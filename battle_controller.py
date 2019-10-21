@@ -4,7 +4,7 @@ from team_config import FgoTeamConfiguration
 from battle_action import FgoBattleAction
 from matcher import ServantMatcher, CraftEssenceMatcher
 import cv2
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 from time import sleep
 from typing import *
 from cv_positioning import *
@@ -14,7 +14,7 @@ from time import time
 
 
 # behavior definition
-AP_EAT_APPLE_THRESHOLD = 50
+AP_EAT_APPLE_THRESHOLD = 0
 
 
 class FgoBattleController:
@@ -87,7 +87,7 @@ class FgoBattleController:
             ratio = np.average(fufu_area < CV_FUFU_BLANK_THRESHOLD)
             if ratio < CV_FUFU_BLANK_RATIO_THRESHOLD:
                 break
-            sleep(0.5)
+            sleep(0.2)
         self.debug_output('Performance: waited %f second(s)' % (time() - t))
 
     def _init_attack_button_cv_data(self):
@@ -101,7 +101,7 @@ class FgoBattleController:
         mask = r < (d / 2)
         sum_mask = np.sum(mask)
         self._attack_button_cv_data = {
-            'anchor_img': np.mean(skimage.io.imread(CV_ATTACK_BUTTON_ANCHOR)[..., :3]),
+            'anchor_img': np.mean(skimage.io.imread(CV_ATTACK_BUTTON_ANCHOR)[..., :3], -1),
             'mask': mask,
             'mask_sum': sum_mask
         }
@@ -113,7 +113,7 @@ class FgoBattleController:
         if self._attack_button_cv_data is None:
             self._init_attack_button_cv_data()
         while True:
-            screenshot = np.mean(self.simulator.get_screenshot(), -1)
+            screenshot = np.mean(self.get_screenshot(), -1)
             btn_area = screenshot[int(CV_SCREENSHOT_RESOLUTION_Y*CV_ATTACK_BUTTON_Y1):
                                   int(CV_SCREENSHOT_RESOLUTION_Y*CV_ATTACK_BUTTON_Y2),
                                   int(CV_SCREENSHOT_RESOLUTION_X*CV_ATTACK_BUTTON_X1):
@@ -123,7 +123,7 @@ class FgoBattleController:
                 self._attack_button_cv_data['mask_sum'] / 255
             if mean_abs_gray_diff < CV_ATTACK_DIFF_THRESHOLD:
                 break
-            sleep(0.5)
+            sleep(0.2)
         self.debug_output('Performance: waited %f second(s)' % (time() - t))
 
     def select_quest(self):
@@ -150,12 +150,14 @@ class FgoBattleController:
     def enter_quest(self):
         self.debug_output('[State] EnterQuest')
         # todo: check 队伍配置
+        self.debug_output('TODO: implement team member check')
         self.send_click(ENTER_QUEST_BUTTON_X, ENTER_QUEST_BUTTON_Y)
 
     def apply_battle_action(self):
         self.debug_output('[State] ApplyBattleAction')
         action_sequence = self.battle_actions[self.current_team_preset_index].get_click_actions()
         for turn in action_sequence:
+            self.wait_attack_button()
             for t, click_pos in turn:
                 if t == -1:
                     self.wait_attack_button()
@@ -170,11 +172,16 @@ class FgoBattleController:
         while True:
             screenshot = self.get_screenshot()
             support_servant = self.team_presets[self.current_team_preset_index].support_servant_id
+            support_craft_essence = self.team_presets[self.current_team_preset_index].support_craft_essence_id
             current_support_servants, servant_icon_range_y = self.get_support_servant(screenshot=screenshot)
-            current_craft_essences, _ = self.get_support_craft_essence(servant_icon_range_y, screenshot)
+            current_craft_essences = []
+            if type(support_craft_essence) == list or support_craft_essence > 0:
+                current_craft_essences, _ = self.get_support_craft_essence(servant_icon_range_y, screenshot)
             servant_range_y = None
             for i in range(len(current_support_servants)):
-                if support_servant == current_support_servants[i]:
+                if support_servant == current_support_servants[i] and \
+                        ((type(support_craft_essence) == list and support_craft_essence in current_craft_essences)
+                         or (support_craft_essence == 0 or support_craft_essence == current_craft_essences[i])):
                     servant_range_y = servant_icon_range_y[i]
                     break
             if servant_range_y is not None:
@@ -211,11 +218,12 @@ class FgoBattleController:
             support_range = self.get_support_range(screenshot)
         x1 = int(CV_SCREENSHOT_RESOLUTION_X * CV_SUPPORT_SERVANT_X1)
         x2 = int(CV_SCREENSHOT_RESOLUTION_X * CV_SUPPORT_SERVANT_X2)
+        t = time()
         ret = []
         for y1, y2 in support_range:
             servant_icon = screenshot[y1:y2, x1:x2, :]
             ret.append(self.servant_matcher.match_support(servant_icon))
-        self.debug_output('Support servant ID: %s' % str(ret))
+        self.debug_output('Support servant ID: %s (Used time: %f s)' % (str(ret), time() - t))
         return ret, support_range
 
     def get_support_craft_essence(self, support_range: Union[None, List[Tuple[int, int]]] = None,
@@ -228,11 +236,12 @@ class FgoBattleController:
             support_range = self.get_support_range(screenshot)
         x1 = int(CV_SCREENSHOT_RESOLUTION_X * CV_SUPPORT_SERVANT_X1)
         x2 = int(CV_SCREENSHOT_RESOLUTION_X * CV_SUPPORT_SERVANT_X2)
+        t = time()
         ret = []
         for y1, y2 in support_range:
             servant_icon = screenshot[y1:y2, x1:x2, :]
             ret.append(self.craft_essence_matcher.match_support(servant_icon))
-        self.debug_output('Support craft essence ID: %s' % str(ret))
+        self.debug_output('Support craft essence ID: %s (Used time: %f s)' % (str(ret), time() - t))
         return ret, support_range
 
     def get_support_range(self, screenshot: Union[None, np.ndarray] = None) -> List[Tuple[int, int]]:
@@ -326,6 +335,7 @@ class FgoBattleController:
         self.debug_output('Not implemented, skipped')
 
     def exit_quest(self):
+        self.debug_output('[State] ExitQuest')
         # todo: 等结算画面
         # 羁绊 -> master/衣服等级 -> 掉落
         for _ in range(5):

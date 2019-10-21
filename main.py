@@ -1,11 +1,32 @@
 from mumu_attach import MumuSimulatorAttacher
 from battle_controller import FgoBattleController
 from team_config import FgoTeamConfiguration
+from battle_action import FgoBattleAction
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
 from cv_positioning import *
 import skimage.io
+
+# 常用从者
+svt_common = {
+    # 四拐
+    'cba': 215,
+    '孔': 37,
+    '梅': 150,
+    '狐': 62,
+    # 常用打手
+    '呆毛': 2,
+    '大英雄': 16,
+    'stella': 16,
+    '伯爵': None,
+}
+
+cs_common = {
+    '宝石': 34,
+    '虚数': 28,
+
+}
 
 def plot_axis():
     simulator = MumuSimulatorAttacher()
@@ -50,12 +71,41 @@ def t():
     # print(x.match_support(a[195:375, 48:212, :]))
 
 
+def team_one():
+    # 龙牙本
+    team_preset = FgoTeamConfiguration([1, 2, 3, 4, 5], [0, 0, 0, 0, 0],
+                                       svt_common['大英雄'], 0, 3)
+    actions = FgoBattleAction(team_preset)
+    # T1 大英雄自充 + 宝具
+    actions.begin_turn()
+    actions.click_skill(1, 2)
+    actions.go_fucking_noble_phantasm(1).go_fucking_attack(2, 0).go_fucking_attack(2, 1)
+    actions.remove_servant(1)
+    actions.end_turn()
+    # T2 大英雄自充 + 宝具
+    actions.begin_turn()
+    actions.click_support_skill(2)
+    actions.go_fucking_support_noble_phantasm().go_fucking_attack(2, 0).go_fucking_attack(2, 1)
+    actions.remove_servant(0)  # remove support
+    actions.end_turn()
+    # T3 海伦娜群充 + 魔放，魔总和x毛宝具
+    actions.begin_turn()
+    actions.click_skill(4, 0).click_skill(4, 2).click_skill(2, 0).click_skill(2, 2)
+    actions.use_clothes_skill(1, 2)
+    actions.go_fucking_noble_phantasm(2, 1).go_fucking_noble_phantasm(3).go_fucking_attack(3, 0)
+    actions.end_turn()
+
+    controller = FgoBattleController(141, [team_preset], [actions])
+    controller.start_script()
+
+
 def main():
     # t()
     # plot_axis()
-    team_preset = FgoTeamConfiguration([1, 2, 3, 4, 5], [0, 0, 0, 0, 0], 215, 0, 2)
-    controller = FgoBattleController(141, [team_preset], None)
-    controller.start_script()
+    # team_preset = FgoTeamConfiguration([1, 2, 3, 4, 5], [0, 0, 0, 0, 0], 215, 0, 2)
+    # controller = FgoBattleController(141, [team_preset], None)
+    # controller.start_script()
+    team_one()
 
 
 if __name__ == '__main__':

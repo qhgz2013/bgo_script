@@ -27,7 +27,7 @@ TO_SERVANT_X = [0.258, 0.508, 0.75]
 ENEMY_XS = [0.035, 0.223, 0.41]
 ENEMY_Y = 0.056
 ATTACK_BUTTON_X = 0.89
-ATTACK_BUTTON_Y = 0.48
+ATTACK_BUTTON_Y = 0.84
 APPLY_CHANGE_SERVANT_BUTTON_X = 0
 APPLY_CHANGE_SERVANT_BUTTON_Y = 0
 
@@ -65,7 +65,11 @@ class FgoBattleAction:
         # for SUPPORT SERVANT, refers to SERVANT_ID_SUPPORT (= 0)
         servant_pos = self._lookup_servant_position(servant_id)
         assert servant_pos >= 0, 'Could not find servant in current team'
-        self.servants.remove(servant_id)
+        if len(self.servants) <= 3:
+            self.servants.remove(servant_id)
+        else:
+            self.servants[servant_pos] = self.servants[3]
+            self.servants = self.servants[:3] + self.servants[4:]
         return self
 
     def _ensure_battle_began(self):
@@ -141,6 +145,7 @@ class FgoBattleAction:
         ret = []
         for turn_seq in self.action_seq:
             click_seq = []
+            use_skill = False
             # 生成点击序列，BUFF first
             for action_id, action_data in turn_seq:
                 if action_id == ID_SKILL:
@@ -150,10 +155,13 @@ class FgoBattleAction:
                     if enemy_pos != ENEMY_LOCATION_EMPTY:
                         click_seq.append((1, (ENEMY_XS[enemy_pos], ENEMY_Y)))
                     # 点击技能
-                    click_seq.append((1, (SKILL_XS[servant_pos * 3 + skill_index], SKILL_Y)))
+                    click_seq.append((0.5, (SKILL_XS[servant_pos * 3 + skill_index], SKILL_Y)))
+                    # first_skill = False
                     # 若是我方单体技能，则选定我方一个目标
                     if to_servant_pos != SERVANT_ID_EMPTY:
                         click_seq.append((1, (TO_SERVANT_X[to_servant_pos], TO_SERVANT_Y)))
+                    click_seq.append((1, None))
+                    use_skill = True
                 elif action_id == ID_CLOTHES:
                     # master技能
                     skill_index, servant_pos = action_data
@@ -167,12 +175,14 @@ class FgoBattleAction:
                         # 选择第一个servant
                         click_seq.append((1, (CHANGE_SERVANT_XS[servant_pos1], CHANGE_SERVANT_Y)))
                         # 选择第二个servant
-                        click_seq.append((0.5, (CHANGE_SERVANT_XS[servant_pos2], CHANGE_SERVANT_Y)))
+                        click_seq.append((0.2, (CHANGE_SERVANT_XS[servant_pos2], CHANGE_SERVANT_Y)))
                         # 点确定
-                        click_seq.append((0.5, (APPLY_CHANGE_SERVANT_BUTTON_X, APPLY_CHANGE_SERVANT_BUTTON_Y)))
+                        click_seq.append((0.2, (APPLY_CHANGE_SERVANT_BUTTON_X, APPLY_CHANGE_SERVANT_BUTTON_Y)))
                     elif servant_pos != SERVANT_ID_EMPTY:
                         # 普通的单体技能
                         click_seq.append((1, (TO_SERVANT_X[servant_pos], TO_SERVANT_Y)))
+                    click_seq.append((1, None))
+                    use_skill = True
                 elif action_id == ID_NP or action_id == ID_COMMAND_CARD:
                     # BUFF阶段忽略所有指令卡出卡
                     continue
@@ -180,7 +190,7 @@ class FgoBattleAction:
                     raise ValueError('program error, invalid action_id')
                 click_seq.append((-1, None))
             # 加了所有BUFF之后再出卡
-            click_seq.append((1, (ATTACK_BUTTON_X, ATTACK_BUTTON_Y)))
+            click_seq.append((1 if use_skill else 2, (ATTACK_BUTTON_X, ATTACK_BUTTON_Y)))
             # 如果是第一张卡就是宝具卡的话，需要更长一点的等待时间
             # 而且选择卡之后无法更换要攻击的敌方目标
             selected_cards = 0
