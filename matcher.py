@@ -7,9 +7,9 @@ from PIL import Image
 from io import BytesIO
 import pickle
 from phash import perception_hash
+from cv_positioning import CV_FGO_DATABASE_FILE
 
-
-SQL_PATH = 'cv_data/fgo.db'
+SQL_PATH = CV_FGO_DATABASE_FILE
 
 
 class AbstractFgoMaterialMatcher:

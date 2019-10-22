@@ -35,6 +35,7 @@ class FgoBattleController:
         self._attack_button_cv_data = None
         self.debug_output('Initializing servant matcher')
         self.servant_matcher = ServantMatcher()
+        self.debug_output('Initializing craft essence matcher')
         self.craft_essence_matcher = CraftEssenceMatcher()
 
     @staticmethod
@@ -57,12 +58,15 @@ class FgoBattleController:
             # AP少于一定数量就啃苹果
             if current_ap < AP_EAT_APPLE_THRESHOLD:
                 self.eat_my_fucking_apple()
+                sleep(1)
+                self.wait_fufu_running()
             # 选本
             self.select_quest()
             sleep(0.5)
             # 等选助战的跑狗
             self.wait_fufu_running()
             # 选助战
+            sleep(2)
             self.select_support()
             sleep(1)
             # 确认编队
@@ -74,6 +78,9 @@ class FgoBattleController:
             self.apply_battle_action()
             # 出本结算
             self.exit_quest()
+            sleep(1)
+            self.wait_fufu_running()
+            sleep(5)
 
     def wait_fufu_running(self):
         self.debug_output('[State] WaitFufuRunning')
@@ -336,9 +343,29 @@ class FgoBattleController:
 
     def exit_quest(self):
         self.debug_output('[State] ExitQuest')
-        # todo: 等结算画面
+        # 等结算画面
+        while True:
+            screenshot = self.get_screenshot()
+            screenshot = screenshot[int(CV_SCREENSHOT_RESOLUTION_Y*CV_EXIT_QUEST_Y1):
+                                    int(CV_SCREENSHOT_RESOLUTION_Y*CV_EXIT_QUEST_Y2),
+                                    int(CV_SCREENSHOT_RESOLUTION_X*CV_EXIT_QUEST_X1):
+                                    int(CV_SCREENSHOT_RESOLUTION_X*CV_EXIT_QUEST_X2), :]
+            h, w = screenshot.shape[:2]
+            screenshot[int(h*CV_EXIT_QUEST_TITLE_MASK_Y1):int(h*CV_EXIT_QUEST_TITLE_MASK_Y2),
+                       int(w*CV_EXIT_QUEST_TITLE_MASK_X1):int(w*CV_EXIT_QUEST_TITLE_MASK_Y2), :] = 0
+            for i in range(len(CV_EXIT_QUEST_SERVANT_MASK_X1S)):
+                screenshot[int(h*CV_EXIT_QUEST_SERVANT_MASK_Y1):int(h*CV_EXIT_QUEST_SERVANT_MASK_Y2),
+                           int(w*CV_EXIT_QUEST_SERVANT_MASK_X1S[i]):int(w*CV_EXIT_QUEST_SERVANT_MASK_X2S[i]), :] = 0
+            gray = np.mean(screenshot, -1) < CV_EXIT_QUEST_GRAY_THRESHOLD
+            # plt.figure()
+            # plt.imshow(gray)
+            # plt.show()
+            # print(np.mean(gray))
+            sleep(0.2)
+            if np.mean(gray) >= CV_EXIT_QUEST_GRAY_RATIO_THRESHOLD:
+                break
         # 羁绊 -> master/衣服等级 -> 掉落
-        for _ in range(5):
+        for _ in range(6):
             sleep(0.5)
             self.send_click(BATTLE_EXIT_BUTTON_X, BATTLE_EXIT_BUTTON_Y)
 
