@@ -14,7 +14,7 @@ from time import time
 
 
 # behavior definition
-AP_EAT_APPLE_THRESHOLD = 0
+AP_EAT_APPLE_THRESHOLD = 50
 
 
 class FgoBattleController:
@@ -80,7 +80,7 @@ class FgoBattleController:
             self.exit_quest()
             sleep(1)
             self.wait_fufu_running()
-            sleep(5)
+            sleep(3)
 
     def wait_fufu_running(self):
         self.debug_output('[State] WaitFufuRunning')
@@ -163,7 +163,9 @@ class FgoBattleController:
     def apply_battle_action(self):
         self.debug_output('[State] ApplyBattleAction')
         action_sequence = self.battle_actions[self.current_team_preset_index].get_click_actions()
-        for turn in action_sequence:
+        turns = len(action_sequence)
+        for i, turn in enumerate(action_sequence):
+            self.debug_output('Turn %d / %d' % (i+1, turns))
             self.wait_attack_button()
             for t, click_pos in turn:
                 if t == -1:
@@ -390,7 +392,7 @@ class FgoBattleController:
         sleep(0.5)
         self.send_click(EAT_APPLE_CLICK_X, EAT_APPLE_CLICK_Y)
         sleep(0.5)
-        # self.send_click(EAT_APPLE_CONFIRM_CLICK_X, EAT_APPLE_CONFIRM_CLICK_Y)
+        self.send_click(EAT_APPLE_CONFIRM_CLICK_X, EAT_APPLE_CONFIRM_CLICK_Y)
 
     # wrapper function
     def send_click(self, x: float, y: float, stay_time: float = 0.1):

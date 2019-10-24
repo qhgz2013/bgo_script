@@ -106,8 +106,8 @@ class CraftEssenceMatcher(AbstractFgoMaterialMatcher):
         craft_essence_part = img_arr_resized[105:-3, ...]
         # CACHE ACCESS
         phash = perception_hash(craft_essence_part, 8)
-        # if phash in self.phash:
-        #     return self.phash[phash]
+        if phash in self.phash:
+            return self.phash[phash]
         if self.cached_icon_meta is None:
             cursor.execute("select * from craft_essence_icon")
             self.cached_icon_meta = cursor.fetchall()

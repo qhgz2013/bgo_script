@@ -76,8 +76,8 @@ class FgoBattleAction:
             self.begin_turn()
             warn("Use begin_turn() before adding any actions")
 
-    def click_skill(self, servant_id: int, skill_index: int, to_servant_id: int = SERVANT_ID_EMPTY,
-                    enemy_location: int = ENEMY_LOCATION_EMPTY) -> 'FgoBattleAction':
+    def use_skill(self, servant_id: int, skill_index: int, to_servant_id: int = SERVANT_ID_EMPTY,
+                  enemy_location: int = ENEMY_LOCATION_EMPTY) -> 'FgoBattleAction':
         self._ensure_battle_began()
         servant_pos = self._lookup_servant_position(servant_id)
         assert 0 <= servant_pos < 3, 'Could not find servant in current team'
@@ -86,11 +86,11 @@ class FgoBattleAction:
         self.current_action_seq.append((ID_SKILL, (servant_pos, skill_index, to_servant_pos, enemy_location)))
         return self
 
-    def click_support_skill(self, skill_index: int, to_servant_id: int = SERVANT_ID_EMPTY,
-                            enemy_location: int = ENEMY_LOCATION_EMPTY) -> 'FgoBattleAction':
-        return self.click_skill(SERVANT_ID_SUPPORT, skill_index, to_servant_id, enemy_location)
+    def use_support_skill(self, skill_index: int, to_servant_id: int = SERVANT_ID_EMPTY,
+                          enemy_location: int = ENEMY_LOCATION_EMPTY) -> 'FgoBattleAction':
+        return self.use_skill(SERVANT_ID_SUPPORT, skill_index, to_servant_id, enemy_location)
 
-    def go_fucking_noble_phantasm(self, servant_id: int, enemy_location: int = ENEMY_LOCATION_EMPTY) \
+    def noble_phantasm(self, servant_id: int, enemy_location: int = ENEMY_LOCATION_EMPTY) \
             -> 'FgoBattleAction':
         self._ensure_battle_began()
         servant_pos = self._lookup_servant_position(servant_id)
@@ -98,20 +98,13 @@ class FgoBattleAction:
         self.current_action_seq.append((ID_NP, (servant_pos, enemy_location)))
         return self
 
-    def go_fucking_support_noble_phantasm(self, enemy_location: int = ENEMY_LOCATION_EMPTY) -> 'FgoBattleAction':
-        return self.go_fucking_noble_phantasm(SERVANT_ID_SUPPORT, enemy_location)
+    def support_noble_phantasm(self, enemy_location: int = ENEMY_LOCATION_EMPTY) -> 'FgoBattleAction':
+        return self.noble_phantasm(SERVANT_ID_SUPPORT, enemy_location)
 
-    def go_fucking_attack(self, servant_id: int, command_card_index: int, enemy_location: int = ENEMY_LOCATION_EMPTY) \
-            -> 'FgoBattleAction':
+    def attack(self, command_card_index: int, enemy_location: int = ENEMY_LOCATION_EMPTY) -> 'FgoBattleAction':
         self._ensure_battle_began()
-        servant_pos = self._lookup_servant_position(servant_id)
-        assert 0 <= servant_pos < 3, 'Could not find servant in current team'
-        self.current_action_seq.append((ID_COMMAND_CARD, (servant_pos, command_card_index, enemy_location)))
+        self.current_action_seq.append((ID_COMMAND_CARD, (command_card_index, enemy_location)))
         return self
-
-    def go_fucking_support_attack(self, command_card_index: int, enemy_location: int = ENEMY_LOCATION_EMPTY) \
-            -> 'FgoBattleAction':
-        return self.go_fucking_attack(SERVANT_ID_SUPPORT, command_card_index, enemy_location)
 
     def use_clothes_skill(self, skill_index: int, to_servant_id: Union[int, Tuple[int, int]] = SERVANT_ID_EMPTY) \
             -> 'FgoBattleAction':
@@ -119,7 +112,7 @@ class FgoBattleAction:
         self._ensure_battle_began()
         if type(to_servant_id) == int:
             servant_pos = self._lookup_servant_position(to_servant_id)
-            assert 0 <= servant_pos < 3, 'Could not find servant in current team'
+            assert servant_pos < 3, 'Could not use skill to backup member'
             self.current_action_seq.append((ID_CLOTHES, (skill_index, servant_pos)))
         else:
             assert (type(to_servant_id) == tuple or type(to_servant_id) == list) \
@@ -158,7 +151,7 @@ class FgoBattleAction:
                     # first_skill = False
                     # 若是我方单体技能，则选定我方一个目标
                     if to_servant_pos != SERVANT_ID_EMPTY:
-                        click_seq.append((1, (TO_SERVANT_X[to_servant_pos], TO_SERVANT_Y)))
+                        click_seq.append((0.5, (TO_SERVANT_X[to_servant_pos], TO_SERVANT_Y)))
                     click_seq.append((1, None))
                     use_skill = True
                 elif action_id == ID_CLOTHES:
@@ -167,7 +160,7 @@ class FgoBattleAction:
                     # 搓按钮
                     click_seq.append((1, (CLOTHES_BUTTON_X, CLOTHES_BUTTON_Y)))
                     # 选技能
-                    click_seq.append((1, (CLOTHES_SKILL_XS[skill_index], CLOTHES_BUTTON_Y)))
+                    click_seq.append((0.5, (CLOTHES_SKILL_XS[skill_index], CLOTHES_BUTTON_Y)))
                     if type(servant_pos) == tuple:
                         # 特殊的换人情况，需要选择两个servant
                         servant_pos1, servant_pos2 = servant_pos
@@ -207,23 +200,14 @@ class FgoBattleAction:
                     selected_cards += 1
                 elif action_id == ID_COMMAND_CARD:
                     # 普通平A卡
-                    servant_pos, card_index, enemy_pos = action_data
+                    card_index, enemy_pos = action_data
                     # 未出卡前指定敌方单体
                     if selected_cards == 0 and enemy_pos != ENEMY_LOCATION_EMPTY:
                         click_seq.append((0.5, (ENEMY_XS[enemy_pos], ENEMY_Y)))
                     # 选卡
-                    click_seq.append((0.5, (COMMAND_CARD_XS[card_index], COMMAND_CARD_Y)))
+                    click_seq.append((0.2, (COMMAND_CARD_XS[card_index], COMMAND_CARD_Y)))
                     selected_cards += 1
                 else:
                     continue
             ret.append(click_seq)
         return ret
-
-if __name__ == '__main__':
-    cfg = FgoTeamConfiguration([1, 3, 5, 4, 2], [0, 0, 0, 0, 0], 2, 0, 0)
-    act = FgoBattleAction(cfg)
-    act.begin_turn().click_skill(0, 1).click_skill(3, 0, 0).click_support_skill(2, enemy_location=1)
-    act.use_clothes_skill(1, (3, 2))
-    act.go_fucking_noble_phantasm(1).remove_servant(1).go_fucking_attack(5, 0).go_fucking_attack(2, 4)
-    act.end_turn()
-    print(act.get_click_actions())

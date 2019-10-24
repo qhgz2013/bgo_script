@@ -80,69 +80,70 @@ def t():
     # print(x.match_support(a[195:375, 48:212, :]))
 
 
+# 龙牙本 3T
 def team_one():
-    # 龙牙本
     team_preset = FgoTeamConfiguration([1, 2, 3, 4, 5], [0, 0, 0, 0, 0],
                                        svt_common['大英雄'], 0, 3)
     actions = FgoBattleAction(team_preset)
     # T1 大英雄自充 + 宝具
     actions.begin_turn()
-    actions.click_skill(1, 2)
-    actions.go_fucking_noble_phantasm(1).go_fucking_attack(2, 0).go_fucking_attack(2, 1)
+    actions.use_skill(1, 2)
+    actions.noble_phantasm(1).attack(2, 0).attack(2, 1)
     actions.remove_servant(1)
     actions.end_turn()
     # T2 大英雄自充 + 宝具
     actions.begin_turn()
-    actions.click_support_skill(2)
-    actions.go_fucking_support_noble_phantasm().go_fucking_attack(2, 0).go_fucking_attack(2, 1)
+    actions.use_support_skill(2)
+    actions.support_noble_phantasm().attack(2, 0).attack(2, 1)
     actions.remove_servant(0)  # remove support
     actions.end_turn()
     # T3 海伦娜群充 + 魔放，魔总和x毛宝具
     actions.begin_turn()
-    actions.click_skill(4, 0).click_skill(4, 2).click_skill(2, 0).click_skill(2, 2)
+    actions.use_skill(4, 0).use_skill(4, 2).use_skill(2, 0).use_skill(2, 2)
     actions.use_clothes_skill(1, 2)
-    actions.go_fucking_noble_phantasm(2, 1).go_fucking_noble_phantasm(3).go_fucking_attack(3, 0)
+    actions.noble_phantasm(2, 1).noble_phantasm(3).attack(3, 0)
     actions.end_turn()
 
     controller = FgoBattleController(141, [team_preset], [actions])
     controller.start_script()
 
 
-def team_two():
+def team_kinpika_fes():
     # 呆毛 孔明 孔明 cba 其他蹭羁绊的
-    team_preset = FgoTeamConfiguration([1, 2, 3, 4, 5], [0, 0, 0, 0, 0], svt_common['孔'], 0, 2)
+    team_preset = FgoTeamConfiguration([svt_common['呆毛'], svt_common['孔'], svt_common['cba'],
+                                        4, 5], [0, 0, 0, 0, 0], svt_common['孔'], 900, 2)
     actions = FgoBattleAction(team_preset)
+    # use_skill(servant_id: int, skill_index: int, to_servant_id: int = SERVANT_ID_EMPTY,
+    #           enemy_location: int = ENEMY_LOCATION_EMPTY)
+
     # T1: 呆毛宝石80 + 孔明加攻10 x 2
     actions.begin_turn()
-    actions.click_skill(1, 0)
-    actions.click_skill(2, 2).click_support_skill(2)
-    actions.go_fucking_noble_phantasm(1).go_fucking_attack(1, 0).go_fucking_attack(1, 1)
+    actions.use_skill(svt_common['呆毛'], 0)
+    actions.use_skill(svt_common['孔'], 2).use_support_skill(2)
+    actions.noble_phantasm(svt_common['呆毛']).attack(0).attack(1)
     actions.end_turn()
-    # T2: 呆毛宝具20 + 自充30 + 孔明30 + 10 x 2
+    # T2: 呆毛宝具20 + 孔明30 x 2 + 10 x 2
     actions.begin_turn()
-    actions.click_skill(1, 2).click_skill(2, 0, 1).click_skill(2, 1).click_support_skill(1)
-    actions.go_fucking_noble_phantasm(1).go_fucking_attack(1, 0).go_fucking_attack(1, 1)
+    actions.use_support_skill(0, svt_common['呆毛']).use_skill(svt_common['孔'], 0, svt_common['呆毛'])
+    actions.use_skill(svt_common['孔'], 1).use_support_skill(1)
+    actions.noble_phantasm(svt_common['呆毛']).attack(0).attack(1)
     actions.end_turn()
-    # T3: 呆毛宝具20 + 孔明30 + 换人cba50
+    # T3: 呆毛宝具20 + 自充30 + 换人cba50
     actions.begin_turn()
-    actions.click_support_skill(0, 1)
-    actions.use_clothes_skill(2, (2, 3))
-    actions.click_skill(3, 2, 1)
+    actions.use_skill(svt_common['呆毛'], 2)
+    actions.use_clothes_skill(2, (svt_common['孔'], svt_common['cba']))
+    actions.use_skill(svt_common['cba'], 2, svt_common['呆毛'])
     # cba降防 + 呆毛魔放 + 衣服攻击
-    actions.click_skill(3, 1).click_skill(1, 1).use_clothes_skill(0)
-    actions.go_fucking_noble_phantasm(1).go_fucking_attack(1, 0).go_fucking_attack(1, 1)
+    actions.use_skill(svt_common['cba'], 1).use_skill(svt_common['呆毛'], 1).use_clothes_skill(0)
+    actions.noble_phantasm(svt_common['呆毛']).attack(0).attack(1)
     actions.end_turn()
+    # 非的干不过欧的，哈吉马路哟
     controller = FgoBattleController(141, [team_preset], [actions])
     controller.start_script()
 
 
 def main():
-    # t()
-    # plot_axis()
-    # team_preset = FgoTeamConfiguration([1, 2, 3, 4, 5], [0, 0, 0, 0, 0], 215, 0, 2)
-    # controller = FgoBattleController(141, [team_preset], None)
-    # controller.start_script()
-    team_two()
+    team_kinpika_fes()
 
 
 if __name__ == '__main__':
