@@ -8,6 +8,7 @@ from io import BytesIO
 import pickle
 from phash import perception_hash
 from cv_positioning import CV_FGO_DATABASE_FILE
+from image_hash_cacher import ImageHashCacher, mean_gray_diff_err
 
 SQL_PATH = CV_FGO_DATABASE_FILE
 
@@ -88,7 +89,7 @@ class CraftEssenceMatcher(AbstractFgoMaterialMatcher):
         super(CraftEssenceMatcher, self).__init__(sql_path)
         self.sift_detector = cv2.xfeatures2d_SIFT.create()
         self.flann_matcher = cv2.DescriptorMatcher_create(cv2.DescriptorMatcher_FLANNBASED)
-        self.phash = {}
+        self.image_cacher = ImageHashCacher(perception_hash, mean_gray_diff_err)
 
     # noinspection PyUnresolvedReferences
     def match_support(self, img_arr: np.ndarray) -> int:
@@ -98,16 +99,14 @@ class CraftEssenceMatcher(AbstractFgoMaterialMatcher):
         # （毕竟匹配开销太大了）
         # 注意：这里使用cv2的contrib模块算法，在使用cmake编译时把contrib module记得include进去，
         # 并且勾上python3和enable_nonfree再编译release
-        # todo: 添加一层基于Perception Hash的cache，避免重复计算
         cursor = self.sqlite_connection.cursor()
         target_size = (144, 132)
         ratio_thresh = 0.7
         img_arr_resized = cv2.resize(img_arr, (target_size[1], target_size[0]), interpolation=cv2.INTER_CUBIC)
         craft_essence_part = img_arr_resized[105:-3, ...]
         # CACHE ACCESS
-        phash = perception_hash(craft_essence_part, 8)
-        if phash in self.phash:
-            return self.phash[phash]
+        if craft_essence_part in self.image_cacher:
+            return self.image_cacher[craft_essence_part]
         if self.cached_icon_meta is None:
             cursor.execute("select * from craft_essence_icon")
             self.cached_icon_meta = cursor.fetchall()
@@ -132,7 +131,5 @@ class CraftEssenceMatcher(AbstractFgoMaterialMatcher):
                 max_matches = len_good_matches
                 max_craft_essence_id = craft_essence_id
         cursor.close()
-        if phash in self.phash:
-            print('cached id:', self.phash[phash], 'current id:', max_craft_essence_id)
-        self.phash[phash] = max_craft_essence_id
+        self.image_cacher[craft_essence_part] = max_craft_essence_id
         return max_craft_essence_id

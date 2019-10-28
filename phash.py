@@ -3,7 +3,7 @@ import numpy as np
 import cv2
 
 
-def perception_hash(img: np.ndarray, hash_size: int = 8, high_freq_factor: int = 4) -> int:
+def perception_hash(img: np.ndarray, hash_size: int = 4, high_freq_factor: int = 4) -> int:
     """
     Perception Hash (pHash) for fast image matching
     :param img: input image, with shape (h, w, c) or (h, w)
@@ -11,7 +11,7 @@ def perception_hash(img: np.ndarray, hash_size: int = 8, high_freq_factor: int =
     :param high_freq_factor:
     :return:
     """
-    if len(img.shape) == 2:
+    if len(img.shape) == 3:
         img = np.mean(img, -1)
     image_size = hash_size * high_freq_factor
     # noinspection PyUnresolvedReferences

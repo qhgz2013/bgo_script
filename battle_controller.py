@@ -14,7 +14,7 @@ from time import time
 
 
 # behavior definition
-AP_EAT_APPLE_THRESHOLD = 50
+AP_EAT_APPLE_THRESHOLD = 0
 
 
 class FgoBattleController:
