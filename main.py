@@ -1,4 +1,4 @@
-from mumu_attach import MumuSimulatorAttacher
+from attacher import MumuAttacher
 from battle_controller import FgoBattleController
 from team_config import FgoTeamConfiguration
 from battle_action import FgoBattleAction
@@ -29,7 +29,7 @@ cs_common = {
 }
 
 def plot_axis():
-    simulator = MumuSimulatorAttacher()
+    simulator = MumuAttacher()
     a = simulator.get_screenshot()
     a = skimage.io.imread(r'C:\Users\qhgz2\Documents\MuMu共享文件夹\MuMu20191017113537.png')[..., :3]
     a = cv2.resize(a, (1280, 720))
@@ -70,7 +70,7 @@ def plot_axis():
 def t():
     from time import sleep
     sleep(1)
-    sim = MumuSimulatorAttacher()
+    sim = MumuAttacher()
     # sim.send_click(0.5, 0.1)
     sim.send_slide((0.5, 0.5), (0.5, 0.1), 0.5, 2, 1)
     # a = skimage.io.imread(r'C:\Users\qhgz2\Documents\MuMu共享文件夹\MuMu20191017213531.png')[..., :3]

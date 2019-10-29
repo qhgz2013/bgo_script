@@ -1,5 +1,5 @@
 import numpy as np
-from mumu_attach import MumuSimulatorAttacher
+from attacher import MumuAttacher
 from team_config import FgoTeamConfiguration
 from battle_action import FgoBattleAction
 from matcher import ServantMatcher, CraftEssenceMatcher
@@ -27,7 +27,7 @@ class FgoBattleController:
               '* Author: qhgz2013 (Github: qhgz2013)\n'
               '==============================================================')
         self.debug_output('Initializing Mumu simulator attacher')
-        self.simulator = MumuSimulatorAttacher()
+        self.simulator = MumuAttacher()
         self.max_ap = max_ap
         self.team_presets = team_presets
         self.current_team_preset_index = 0
