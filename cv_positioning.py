@@ -12,7 +12,7 @@ CV_AP_BAR_X1 = 0.148
 CV_AP_BAR_X2 = 0.25
 CV_AP_BAR_Y1 = 0.958
 CV_AP_BAR_Y2 = 0.972
-# 检查AP的阈值, todo: 改成S色域检查
+# 检查AP的阈值
 CV_AP_GREEN_THRESHOLD = 100
 # 跑狗的黑屏坐标
 CV_FUFU_Y1 = 0.862

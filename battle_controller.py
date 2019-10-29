@@ -47,8 +47,7 @@ class FgoBattleController:
     def get_screenshot(self):
         # get the screenshot from the simulator and resize the resolution to fit the script
         # noinspection PyUnresolvedReferences
-        return cv2.resize(self.simulator.get_screenshot(), (CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y),
-                          interpolation=cv2.INTER_CUBIC)
+        return self.simulator.get_screenshot(CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y)
 
     def start_script(self):
         self.debug_output('[State] Script started')

@@ -1,14 +1,13 @@
 import sqlite3
-from typing import *
 import os
 import numpy as np
 import cv2
 from PIL import Image
 from io import BytesIO
 import pickle
-from phash import perception_hash
+from util.phash import perception_hash
 from cv_positioning import CV_FGO_DATABASE_FILE
-from image_hash_cacher import ImageHashCacher, mean_gray_diff_err
+from util.image_hash_cacher import ImageHashCacher, mean_gray_diff_err
 
 SQL_PATH = CV_FGO_DATABASE_FILE
 

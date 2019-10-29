@@ -5,6 +5,7 @@ import win32gui
 import win32con
 import win32ui
 from time import sleep, time
+import cv2
 
 
 class AbstractAttacher:
@@ -18,36 +19,46 @@ class AbstractAttacher:
         """
         raise NotImplementedError()
 
-    def get_screenshot(self) -> np.ndarray:
+    def get_screenshot(self, width: Optional[int] = None, height: Optional[int] = None) -> np.ndarray:
         """
         Get the current screenshot of simulator.
+        :param width: the width of reshaped screenshot (in pixels), default: window width
+        :param height: the height of reshaped screenshot (in pixels), default: window height
         :return: returns a numpy array shapes [h, w, c] which c = 3 in RGB order
         """
         left, top, right, bottom = win32gui.GetWindowRect(self.handle())
-        height = bottom - top
-        width = right - left
+        window_height = bottom - top
+        window_width = right - left
         handle_dc = win32gui.GetWindowDC(self.handle())
         new_dc = win32ui.CreateDCFromHandle(handle_dc)
         compat_dc = new_dc.CreateCompatibleDC()
 
         new_bitmap = win32ui.CreateBitmap()
-        new_bitmap.CreateCompatibleBitmap(new_dc, width, height)
+        new_bitmap.CreateCompatibleBitmap(new_dc, window_width, window_height)
         compat_dc.SelectObject(new_bitmap)
-        compat_dc.BitBlt((0, 0), (width, height), new_dc, (0, 0), win32con.SRCCOPY)
+        compat_dc.BitBlt((0, 0), (window_width, window_height), new_dc, (0, 0), win32con.SRCCOPY)
         arr = new_bitmap.GetBitmapBits(True)
-        arr = np.fromstring(arr, dtype='uint8').reshape([height, width, -1])
+        arr = np.fromstring(arr, dtype='uint8').reshape([window_height, window_width, -1])
         new_dc.DeleteDC()
         compat_dc.DeleteDC()
         win32gui.ReleaseDC(self.handle(), handle_dc)
         win32gui.DeleteObject(new_bitmap.GetHandle())
-        return np.flip(arr[..., :3], -1)
+        screenshot = np.flip(arr[..., :3], -1)
+        if width is None:
+            width = window_width
+        if height is None:
+            height = window_height
+        if width != window_width or height != window_width:
+            # noinspection PyUnresolvedReferences
+            screenshot = cv2.resize(screenshot, (width, height), interpolation=cv2.INTER_CUBIC)
+        return screenshot
 
     def send_click(self, x: float, y: float, stay_time: float = 0.1):
         """
         Send the click event to the simulator.
         Execution order: MOUSE BUTTON DOWN EVENT -> sleep(stay_time) -> MOUSE BUTTON UP EVENT
-        :param x: Normalized coordinate X, ranges [0, 1), re-scale is required, which depends on the window size
-        :param y: Normalized coordinate Y, ranges [0, 1), re-scale is required, which depends on the window size
+        :param x: normalized coordinate X, ranges [0, 1), re-scale is required, which depends on the window size
+        :param y: normalized coordinate Y, ranges [0, 1), re-scale is required, which depends on the window size
         :param stay_time: the interval between MOUSE BUTTON DOWN and MOUSE BUTTON UP
         :return: None
         """
@@ -65,9 +76,9 @@ class AbstractAttacher:
                    stay_time_move: float = 0.8, stay_time_after_move: float = 0.1):
         """
         Send the slide event to the simulator.
-        :param p_from: Normalized coordinate (X1, Y1) before sliding, ranges [0, 1), re-scale is required,
+        :param p_from: normalized coordinate (X1, Y1) before sliding, ranges [0, 1), re-scale is required,
          which depends on the window size
-        :param p_to: Normalized coordinate (X2, Y2) after sliding, ranges [0, 1), re-rescale is required,
+        :param p_to: normalized coordinate (X2, Y2) after sliding, ranges [0, 1), re-rescale is required,
          which depends on the window size
         :param stay_time_before_move: the interval between MOUSE BUTTON DOWN and MOUSE MOVE (in seconds)
         :param stay_time_move: the duration of MOUSE MOVE loop (in seconds)

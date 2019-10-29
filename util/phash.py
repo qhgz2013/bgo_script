@@ -8,8 +8,8 @@ def perception_hash(img: np.ndarray, hash_size: int = 4, high_freq_factor: int =
     Perception Hash (pHash) for fast image matching
     :param img: input image, with shape (h, w, c) or (h, w)
     :param hash_size: the dimension of hash, the returned hash will have bit length of hash_size ^ 2
-    :param high_freq_factor:
-    :return:
+    :param high_freq_factor: the coefficient used for capturing image high frequent features
+    :return: the hash code, code address ranges [0, 2^(hash_size^2))
     """
     if len(img.shape) == 3:
         img = np.mean(img, -1)
