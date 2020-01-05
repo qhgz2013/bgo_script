@@ -5,7 +5,8 @@ import win32gui
 import win32con
 import win32ui
 from time import sleep, time
-import cv2
+import image_process
+from logging import root
 
 
 class AbstractAttacher:
@@ -49,8 +50,7 @@ class AbstractAttacher:
         if height is None:
             height = window_height
         if width != window_width or height != window_width:
-            # noinspection PyUnresolvedReferences
-            screenshot = cv2.resize(screenshot, (width, height), interpolation=cv2.INTER_CUBIC)
+            screenshot = image_process.resize(screenshot, width, height)
         return screenshot
 
     def send_click(self, x: float, y: float, stay_time: float = 0.1):
@@ -62,15 +62,18 @@ class AbstractAttacher:
         :param stay_time: the interval between MOUSE BUTTON DOWN and MOUSE BUTTON UP
         :return: None
         """
-        left, top, right, bottom = win32gui.GetWindowRect(self.handle())
+        handle = self.handle()
+        left, top, right, bottom = win32gui.GetWindowRect(handle)
         height = bottom - top
         width = right - left
         x = int(x * width)
         y = int(y * height)
         pos = x | (y << 16)
-        win32gui.PostMessage(self.handle(), win32con.WM_LBUTTONDOWN, win32con.MK_LBUTTON, pos)
+        root.info('PostMessage(%d, WM_LBUTTONDOWN, MK_LBUTTON, pos: (%d, %d))' % (handle, x, y))
+        win32gui.PostMessage(handle, win32con.WM_LBUTTONDOWN, win32con.MK_LBUTTON, pos)
         sleep(stay_time)
-        win32gui.PostMessage(self.handle(), win32con.WM_LBUTTONUP, 0, pos)
+        root.info('PostMessage(%d, WM_LBUTTONUP, 0, pos: (%d, %d))' % (handle, x, y))
+        win32gui.PostMessage(handle, win32con.WM_LBUTTONUP, 0, pos)
 
     def send_slide(self, p_from: Tuple[float, float], p_to: Tuple[float, float], stay_time_before_move: float = 0.1,
                    stay_time_move: float = 0.8, stay_time_after_move: float = 0.1):
@@ -85,7 +88,8 @@ class AbstractAttacher:
         :param stay_time_after_move: the interval between MOUSE MOVE and MOUSE BUTTON UP (in seconds)
         :return: None
         """
-        left, top, right, bottom = win32gui.GetWindowRect(self.handle())
+        handle = self.handle()
+        left, top, right, bottom = win32gui.GetWindowRect(handle)
         height = bottom - top
         width = right - left
         x1, y1 = p_from
@@ -96,7 +100,8 @@ class AbstractAttacher:
         y2 = int(y2 * height)
         begin_pos = x1 | (y1 << 16)
         end_pos = x2 | (y2 << 16)
-        win32gui.PostMessage(self.handle(), win32con.WM_LBUTTONDOWN, win32con.MK_LBUTTON, begin_pos)
+        root.info('PostMessage(%d, WM_LBUTTONDOWN, MK_LBUTTON, pos: (%d, %d))' % (handle, x1, y1))
+        win32gui.PostMessage(handle, win32con.WM_LBUTTONDOWN, win32con.MK_LBUTTON, begin_pos)
         sleep(stay_time_before_move)
         begin_t = time()
         last_x = x1
@@ -107,7 +112,9 @@ class AbstractAttacher:
             new_y = int(y1 + (y2 - y1) * norm_t)
             if last_x != new_x or last_y != new_y:
                 pos = new_x | (new_y << 16)
-                win32gui.SendMessage(self.handle(), win32con.WM_MOUSEMOVE, win32con.MK_LBUTTON, pos)
+                root.info('PostMessage(%d, WM_MOUSEMOVE, MK_LBUTTON, pos: (%d, %d))' % (handle, new_x, new_y))
+                win32gui.SendMessage(handle, win32con.WM_MOUSEMOVE, win32con.MK_LBUTTON, pos)
             sleep(0.002)
         sleep(stay_time_after_move)
-        win32gui.PostMessage(self.handle(), win32con.WM_LBUTTONUP, win32con.MK_LBUTTON, end_pos)
+        root.info('PostMessage(%d, WM_LBUTTONUP, MK_LBUTTON, pos: (%d, %d))' % (handle, x2, y2))
+        win32gui.PostMessage(handle, win32con.WM_LBUTTONUP, win32con.MK_LBUTTON, end_pos)

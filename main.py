@@ -1,3 +1,6 @@
+import logging
+logging.basicConfig(format='[%(asctime)s] [%(levelname)s] (%(filename)s:%(lineno)d) %(message)s',
+                    level=logging.INFO)
 from attacher import MumuAttacher
 from battle_controller import FgoBattleController
 from team_config import FgoTeamConfiguration
@@ -27,6 +30,7 @@ cs_common = {
     '虚数': 28,
 
 }
+
 
 def plot_axis():
     simulator = MumuAttacher()
@@ -66,6 +70,7 @@ def plot_axis():
     # plt.figure(figsize=(16, 9))
     # plt.plot(am3)
     # plt.show()
+
 
 def t():
     from time import sleep

@@ -11,6 +11,7 @@ from cv_positioning import *
 from click_positioning import *
 import skimage.io
 from time import time
+from logging import root
 
 
 # behavior definition
@@ -20,22 +21,21 @@ AP_EAT_APPLE_THRESHOLD = 0
 class FgoBattleController:
     def __init__(self, max_ap: int, team_presets: List[FgoTeamConfiguration], battle_actions: List[FgoBattleAction]):
         from _version import VERSION
-        print('==============================================================\n'
-              '* Fate / Grand Order Auto Battle Controller\n'
-              '* Version: ' + VERSION + '\n'
-              '* Licence: WTFPL (Do what the fuck you want to Public License)\n'
-              '* Author: qhgz2013 (Github: qhgz2013)\n'
-              '==============================================================')
-        self.debug_output('Initializing Mumu simulator attacher')
+        root.info('==============================================================')
+        root.info('* Fate / Grand Order Auto Battle Controller')
+        root.info('* Version: ' + VERSION)
+        root.info('* Licence: WTFPL (Do what the fuck you want to Public License)')
+        root.info('* Author: qhgz2013 (Github: qhgz2013)')
+        root.info('==============================================================')
         self.simulator = MumuAttacher()
         self.max_ap = max_ap
         self.team_presets = team_presets
         self.current_team_preset_index = 0
         self.battle_actions = battle_actions
         self._attack_button_cv_data = None
-        self.debug_output('Initializing servant matcher')
+        # self.debug_output('Initializing servant matcher')
         self.servant_matcher = ServantMatcher()
-        self.debug_output('Initializing craft essence matcher')
+        # self.debug_output('Initializing craft essence matcher')
         self.craft_essence_matcher = CraftEssenceMatcher()
 
     @staticmethod
@@ -50,16 +50,11 @@ class FgoBattleController:
         return self.simulator.get_screenshot(CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y)
 
     def start_script(self):
-        self.debug_output('[State] Script started')
+        from fsm import FgoFSMFacade
+        facade = FgoFSMFacade(self.simulator)
+        # self.debug_output('[State] Script started')
+        facade.run()
         while True:
-            # 进本前检查AP
-            current_ap = self._pre_enter_quest_ap_check()
-            # AP少于一定数量就啃苹果
-            if current_ap < AP_EAT_APPLE_THRESHOLD:
-                self.eat_my_fucking_apple()
-                sleep(1)
-                self.wait_fufu_running()
-            # 选本
             self.select_quest()
             sleep(0.5)
             # 等选助战的跑狗
@@ -369,29 +364,6 @@ class FgoBattleController:
         for _ in range(6):
             sleep(0.5)
             self.send_click(BATTLE_EXIT_BUTTON_X, BATTLE_EXIT_BUTTON_Y)
-
-    def _pre_enter_quest_ap_check(self) -> int:
-        self.debug_output('[State] PreEnterQuestAPCheck')
-        # test passed
-        img = self.get_screenshot()
-        img = img[int(CV_SCREENSHOT_RESOLUTION_Y*CV_AP_BAR_Y1):int(CV_SCREENSHOT_RESOLUTION_Y*CV_AP_BAR_Y2),
-                  int(CV_SCREENSHOT_RESOLUTION_X*CV_AP_BAR_X1):int(CV_SCREENSHOT_RESOLUTION_X*CV_AP_BAR_X2), 1]
-        g_val = np.average(img, 0)
-        normalized_ap_val = np.average(g_val > CV_AP_GREEN_THRESHOLD)
-        ap_val = int(self.max_ap * normalized_ap_val)
-        self.debug_output('Estimated current AP: %d' % ap_val)
-        return ap_val
-
-    def eat_my_fucking_apple(self):
-        self.debug_output('[State] EatMyFuckingApple')
-        # test passed
-        ap_bar_center_x = (CV_AP_BAR_X1 + CV_AP_BAR_X2) / 2
-        ap_bar_center_y = (CV_AP_BAR_Y1 + CV_AP_BAR_Y2) / 2
-        self.send_click(ap_bar_center_x, ap_bar_center_y)
-        sleep(0.5)
-        self.send_click(EAT_APPLE_CLICK_X, EAT_APPLE_CLICK_Y)
-        sleep(0.5)
-        self.send_click(EAT_APPLE_CONFIRM_CLICK_X, EAT_APPLE_CONFIRM_CLICK_Y)
 
     # wrapper function
     def send_click(self, x: float, y: float, stay_time: float = 0.1):

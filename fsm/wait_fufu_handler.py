@@ -2,7 +2,8 @@ from .state_handler import StateHandler
 from cv_positioning import *
 from attacher import AbstractAttacher
 import numpy as np
-from time import sleep
+from time import sleep, time
+from logging import root
 
 
 class WaitFufuStateHandler(StateHandler):
@@ -11,6 +12,8 @@ class WaitFufuStateHandler(StateHandler):
         self.forward_state = forward_state
 
     def run_and_transit_state(self) -> int:
+        begin_timing = time()
+        root.info('Started waiting fufu')
         while True:
             screenshot = self.attacher.get_screenshot(CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y)
             fufu_area = np.sum(
@@ -21,4 +24,6 @@ class WaitFufuStateHandler(StateHandler):
             if ratio < CV_FUFU_BLANK_RATIO_THRESHOLD:
                 break
             sleep(0.2)
+        sleep(1)
+        root.info('Ended waiting fufu, waited %f sec(s)' % (time() - begin_timing))
         return self.forward_state

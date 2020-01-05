@@ -1,5 +1,11 @@
+# Author: Zhou Xuebin
+# Version: 1.1
+# Changelog:
+# v1.1: changed cacher hash algorithm from bucket to BK tree
+
 from typing import *
 import numpy as np
+from .bk_tree import BKTree
 
 
 def mean_gray_diff_err(a: np.ndarray, b: np.ndarray, mean_gray_diff_threshold: float = 20) -> bool:
@@ -40,28 +46,24 @@ class ImageHashCacher:
         """
         self.hash_func = hash_func
         self.hash_conflict_func = hash_conflict_func
-        self.hash_dict = dict()
+        self.hash_tree = BKTree()
 
     def add_image(self, image: np.ndarray, value: Optional[T] = None):
         if type(image) != np.ndarray:
             raise TypeError('image must be numpy.ndarray instance')
         hash_value = self.hash_func(image)
-        if hash_value in self.hash_dict:
-            candidate_conflict_images = self.hash_dict[hash_value]
-            for candidate_image, _ in candidate_conflict_images:
-                if self.hash_conflict_func(image, candidate_image):
-                    return
-            self.hash_dict[hash_value].append((image, value))
-        else:
-            self.hash_dict[hash_value] = [(image, value)]
+        candidate_conflict_images = self.hash_tree.approximate_query(hash_value, tol=2)
+        for (candidate_image, _), _ in candidate_conflict_images:
+            if self.hash_conflict_func(image, candidate_image):
+                return
+        self.hash_tree.add_node(hash_value, (image, value))
 
     def contains(self, image: np.ndarray) -> bool:
         if type(image) != np.ndarray:
             raise TypeError('image must be numpy.ndarray instance')
         hash_value = self.hash_func(image)
-        if hash_value not in self.hash_dict:
-            return False
-        for candidate_image, _ in self.hash_dict[hash_value]:
+        candidate_conflict_images = self.hash_tree.approximate_query(hash_value, tol=2)
+        for (candidate_image, _), _ in candidate_conflict_images:
             if self.hash_conflict_func(image, candidate_image):
                 return True
         return False
@@ -70,9 +72,8 @@ class ImageHashCacher:
         if type(image) != np.ndarray:
             raise TypeError('image must be numpy.ndarray instance')
         hash_value = self.hash_func(image)
-        if hash_value not in self.hash_dict:
-            raise KeyError('image not found')
-        for candidate_image, value in self.hash_dict[hash_value]:
+        candidate_conflict_images = self.hash_tree.approximate_query(hash_value, tol=2)
+        for (candidate_image, value), _ in candidate_conflict_images:
             if self.hash_conflict_func(image, candidate_image):
                 return value
         raise KeyError('image not found')

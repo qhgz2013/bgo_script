@@ -1,1 +1,1 @@
-from .facade import FgoStateFacade
+from .facade import FgoFSMFacade

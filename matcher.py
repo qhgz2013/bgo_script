@@ -32,7 +32,7 @@ class ServantMatcher(AbstractFgoMaterialMatcher):
     def match_support(self, img_arr: np.ndarray) -> int:
         # 支援从者匹配（注意：这里忽略了匹配的礼装）
         # 从数据库中匹配给定的截图，返回对应的从者ID（目前可以很客气地说应该是可以识别某个从者的所有卡面的，包括灵衣）
-        # 数据库记录目前更新至2019年2月的日服进度
+        # 数据库记录目前更新至2020年1月的日服进度：最新从者：Foreigner 杨贵妃
         cursor = self.sqlite_connection.cursor()
         target_size = (150, 138)
         img_arr_resized = cv2.resize(img_arr, (target_size[1], target_size[0]), interpolation=cv2.INTER_CUBIC)
@@ -93,7 +93,7 @@ class CraftEssenceMatcher(AbstractFgoMaterialMatcher):
     # noinspection PyUnresolvedReferences
     def match_support(self, img_arr: np.ndarray) -> int:
         # EXPERIMENTAL
-        # 数据库记录目前更新至2019年10月的日服进度
+        # 数据库记录目前更新至2020年1月的日服进度
         # 注：礼装的助战缩略图和平常的小图还是有挺大偏差的，旋转裁剪缩放这种事情都能干出来，极其心不甘情不愿上SIFT算法
         # （毕竟匹配开销太大了）
         # 注意：这里使用cv2的contrib模块算法，在使用cmake编译时把contrib module记得include进去，
