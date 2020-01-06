@@ -53,9 +53,10 @@ class ImageHashCacher:
             raise TypeError('image must be numpy.ndarray instance')
         hash_value = self.hash_func(image)
         candidate_conflict_images = self.hash_tree.approximate_query(hash_value, tol=2)
-        for (candidate_image, _), _ in candidate_conflict_images:
-            if self.hash_conflict_func(image, candidate_image):
-                return
+        for candidate_image_list, _ in candidate_conflict_images:
+            for candidate_image, value in candidate_image_list:
+                if self.hash_conflict_func(image, candidate_image):
+                    return
         self.hash_tree.add_node(hash_value, (image, value))
 
     def contains(self, image: np.ndarray) -> bool:
@@ -63,9 +64,10 @@ class ImageHashCacher:
             raise TypeError('image must be numpy.ndarray instance')
         hash_value = self.hash_func(image)
         candidate_conflict_images = self.hash_tree.approximate_query(hash_value, tol=2)
-        for (candidate_image, _), _ in candidate_conflict_images:
-            if self.hash_conflict_func(image, candidate_image):
-                return True
+        for candidate_image_list, _ in candidate_conflict_images:
+            for candidate_image, _ in candidate_image_list:
+                if self.hash_conflict_func(image, candidate_image):
+                    return True
         return False
 
     def get_value(self, image: np.ndarray) -> Optional[T]:
@@ -73,9 +75,10 @@ class ImageHashCacher:
             raise TypeError('image must be numpy.ndarray instance')
         hash_value = self.hash_func(image)
         candidate_conflict_images = self.hash_tree.approximate_query(hash_value, tol=2)
-        for (candidate_image, value), _ in candidate_conflict_images:
-            if self.hash_conflict_func(image, candidate_image):
-                return value
+        for candidate_image_list, _ in candidate_conflict_images:
+            for candidate_image, value in candidate_image_list:
+                if self.hash_conflict_func(image, candidate_image):
+                    return value
         raise KeyError('image not found')
 
     def __contains__(self, item):

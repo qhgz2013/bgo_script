@@ -114,6 +114,8 @@ class AbstractAttacher:
                 pos = new_x | (new_y << 16)
                 root.info('PostMessage(%d, WM_MOUSEMOVE, MK_LBUTTON, pos: (%d, %d))' % (handle, new_x, new_y))
                 win32gui.SendMessage(handle, win32con.WM_MOUSEMOVE, win32con.MK_LBUTTON, pos)
+                last_x = new_x
+                last_y = new_y
             sleep(0.002)
         sleep(stay_time_after_move)
         root.info('PostMessage(%d, WM_LBUTTONUP, MK_LBUTTON, pos: (%d, %d))' % (handle, x2, y2))

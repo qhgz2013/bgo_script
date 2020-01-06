@@ -8,10 +8,12 @@ import pickle
 from util.phash import perception_hash
 from cv_positioning import CV_FGO_DATABASE_FILE
 from util.image_hash_cacher import ImageHashCacher, mean_gray_diff_err
+import image_process
 
 SQL_PATH = CV_FGO_DATABASE_FILE
 
 
+# TODO: 重构该部分代码
 class AbstractFgoMaterialMatcher:
     def __init__(self, sql_path: str = SQL_PATH):
         self.sql_path = sql_path
@@ -35,9 +37,9 @@ class ServantMatcher(AbstractFgoMaterialMatcher):
         # 数据库记录目前更新至2020年1月的日服进度：最新从者：Foreigner 杨贵妃
         cursor = self.sqlite_connection.cursor()
         target_size = (150, 138)
-        img_arr_resized = cv2.resize(img_arr, (target_size[1], target_size[0]), interpolation=cv2.INTER_CUBIC)
+        img_arr_resized = image_process.resize(img_arr, target_size[1], target_size[0])
         servant_part = img_arr_resized[:109, ...]
-        hsv_servant_part = cv2.cvtColor(servant_part, cv2.COLOR_RGB2HSV)
+        hsv_servant_part = image_process.rgb_to_hsv(servant_part)
         # querying servant icon database
         if self.cached_icon_meta is None:
             cursor.execute("select id, image_key from servant_icon")
@@ -47,13 +49,16 @@ class ServantMatcher(AbstractFgoMaterialMatcher):
         min_abs_err = 0
         for servant_id, image_key in self.cached_icon_meta:
             if image_key not in self.cached_icons:
-                cursor.execute("select image_data from image where image_key = ?", (image_key,))
-                binary_data = cursor.fetchone()[0]
+                cursor.execute("select image_data, name from image where image_key = ?", (image_key,))
+                binary_data, name = cursor.fetchone()
+                # In the newest database, the icon contains servant portrait, which is useless here.
+                if 'portrait' in name.lower() or 'without frame' in name.lower():
+                    continue
                 pil_image = Image.open(BytesIO(binary_data))
                 np_image = np.asarray(pil_image)[3:-3, 3:-3, :3]  # clipping alpha and opacity border
                 if np_image.shape[:2] != target_size:
-                    np_image = cv2.resize(np_image, (target_size[1], target_size[0]), interpolation=cv2.INTER_CUBIC)
-                hsv_image = cv2.cvtColor(np_image, cv2.COLOR_RGB2HSV)
+                    np_image = image_process.resize(np_image, target_size[1], target_size[0])
+                hsv_image = image_process.rgb_to_hsv(np_image)
                 self.cached_icons[image_key] = hsv_image
             anchor_servant_part = self.cached_icons[image_key][:109, ...]
             abs_h_err = np.abs(anchor_servant_part[..., 0] - hsv_servant_part[..., 0])
@@ -67,14 +72,15 @@ class ServantMatcher(AbstractFgoMaterialMatcher):
         cursor.close()
         return min_servant_id
 
-    def get_servant_name(self, servant_id: int) -> str:
-        cursor = self.sqlite_connection.cursor()
-        cursor.execute("select name_cn from servant_base where id = ?", (servant_id,))
-        result = cursor.fetchone()
-        cursor.close()
-        if result is None:
-            return ''
-        return result[0]
+    # no longer support in the newest database
+    # def get_servant_name(self, servant_id: int) -> str:
+    #     cursor = self.sqlite_connection.cursor()
+    #     cursor.execute("select name_cn from servant_base where id = ?", (servant_id,))
+    #     result = cursor.fetchone()
+    #     cursor.close()
+    #     if result is None:
+    #         return ''
+    #     return result[0]
 
 
 def deserialize_cv2_keypoint(serialized_tuple):

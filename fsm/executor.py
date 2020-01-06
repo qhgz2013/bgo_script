@@ -23,4 +23,5 @@ class FSMExecutor:
                 self.state = STATE_ERROR
                 break
             next_state = handler.run_and_transit_state()
+            assert type(next_state) == int, 'Expected state type: int, but got: %s' % str(type(next_state))
             self.state = next_state
