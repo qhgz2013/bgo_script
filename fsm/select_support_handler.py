@@ -26,10 +26,13 @@ class SelectSupportHandler(StateHandler):
         self.servant_matcher = SupportServantMatcher(CV_FGO_DATABASE_FILE)
         self.craft_essence_matcher = SupportCraftEssenceMatcher(CV_FGO_DATABASE_FILE)
         self._support_empty_img = image_process.imread(CV_SUPPORT_EMPTY_FILE)
+        self._support_craft_essence_img = image_process.imread(CV_SUPPORT_CRAFT_ESSENCE_FILE)
+        self._support_max_break_img = image_process.imread(CV_SUPPORT_CRAFT_ESSENCE_MAX_BREAK_FILE)
 
     def run_and_transit_state(self) -> int:
         suc = False
         while True:
+            sleep(0.5)
             img = self.attacher.get_screenshot(CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y)
             support_range = self._split_support_image(img)
             servant_ids = self.match_servant(img, support_range)
@@ -38,8 +41,9 @@ class SelectSupportHandler(StateHandler):
             else:
                 craft_essence_ids = []
             for i in range(len(servant_ids)):
-                if servant_ids[i][0] == self.servant_id and (self.craft_essence_id == 0 or
-                                                             craft_essence_ids[i][0] == self.craft_essence_id):
+                if servant_ids[i][0] == self.servant_id and \
+                        (self.craft_essence_id == 0 or craft_essence_ids[i][0] == self.craft_essence_id) and \
+                        (not self.craft_essence_max_break or craft_essence_ids[i][1]):
                     # servant matched
                     root.info('Found required support')
                     self.attacher.send_click(0.5, (support_range[i][0] + support_range[i][1]) / 2)
@@ -59,7 +63,7 @@ class SelectSupportHandler(StateHandler):
     def _action_scroll_down(self):
         root.info('scrolling down')
         self.attacher.send_slide((0.5, 0.9), (0.5, 0.9 - SUPPORT_SCROLLDOWN_Y))
-        sleep(0.5)
+        sleep(1.5)
 
     @staticmethod
     def _split_support_image(img: np.ndarray) -> List[Tuple[float, float]]:
@@ -136,19 +140,41 @@ class SelectSupportHandler(StateHandler):
         sleep(0.5)
 
     def match_servant(self, img: np.ndarray, range_list: List[Tuple[float, float]]) -> List[Tuple[int, List[int]]]:
-        ret, t = self._wrap_call_matcher(self.servant_matcher.match, img, self._support_empty_img, range_list)
+        def _empty_check(img1, img2):
+            return mean_gray_diff_err(image_process.resize(img1, img2.shape[1], img2.shape[0]), img2)
+        ret, t = self._wrap_call_matcher(self.servant_matcher.match, _empty_check, img, self._support_empty_img,
+                                         range_list)
         root.info('Detected support servant ID: %s (used %f sec(s))' % (str(ret), t))
         # TODO: implement skill level detection here (replacing [0, 0, 0])
         return [(x, [0, 0, 0]) for x in ret]
 
     def match_craft_essence(self, img: np.ndarray, range_list: List[Tuple[float, float]]) -> List[Tuple[int, bool]]:
-        ret, t = self._wrap_call_matcher(self.craft_essence_matcher.match, img, None, range_list)
+        def _empty_check(img1, img2):
+            img1_h = int(img2.shape[1] / img1.shape[1] * img1.shape[0])
+            img1 = image_process.resize(img1, img2.shape[1], img1_h)
+            img1 = img1[-img2.shape[0]:, ...]
+            return mean_gray_diff_err(img1, img2)
+        ret, t = self._wrap_call_matcher(self.craft_essence_matcher.match, _empty_check, img,
+                                         self._support_craft_essence_img, range_list)
         root.info('Detected support craft essence ID: %s (used %f sec(s))' % (str(ret), t))
-        # TODO: implement max break detection here (replacing False)
-        return [(x, False) for x in ret]
+        t = time()
+        # detect craft essence max break state
+        max_break = []
+        for y1, y2 in range_list:
+            icon = img[int(CV_SCREENSHOT_RESOLUTION_Y*y1):int(CV_SCREENSHOT_RESOLUTION_Y*y2),
+                       int(CV_SCREENSHOT_RESOLUTION_X*CV_SUPPORT_SERVANT_X1):
+                       int(CV_SCREENSHOT_RESOLUTION_X*CV_SUPPORT_SERVANT_X2), :]
+            icon = icon[-24:-4, 133:153, :]
+            icon = image_process.resize(icon, self._support_max_break_img.shape[1],
+                                        self._support_max_break_img.shape[0])
+            max_break.append(mean_gray_diff_err(icon, self._support_max_break_img))
+        root.info('Detected support craft essence max break state: %s (used %f sec(s))' % (str(max_break), time() - t))
+        return list(zip(ret, max_break))
 
     @staticmethod
-    def _wrap_call_matcher(func: Callable[[np.ndarray], int], img: np.ndarray, empty_img: Union[np.ndarray, None],
+    def _wrap_call_matcher(func: Callable[[np.ndarray], int],
+                           empty_check_func: Callable[[np.ndarray, np.ndarray], bool],
+                           img: np.ndarray, empty_img: Union[np.ndarray, None],
                            range_list: List[Tuple[float, float]]) -> Tuple[List[int], float]:
         x1 = int(CV_SCREENSHOT_RESOLUTION_X * CV_SUPPORT_SERVANT_X1)
         x2 = int(CV_SCREENSHOT_RESOLUTION_X * CV_SUPPORT_SERVANT_X2)
@@ -156,8 +182,7 @@ class SelectSupportHandler(StateHandler):
         ret = []
         for y1, y2 in range_list:
             icon = img[int(CV_SCREENSHOT_RESOLUTION_Y*y1):int(CV_SCREENSHOT_RESOLUTION_Y*y2), x1:x2, :]
-            if empty_img is not None and \
-                    mean_gray_diff_err(image_process.resize(icon, empty_img.shape[1], empty_img.shape[0]), empty_img):
+            if empty_img is not None and empty_check_func(icon, empty_img):
                 ret.append(0)
             else:
                 ret.append(func(icon))

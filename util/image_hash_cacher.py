@@ -8,6 +8,19 @@ import numpy as np
 from .bk_tree import BKTree
 
 
+def _compute_gray_alpha(img: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    if len(img.shape) == 3:
+        if img.shape[-1] == 4:
+            alpha = img[..., -1]
+        else:
+            alpha = np.full([img.shape[0], img.shape[1]], 255, 'uint8')
+        gray = np.mean(img[..., :3], -1)
+        return gray, alpha
+    else:
+        alpha = np.full([img.shape[0], img.shape[1]], 255, 'uint8')
+        return img, alpha
+
+
 def mean_gray_diff_err(a: np.ndarray, b: np.ndarray, mean_gray_diff_threshold: float = 20) -> bool:
     """
     A common used hash conflict function, compute the absolute difference between two images, returns whether the mean
@@ -22,11 +35,10 @@ def mean_gray_diff_err(a: np.ndarray, b: np.ndarray, mean_gray_diff_threshold: f
         raise ValueError('unsupported input shape, input image must shapes (h, w, c) or (h, w)')
     if a.shape[:2] != b.shape[:2]:
         raise ValueError('invalid comparison: %s and %s' % (str(a.shape[:2]), str(b.shape[:2])))
-    if len(a.shape) == 3:
-        a = np.mean(a, -1)
-    if len(b.shape) == 3:
-        b = np.mean(b, -1)
-    gray_diff_err = np.mean(np.abs(a - b))
+    a, alpha_a = _compute_gray_alpha(a)
+    b, alpha_b = _compute_gray_alpha(b)
+    gray_diff_err = np.abs(a - b) * (np.minimum(alpha_a, alpha_b) / 255.0)
+    gray_diff_err = np.mean(gray_diff_err)
     return gray_diff_err < mean_gray_diff_threshold
 
 

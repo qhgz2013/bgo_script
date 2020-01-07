@@ -9,6 +9,8 @@ import numpy as np
 from logging import root
 import os
 from matcher import ServantCommandCardMatcher
+from team_config import FgoTeamConfiguration
+from battle_action import FgoBattleAction
 
 
 # DFS segmentation, original implemented in file fgo_detection.ipynb
@@ -43,12 +45,13 @@ def dfs_image(img_binary, x, y, visited, rect, group_idx=1):
         dfs_image(img_binary, x+1, y, visited, rect, group_idx)
 
 
-_card_type_mapper = {1: 'Buster (1)', 2: 'Quick (2)', 3: 'Arts (3)'}
+_card_type_mapper = {1: 'Buster', 2: 'Quick', 3: 'Arts'}
 
 
 class BattleLoopHandler(StateHandler):
-    def __init__(self, attacher: AbstractAttacher, forward_state: int, battle_loop_callback: Callable,
-                 battle_digit_dir: str):
+    def __init__(self, attacher: AbstractAttacher, forward_state: int, team_preset: FgoTeamConfiguration,
+                 battle_loop_callback: Callable[[int, int, List[int], List[int], List[int],
+                                                 FgoTeamConfiguration, FgoBattleAction], None], battle_digit_dir: str):
         self.attacher = attacher
         self.forward_state = forward_state
         self.battle_loop_callback = battle_loop_callback
@@ -58,6 +61,7 @@ class BattleLoopHandler(StateHandler):
         self._battle_digit_dir = battle_digit_dir
         self._battle_digits = self._handle_digits()
         self._servant_matcher = ServantCommandCardMatcher(CV_FGO_DATABASE_FILE)
+        self.team_preset = team_preset
 
     @staticmethod
     def _generate_attack_button_mask() -> np.ndarray:
@@ -94,6 +98,7 @@ class BattleLoopHandler(StateHandler):
 
     def run_and_transit_state(self) -> int:
         turn = 1
+        action = FgoBattleAction(self.team_preset)
         while True:
             if not self._wait_can_attack_or_exit_quest():
                 return self.forward_state
@@ -102,12 +107,32 @@ class BattleLoopHandler(StateHandler):
             battle, max_battle = self._get_current_battle(img)
             root.info('Detected quest info: Battle: %d / %d, Turn: %d' % (battle, max_battle, turn))
             sleep(0.5)
-            self.attacher.send_click((CV_ATTACK_BUTTON_X1 + CV_ATTACK_BUTTON_X2) / 2,
-                                     (CV_ATTACK_BUTTON_Y1 + CV_ATTACK_BUTTON_Y2) / 2)
+            self.attacher.send_click(ATTACK_BUTTON_X, ATTACK_BUTTON_Y)
             sleep(0.5)
             img = self.attacher.get_screenshot(CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y)
-            command_card_data = self._get_command_card_info(img)
+            command_card_servant_id, command_card_type = self._get_command_card_info(img)
+            action.reset()
             # do callback
+            try:
+                self.battle_loop_callback(battle, turn, command_card_servant_id, command_card_type, [],
+                                          self.team_preset, action)
+                click_sequence = action.get_click_actions()
+                # if uses skill, back to servant page
+                if len(action.skill_sequence) > 0:
+                    self.attacher.send_click(ATTACK_BACK_BUTTON_X, ATTACK_BACK_BUTTON_Y)
+                    sleep(1)
+                for t, click_pos in click_sequence:
+                    if t == -1:
+                        if not self._wait_can_attack_or_exit_quest():
+                            root.info('Unexpected exit quest state detected! Exit battle loop')
+                            break
+                    elif t > 0:
+                        sleep(t)
+                    if click_pos is not None:
+                        x, y = click_pos
+                        self.attacher.send_click(x, y)
+            except Exception as ex:
+                root.error('Error while calling callback function: %s' % str(ex), exc_info=ex)
             sleep(1)
             turn += 1
 
@@ -143,7 +168,7 @@ class BattleLoopHandler(StateHandler):
         # re-order based on x position
         cx = [(x[1] + x[2]) / 2 for x in rects]
         rects = [x[1] for x in sorted(zip(cx, rects), key=lambda t: t[0]) if x[1][-1] > 20]  # filter out obj < 20 px
-        root.info('Digit recognition rects: %s' % str(rects))
+        # root.info('Digit recognition rects: %s' % str(rects))
         assert len(rects) == 3, 'Current implementation must meet that # of battles less than 10,' \
                                 ' or maybe recognition corrupted'
         return self._digit_recognize(self._normalize_image(s, rects[0], [20, 10])), \
@@ -170,7 +195,6 @@ class BattleLoopHandler(StateHandler):
     def _get_command_card_info(self, img: np.ndarray) -> Tuple[List[int], List[int]]:
         # 从者头像与指令卡的padding: Top 25px, Left 40px, Right 40px, Bottom 14px
         # 缩放比到时候根据指令卡边框大小算就ok
-        import matplotlib.pyplot as plt
         t = time()
         servant_ids = []
         card_types = []
@@ -181,7 +205,6 @@ class BattleLoopHandler(StateHandler):
             score = np.logical_and(h >= CV_COMMAND_CARD_TOP_BORDER_H_LO, h < CV_COMMAND_CARD_TOP_BORDER_H_HI)
             score = np.mean(score, -1)[:int(0.1*command_card.shape[0])]
             y_offset = np.argmax(score)
-            # command_card = command_card[y_offset:y_offset+int(CV_SCREENSHOT_RESOLUTION_Y*CV_COMMAND_CARD_HEIGHT), ...]
             # Extend pixels
             command_card = img[int(CV_SCREENSHOT_RESOLUTION_Y*(CV_COMMAND_CARD_Y-0.03472))+y_offset:
                                int(CV_SCREENSHOT_RESOLUTION_Y*(CV_COMMAND_CARD_Y+CV_COMMAND_CARD_HEIGHT+0.01945))
@@ -191,14 +214,12 @@ class BattleLoopHandler(StateHandler):
             servant_id, card_type = self._servant_matcher.match(command_card)
             servant_ids.append(servant_id)
             card_types.append(card_type + 1)
-            # plt.figure()
-            # plt.imshow(command_card)
-            # plt.show()
         root.info('Detected command card data: Servant: %s, Type: %s (used %f sec(s))' %
                   (str(servant_ids), str([_card_type_mapper[x] for x in card_types]), time() - t))
         return servant_ids, card_types
 
     def _is_exit_quest_scene(self, img: np.ndarray) -> bool:
+        # TODO: implement this!
         pass
 
     def _wait_can_attack_or_exit_quest(self) -> bool:

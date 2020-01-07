@@ -62,6 +62,7 @@ class AbstractAttacher:
         :param stay_time: the interval between MOUSE BUTTON DOWN and MOUSE BUTTON UP
         :return: None
         """
+        root.info('Performing click: (%f, %f)' % (x, y))
         handle = self.handle()
         left, top, right, bottom = win32gui.GetWindowRect(handle)
         height = bottom - top
@@ -69,10 +70,10 @@ class AbstractAttacher:
         x = int(x * width)
         y = int(y * height)
         pos = x | (y << 16)
-        root.info('PostMessage(%d, WM_LBUTTONDOWN, MK_LBUTTON, pos: (%d, %d))' % (handle, x, y))
+        # root.info('PostMessage(%d, WM_LBUTTONDOWN, MK_LBUTTON, pos: (%d, %d))' % (handle, x, y))
         win32gui.PostMessage(handle, win32con.WM_LBUTTONDOWN, win32con.MK_LBUTTON, pos)
         sleep(stay_time)
-        root.info('PostMessage(%d, WM_LBUTTONUP, 0, pos: (%d, %d))' % (handle, x, y))
+        # root.info('PostMessage(%d, WM_LBUTTONUP, 0, pos: (%d, %d))' % (handle, x, y))
         win32gui.PostMessage(handle, win32con.WM_LBUTTONUP, 0, pos)
 
     def send_slide(self, p_from: Tuple[float, float], p_to: Tuple[float, float], stay_time_before_move: float = 0.1,
@@ -88,6 +89,7 @@ class AbstractAttacher:
         :param stay_time_after_move: the interval between MOUSE MOVE and MOUSE BUTTON UP (in seconds)
         :return: None
         """
+        root.info('Performing slide: from %s to %s' % (str(p_from), str(p_to)))
         handle = self.handle()
         left, top, right, bottom = win32gui.GetWindowRect(handle)
         height = bottom - top
@@ -100,7 +102,7 @@ class AbstractAttacher:
         y2 = int(y2 * height)
         begin_pos = x1 | (y1 << 16)
         end_pos = x2 | (y2 << 16)
-        root.info('PostMessage(%d, WM_LBUTTONDOWN, MK_LBUTTON, pos: (%d, %d))' % (handle, x1, y1))
+        # root.info('PostMessage(%d, WM_LBUTTONDOWN, MK_LBUTTON, pos: (%d, %d))' % (handle, x1, y1))
         win32gui.PostMessage(handle, win32con.WM_LBUTTONDOWN, win32con.MK_LBUTTON, begin_pos)
         sleep(stay_time_before_move)
         begin_t = time()
@@ -112,11 +114,11 @@ class AbstractAttacher:
             new_y = int(y1 + (y2 - y1) * norm_t)
             if last_x != new_x or last_y != new_y:
                 pos = new_x | (new_y << 16)
-                root.info('PostMessage(%d, WM_MOUSEMOVE, MK_LBUTTON, pos: (%d, %d))' % (handle, new_x, new_y))
+                # root.info('PostMessage(%d, WM_MOUSEMOVE, MK_LBUTTON, pos: (%d, %d))' % (handle, new_x, new_y))
                 win32gui.SendMessage(handle, win32con.WM_MOUSEMOVE, win32con.MK_LBUTTON, pos)
                 last_x = new_x
                 last_y = new_y
             sleep(0.002)
         sleep(stay_time_after_move)
-        root.info('PostMessage(%d, WM_LBUTTONUP, MK_LBUTTON, pos: (%d, %d))' % (handle, x2, y2))
+        # root.info('PostMessage(%d, WM_LBUTTONUP, MK_LBUTTON, pos: (%d, %d))' % (handle, x2, y2))
         win32gui.PostMessage(handle, win32con.WM_LBUTTONUP, win32con.MK_LBUTTON, end_pos)

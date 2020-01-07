@@ -72,6 +72,7 @@ CV_EXIT_QUEST_GRAY_RATIO_THRESHOLD = 0.99
 CV_FGO_DATABASE_FILE = 'cv_data/fgo_new.db'
 CV_SUPPORT_EMPTY_FILE = 'cv_data/support_empty.png'
 CV_SUPPORT_CRAFT_ESSENCE_FILE = 'cv_data/support_craft_essence_empty.png'
+CV_SUPPORT_CRAFT_ESSENCE_MAX_BREAK_FILE = 'cv_data/max_break.png'
 
 CV_BATTLE_DETECTION_X1 = 0.6718
 CV_BATTLE_DETECTION_X2 = 0.7344
