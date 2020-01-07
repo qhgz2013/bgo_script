@@ -9,6 +9,7 @@ from util.phash import perception_hash
 from cv_positioning import CV_FGO_DATABASE_FILE
 from util.image_hash_cacher import ImageHashCacher, mean_gray_diff_err
 import image_process
+from typing import *
 
 SQL_PATH = CV_FGO_DATABASE_FILE
 
@@ -22,16 +23,16 @@ class AbstractFgoMaterialMatcher:
         self.cached_icon_meta = None
         self.cached_icons = {}
 
-    def match_support(self, img_arr: np.ndarray) -> int:
+    def match(self, img_arr: np.ndarray) -> int:
         raise NotImplementedError()
 
 
-class ServantMatcher(AbstractFgoMaterialMatcher):
+class SupportServantMatcher(AbstractFgoMaterialMatcher):
     def __init__(self, sql_path: str = SQL_PATH):
-        super(ServantMatcher, self).__init__(sql_path)
+        super(SupportServantMatcher, self).__init__(sql_path)
 
     # noinspection PyUnresolvedReferences
-    def match_support(self, img_arr: np.ndarray) -> int:
+    def match(self, img_arr: np.ndarray) -> int:
         # 支援从者匹配（注意：这里忽略了匹配的礼装）
         # 从数据库中匹配给定的截图，返回对应的从者ID（目前可以很客气地说应该是可以识别某个从者的所有卡面的，包括灵衣）
         # 数据库记录目前更新至2020年1月的日服进度：最新从者：Foreigner 杨贵妃
@@ -72,15 +73,55 @@ class ServantMatcher(AbstractFgoMaterialMatcher):
         cursor.close()
         return min_servant_id
 
-    # no longer support in the newest database
-    # def get_servant_name(self, servant_id: int) -> str:
-    #     cursor = self.sqlite_connection.cursor()
-    #     cursor.execute("select name_cn from servant_base where id = ?", (servant_id,))
-    #     result = cursor.fetchone()
-    #     cursor.close()
-    #     if result is None:
-    #         return ''
-    #     return result[0]
+
+class ServantCommandCardMatcher(AbstractFgoMaterialMatcher):
+    def __init__(self, sql_path: str = SQL_PATH):
+        super(ServantCommandCardMatcher, self).__init__(sql_path)
+
+    def match(self, img_arr: np.ndarray) -> Tuple[int, int]:
+        # import matplotlib.pyplot as plt
+        cursor = self.sqlite_connection.cursor()
+        target_size = (160, 160)
+        img_arr_resized = image_process.resize(img_arr, target_size[1], target_size[0])
+        servant_part = img_arr_resized[:int(0.5*target_size[0]), ...]
+        # querying servant icon database
+        if self.cached_icon_meta is None:
+            cursor.execute("select id, image_key from servant_command_card_icon")
+            self.cached_icon_meta = cursor.fetchall()
+        # querying image data
+        min_servant_id = 0
+        min_abs_err = 0
+        card_color = -1
+        for servant_id, image_key in self.cached_icon_meta:
+            if image_key not in self.cached_icons:
+                cursor.execute("select image_data, name from image where image_key = ?", (image_key,))
+                binary_data, name = cursor.fetchone()
+                # All icon are PNG file with extra alpha channel
+                pil_image = Image.open(BytesIO(binary_data))
+                np_image = np.asarray(pil_image)
+                # split alpha channel
+                assert np_image.shape[-1] == 4, 'Servant Icon should be RGBA channel'
+                alpha = np_image[..., -1:]
+                np_image = np_image[..., :3]
+                if np_image.shape[:2] != target_size:
+                    np_image = image_process.resize(np_image, target_size[1], target_size[0])
+                self.cached_icons[image_key] = np_image, alpha
+            anchor_servant_part = self.cached_icons[image_key][0][:int(0.5*target_size[0]), ...]
+            abs_err = np.abs(anchor_servant_part.astype(np.float) - servant_part)
+            abs_err = abs_err * (self.cached_icons[image_key][1][:int(0.5*target_size[0]), ...] / 255)
+            mean_abs_err = np.mean(abs_err)
+            if min_servant_id == 0 or mean_abs_err < min_abs_err:
+                min_servant_id = servant_id
+                min_abs_err = mean_abs_err
+                # computing card color, reverse alpha channel to choose background
+                card_bg = (1.0 - self.cached_icons[image_key][1] / 255) * img_arr_resized
+                card_bg = card_bg[15:150, 27:133, :].astype('uint8')
+                # plt.figure()
+                # plt.imshow(card_bg)
+                # plt.show()
+                card_color = np.argmax(np.mean(card_bg, (0, 1)))
+        cursor.close()
+        return min_servant_id, card_color
 
 
 def deserialize_cv2_keypoint(serialized_tuple):
@@ -89,15 +130,15 @@ def deserialize_cv2_keypoint(serialized_tuple):
                         _class_id=serialized_tuple[5])
 
 
-class CraftEssenceMatcher(AbstractFgoMaterialMatcher):
+class SupportCraftEssenceMatcher(AbstractFgoMaterialMatcher):
     def __init__(self, sql_path: str = SQL_PATH):
-        super(CraftEssenceMatcher, self).__init__(sql_path)
+        super(SupportCraftEssenceMatcher, self).__init__(sql_path)
         self.sift_detector = cv2.xfeatures2d_SIFT.create()
         self.flann_matcher = cv2.DescriptorMatcher_create(cv2.DescriptorMatcher_FLANNBASED)
         self.image_cacher = ImageHashCacher(perception_hash, mean_gray_diff_err)
 
     # noinspection PyUnresolvedReferences
-    def match_support(self, img_arr: np.ndarray) -> int:
+    def match(self, img_arr: np.ndarray) -> int:
         # EXPERIMENTAL
         # 数据库记录目前更新至2020年1月的日服进度
         # 注：礼装的助战缩略图和平常的小图还是有挺大偏差的，旋转裁剪缩放这种事情都能干出来，极其心不甘情不愿上SIFT算法
@@ -107,7 +148,7 @@ class CraftEssenceMatcher(AbstractFgoMaterialMatcher):
         cursor = self.sqlite_connection.cursor()
         target_size = (144, 132)
         ratio_thresh = 0.7
-        img_arr_resized = cv2.resize(img_arr, (target_size[1], target_size[0]), interpolation=cv2.INTER_CUBIC)
+        img_arr_resized = image_process.resize(img_arr, target_size[1], target_size[0])
         craft_essence_part = img_arr_resized[105:-3, ...]
         # CACHE ACCESS
         if craft_essence_part in self.image_cacher:

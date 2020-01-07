@@ -34,30 +34,28 @@ cs_common = {
 
 def plot_axis():
     simulator = MumuAttacher()
-    a = simulator.get_screenshot()
-    a = skimage.io.imread(r'C:\Users\qhgz2\Documents\MuMu共享文件夹\MuMu20191017113537.png')[..., :3]
-    a = cv2.resize(a, (1280, 720))
-    # hsv = cv2.cvtColor(a, cv2.COLOR_RGB2HSV)
-    # for i in range(3):
-    #     a[:, :, i] = hsv[..., 2]
-    a = a[155:545, 55:1225, :]
+    a = simulator.get_screenshot(CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y).copy()
+    hsv = cv2.cvtColor(a, cv2.COLOR_RGB2HSV)
+    for i in range(3):
+        a[:, :, i] = hsv[..., 0]
+    # a = a[155:545, 55:1225, :]
     # for i in range(0, a.shape[1], 10):
     #     a[:, i, 0] = 255
     # for j in range(0, a.shape[0], 10):
     #     a[j, :, 1] = 255
-    a[15:50, 20:245, :] = 0
-    a[75:365, 55:225, :] = 0
-    a[75:365, 275:450, :] = 0
-    a[75:365, 500:670, :] = 0
-    a[75:365, 720:895, :] = 0
-    a[75:365, 945:1115, :] = 0
-    a = np.mean(a, -1)
-    a = a < 25
-    print(np.mean(a))
+    # a[15:50, 20:245, :] = 0
+    # a[75:365, 55:225, :] = 0
+    # a[75:365, 275:450, :] = 0
+    # a[75:365, 500:670, :] = 0
+    # a[75:365, 720:895, :] = 0
+    # a[75:365, 945:1115, :] = 0
+    # a = np.mean(a, -1)
+    # a = a < 25
+    # print(np.mean(a))
     plt.figure(figsize=(16, 9))
     plt.imshow(a)
     plt.show()
-    plt.figure(figsize=(16, 9))
+    # plt.figure(figsize=(16, 9))
     # a = np.mean(a[..., 0], -1)
     # plt.plot(a)
     # plt.show()
@@ -148,6 +146,7 @@ def team_kinpika_fes():
 
 
 def main():
+    # plot_axis()
     team_kinpika_fes()
 
 

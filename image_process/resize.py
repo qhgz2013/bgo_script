@@ -23,6 +23,8 @@ def _resize_pil(img: np.ndarray, width: int, height: int) -> np.ndarray:
 
 
 def resize(img: np.ndarray, width: int, height: int) -> np.ndarray:
+    if img.shape[0] == height and img.shape[1] == width:
+        return img  # no need to resize
     global _selected_default_func
     if _selected_default_func is not None:
         return _selected_default_func(img, width, height)

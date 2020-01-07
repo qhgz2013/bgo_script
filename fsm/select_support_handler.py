@@ -1,14 +1,15 @@
 from .state_handler import StateHandler
 from attacher import AbstractAttacher
-from matcher import ServantMatcher, CraftEssenceMatcher
+from matcher import SupportServantMatcher, SupportCraftEssenceMatcher
 from logging import root
-from typing import List, Optional, Tuple, Callable
+from typing import List, Optional, Tuple, Callable, Union
 from cv_positioning import *
 from click_positioning import *
 import image_process
 import numpy as np
 from time import sleep, time
 from .wait_fufu_handler import WaitFufuStateHandler
+from util import mean_gray_diff_err
 
 
 # TODO: multiple support configuration support
@@ -22,8 +23,9 @@ class SelectSupportHandler(StateHandler):
         self.craft_essence_id = support_craft_essence_id
         self.craft_essence_max_break = support_craft_essence_max_break
         self.servant_skill = support_servant_minimal_skill or [0, 0, 0]
-        self.servant_matcher = ServantMatcher(CV_FGO_DATABASE_FILE)
-        self.craft_essence_matcher = CraftEssenceMatcher(CV_FGO_DATABASE_FILE)
+        self.servant_matcher = SupportServantMatcher(CV_FGO_DATABASE_FILE)
+        self.craft_essence_matcher = SupportCraftEssenceMatcher(CV_FGO_DATABASE_FILE)
+        self._support_empty_img = image_process.imread(CV_SUPPORT_EMPTY_FILE)
 
     def run_and_transit_state(self) -> int:
         suc = False
@@ -37,7 +39,7 @@ class SelectSupportHandler(StateHandler):
                 craft_essence_ids = []
             for i in range(len(servant_ids)):
                 if servant_ids[i][0] == self.servant_id and (self.craft_essence_id == 0 or
-                                                             craft_essence_ids[i] == self.craft_essence_id):
+                                                             craft_essence_ids[i][0] == self.craft_essence_id):
                     # servant matched
                     root.info('Found required support')
                     self.attacher.send_click(0.5, (support_range[i][0] + support_range[i][1]) / 2)
@@ -51,11 +53,13 @@ class SelectSupportHandler(StateHandler):
                 self._action_scroll_down()
             else:
                 self.refresh_support()
+        sleep(1)
         return self.forward_state
 
     def _action_scroll_down(self):
         root.info('scrolling down')
         self.attacher.send_slide((0.5, 0.9), (0.5, 0.9 - SUPPORT_SCROLLDOWN_Y))
+        sleep(0.5)
 
     @staticmethod
     def _split_support_image(img: np.ndarray) -> List[Tuple[float, float]]:
@@ -74,7 +78,7 @@ class SelectSupportHandler(StateHandler):
             if y == CV_SCREENSHOT_RESOLUTION_Y:
                 break
             begin_s1_y = y
-            while y  <CV_SCREENSHOT_RESOLUTION_Y and stage1_valid[y]:
+            while y < CV_SCREENSHOT_RESOLUTION_Y and stage1_valid[y]:
                 y += 1
             end_s1_y = y
             s1_len = end_s1_y - begin_s1_y
@@ -132,26 +136,29 @@ class SelectSupportHandler(StateHandler):
         sleep(0.5)
 
     def match_servant(self, img: np.ndarray, range_list: List[Tuple[float, float]]) -> List[Tuple[int, List[int]]]:
-        ret, t = self._wrap_call_matcher(self.servant_matcher.match_support, img, range_list)
+        ret, t = self._wrap_call_matcher(self.servant_matcher.match, img, self._support_empty_img, range_list)
         root.info('Detected support servant ID: %s (used %f sec(s))' % (str(ret), t))
         # TODO: implement skill level detection here (replacing [0, 0, 0])
         return [(x, [0, 0, 0]) for x in ret]
 
     def match_craft_essence(self, img: np.ndarray, range_list: List[Tuple[float, float]]) -> List[Tuple[int, bool]]:
-        ret, t = self._wrap_call_matcher(self.craft_essence_matcher.match_support, img, range_list)
+        ret, t = self._wrap_call_matcher(self.craft_essence_matcher.match, img, None, range_list)
         root.info('Detected support craft essence ID: %s (used %f sec(s))' % (str(ret), t))
         # TODO: implement max break detection here (replacing False)
         return [(x, False) for x in ret]
 
     @staticmethod
-    def _wrap_call_matcher(func: Callable[[np.ndarray], int], img: np.ndarray, range_list: List[Tuple[float, float]])\
-            -> Tuple[List[int], float]:
+    def _wrap_call_matcher(func: Callable[[np.ndarray], int], img: np.ndarray, empty_img: Union[np.ndarray, None],
+                           range_list: List[Tuple[float, float]]) -> Tuple[List[int], float]:
         x1 = int(CV_SCREENSHOT_RESOLUTION_X * CV_SUPPORT_SERVANT_X1)
         x2 = int(CV_SCREENSHOT_RESOLUTION_X * CV_SUPPORT_SERVANT_X2)
         t = time()
         ret = []
         for y1, y2 in range_list:
             icon = img[int(CV_SCREENSHOT_RESOLUTION_Y*y1):int(CV_SCREENSHOT_RESOLUTION_Y*y2), x1:x2, :]
-            ret.append(func(icon))
+            if empty_img is not None and \
+                    mean_gray_diff_err(image_process.resize(icon, empty_img.shape[1], empty_img.shape[0]), empty_img):
+                ret.append(0)
+            else:
+                ret.append(func(icon))
         return ret, time() - t
-

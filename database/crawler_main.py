@@ -24,6 +24,8 @@ def initialize_sql_table(sql_conn):
                             'name varchar(50), image_data blob not null)')
     create_table_not_exists('create table servant_icon(id int not null, image_key varchar(50) not null,'
                             'foreign key (image_key) references image(image_key))')
+    create_table_not_exists('create table servant_command_card_icon(id int not null, image_key varchar(50) not null,'
+                            'foreign key (image_key) references image(image_key))')
     create_table_not_exists('create table craft_essence_icon(id int not null, image_key varchar(50) not null,'
                             'foreign key (image_key) references image(image_key))')
     create_table_not_exists('create table image_sift_descriptor(image_key varchar(50) primary key not null unique,'
@@ -74,8 +76,27 @@ def retrieve_servant_icons(sql_conn):
                 img = item.find('img')
                 img_src = img.attrs['src']
                 img_key = img.attrs['data-image-name']
+                text_lower = text.lower()
+                # skips portrait and without-frame images
+                if 'portrait' in text_lower or 'without frame' in text_lower:
+                    continue
                 download_image_if_not_exists(cursor, img_key, text, img_src)
                 cursor.execute("insert into servant_icon(id, image_key) values (?, ?)", (servant_id, img_key))
+            icon_div = servant_html.find('div', {'id': 'gallery-3'})
+            icon_items = icon_div.find_all('div', {'class': 'wikia-gallery-item'})
+            for item in icon_items:
+                text = str(item.find('div', {'class': 'lightbox-caption'}).string)
+                img = item.find('img')
+                if img is None:
+                    continue
+                img_src = img.attrs['src']
+                img_key = img.attrs['data-image-name']
+                text_lower = text.lower()
+                # skips portrait and without-frame images
+                if 'command card' in text_lower:
+                    download_image_if_not_exists(cursor, img_key, text, img_src)
+                    cursor.execute("insert into servant_command_card_icon(id, image_key) values (?, ?)",
+                                   (servant_id, img_key))
     cursor.close()
     sql_conn.commit()
 

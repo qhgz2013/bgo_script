@@ -1,6 +1,6 @@
 import scipy.fftpack
 import numpy as np
-import cv2
+import image_process
 
 
 def perception_hash(img: np.ndarray, hash_size: int = 4, high_freq_factor: int = 4) -> int:
@@ -15,7 +15,7 @@ def perception_hash(img: np.ndarray, hash_size: int = 4, high_freq_factor: int =
         img = np.mean(img, -1)
     image_size = hash_size * high_freq_factor
     # noinspection PyUnresolvedReferences
-    img = cv2.resize(img, (image_size, image_size), interpolation=cv2.INTER_CUBIC)
+    img = image_process.resize(img, image_size, image_size)
     dct = scipy.fftpack.dct(img)
     dct_low_freq = dct[:hash_size, 1:hash_size+1]
     avg_dct = np.mean(dct_low_freq)
