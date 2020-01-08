@@ -63,6 +63,7 @@ class FgoBattleAction:
             -> 'FgoBattleAction':
         servant_pos = self._lookup_servant_position(servant_id)
         assert 0 <= servant_pos < 3, 'Could not find servant in current team'
+        assert len(self.attack_sequence) < 3, 'Reached attack limitation (3 attacks per turn)'
         self.attack_sequence.append((ID_NP, (servant_pos, enemy_location)))
         return self
 
@@ -70,6 +71,7 @@ class FgoBattleAction:
         return self.noble_phantasm(SERVANT_ID_SUPPORT, enemy_location)
 
     def attack(self, command_card_index: int, enemy_location: int = ENEMY_LOCATION_EMPTY) -> 'FgoBattleAction':
+        assert len(self.attack_sequence) < 3, 'Reached attack limitation (3 attacks per turn)'
         self.attack_sequence.append((ID_COMMAND_CARD, (command_card_index, enemy_location)))
         return self
 
@@ -94,7 +96,7 @@ class FgoBattleAction:
         return self
 
     def get_click_actions(self) -> List[Tuple[float, Union[None, Tuple[float, float]]]]:
-        # 返回一个list，list中的每个元素都是多个tuple组成的list，代表当前turn的所有点击事件，每个tuple则只包含一个点击事件
+        # 返回一个list，该list由多个tuple组成，代表当前turn的所有点击事件，每个tuple则只包含一个点击事件
         # tuple的格式如下：(与上一个事件的时间差t，坐标)
         # 需要点击时，则坐标为(点击的坐标x，点击的坐标y)，都是归一化到[0, 1]表示的，不需要（纯粹为了等时间的话）则为None
         # 时间差一般都是大于0或等于-1的，等于-1则需要等到右下角的Attack可以按为止
@@ -145,9 +147,9 @@ class FgoBattleAction:
         # 如果是第一张卡就是宝具卡的话，需要更长一点的等待时间
         # 而且选择卡之后无法更换要攻击的敌方目标
         selected_cards = 0
+        if len(self.attack_sequence) != 3:
+            raise ValueError('Invalid turn sequence: command card selection should be equal to 3')
         for action_id, action_data in self.attack_sequence:
-            if selected_cards >= 3:
-                raise ValueError('Invalid turn sequence: command card selection should less than 3')
             if action_id == ID_NP:
                 # 宝具卡
                 servant_pos, enemy_pos = action_data

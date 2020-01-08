@@ -98,6 +98,7 @@ class BattleLoopHandler(StateHandler):
 
     def run_and_transit_state(self) -> int:
         turn = 1
+        last_battle = None
         action = FgoBattleAction(self.team_preset)
         while True:
             if not self._wait_can_attack_or_exit_quest():
@@ -105,6 +106,9 @@ class BattleLoopHandler(StateHandler):
             sleep(0.5)
             img = self.attacher.get_screenshot(CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y)
             battle, max_battle = self._get_current_battle(img)
+            if last_battle is None or last_battle != battle:
+                turn = 1  # Reset turn accumulator if battle changed
+                last_battle = battle
             root.info('Detected quest info: Battle: %d / %d, Turn: %d' % (battle, max_battle, turn))
             sleep(0.5)
             self.attacher.send_click(ATTACK_BUTTON_X, ATTACK_BUTTON_Y)
@@ -114,7 +118,7 @@ class BattleLoopHandler(StateHandler):
             action.reset()
             # do callback
             try:
-                self.battle_loop_callback(battle, turn, command_card_servant_id, command_card_type, [],
+                self.battle_loop_callback(battle, turn, command_card_type, command_card_servant_id, [],
                                           self.team_preset, action)
                 click_sequence = action.get_click_actions()
                 # if uses skill, back to servant page
@@ -133,6 +137,7 @@ class BattleLoopHandler(StateHandler):
                         self.attacher.send_click(x, y)
             except Exception as ex:
                 root.error('Error while calling callback function: %s' % str(ex), exc_info=ex)
+                exit(1)
             sleep(1)
             turn += 1
 
@@ -218,19 +223,34 @@ class BattleLoopHandler(StateHandler):
                   (str(servant_ids), str([_card_type_mapper[x] for x in card_types]), time() - t))
         return servant_ids, card_types
 
-    def _is_exit_quest_scene(self, img: np.ndarray) -> bool:
-        # TODO: implement this!
-        pass
+    @staticmethod
+    def _is_exit_quest_scene(img: np.ndarray) -> bool:
+        img = img[int(CV_SCREENSHOT_RESOLUTION_Y*CV_EXIT_QUEST_Y1):int(CV_SCREENSHOT_RESOLUTION_Y*CV_EXIT_QUEST_Y2),
+                  int(CV_SCREENSHOT_RESOLUTION_X*CV_EXIT_QUEST_X1):int(CV_SCREENSHOT_RESOLUTION_X*CV_EXIT_QUEST_X2), :]
+        img = img.copy()
+        h, w = img.shape[:2]
+        img[int(h*CV_EXIT_QUEST_TITLE_MASK_Y1):int(h*CV_EXIT_QUEST_TITLE_MASK_Y2),
+            int(w*CV_EXIT_QUEST_TITLE_MASK_X1):int(w*CV_EXIT_QUEST_TITLE_MASK_Y2), :] = 0
+        for i in range(len(CV_EXIT_QUEST_SERVANT_MASK_X1S)):
+            img[int(h*CV_EXIT_QUEST_SERVANT_MASK_Y1):int(h*CV_EXIT_QUEST_SERVANT_MASK_Y2),
+                int(w*CV_EXIT_QUEST_SERVANT_MASK_X1S[i]):int(w*CV_EXIT_QUEST_SERVANT_MASK_X2S[i]), :] = 0
+        gray = np.mean(img, -1) < CV_EXIT_QUEST_GRAY_THRESHOLD
+        return np.mean(gray) >= CV_EXIT_QUEST_GRAY_RATIO_THRESHOLD
 
     def _wait_can_attack_or_exit_quest(self) -> bool:
         t = time()
         try:
             while True:
-                img = np.mean(self.attacher.get_screenshot(CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y), -1)
-                if self._can_attack(img):
+                sleep(0.2)
+                img = self.attacher.get_screenshot(CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y)
+                gray = np.mean(img, -1)
+                blank_val = np.mean(np.less(gray, 10))
+                # skip blank screen frame
+                if blank_val >= 0.7:
+                    continue
+                if self._can_attack(gray):
                     return True
                 if self._is_exit_quest_scene(img):
                     return False
-                sleep(0.2)
         finally:
             root.info('Wait attack or exit quest: waited %f sec(s)' % (time() - t))

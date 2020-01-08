@@ -10,11 +10,18 @@ from .single_click_and_wait_fufu_handler import SingleClickAndWaitFufuHandler
 from click_positioning import *
 from .battle_loop_handler import BattleLoopHandler
 from cv_positioning import *
+from .exit_quest_handler import ExitQuestHandler
+from logging import root
+from _version import VERSION
 
 
 class FgoFSMFacade:
     def __init__(self, attacher: AbstractAttacher):
         team_preset = DEFAULT_TEAM_CONFIGURATION
+        root.info('Fate / Grand Order Auto Battle Controller')
+        root.info('* Version: %s' % VERSION)
+        root.info('* Author: Xuebin Zhou (Github: qhgz2013)')
+        root.info('* This script is free and forbid commercial usage')
         self.executor = FSMExecutor()
         self.executor.add_state_handler(STATE_BEGIN, DirectStateForwarder(STATE_CHECK_AP))
         self.executor.add_state_handler(STATE_CHECK_AP, ApCheckHandler(attacher, MAX_AP, EAT_APPLE_AP_THRESHOLD,
@@ -23,7 +30,9 @@ class FgoFSMFacade:
         self.executor.add_state_handler(STATE_SELECT_SUPPORT,
                                         SelectSupportHandler(attacher, STATE_APPLY_TEAM_CONFIG,
                                                              team_preset.support_servant_id,
-                                                             team_preset.support_craft_essence_id))
+                                                             team_preset.support_craft_essence_id,
+                                                             team_preset.support_craft_essence_max_break,
+                                                             team_preset.support_skill_requirement))
         # todo: check team configuration
         self.executor.add_state_handler(STATE_APPLY_TEAM_CONFIG, DirectStateForwarder(STATE_ENTER_QUEST))
         self.executor.add_state_handler(STATE_ENTER_QUEST,
@@ -32,7 +41,7 @@ class FgoFSMFacade:
         self.executor.add_state_handler(STATE_BATTLE_LOOP, BattleLoopHandler(attacher, STATE_EXIT_QUEST, team_preset,
                                                                              apply_action, CV_BATTLE_DIGIT_DIRECTORY))
         # Loop here
-        self.executor.add_state_handler(STATE_EXIT_QUEST, DirectStateForwarder(STATE_CHECK_AP))
+        self.executor.add_state_handler(STATE_EXIT_QUEST, ExitQuestHandler(attacher, STATE_CHECK_AP))
         # NOT USED STATE: STATE_SELECT_TEAM
 
     def run(self):

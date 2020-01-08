@@ -1,6 +1,5 @@
 # noinspection PyUnresolvedReferences
 def opencv_contrib_check():
-    from warnings import warn
     from logging import root
     try:
         import cv2
