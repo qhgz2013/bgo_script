@@ -156,7 +156,7 @@ class BattleLoopHandler(StateHandler):
                          int(CV_SCREENSHOT_RESOLUTION_Y*CV_BATTLE_DETECTION_Y2),
                          int(CV_SCREENSHOT_RESOLUTION_X*CV_BATTLE_DETECTION_X1):
                          int(CV_SCREENSHOT_RESOLUTION_X*CV_BATTLE_DETECTION_X2), :]
-        s = image_process.rgb_to_hsv(battle_ocr)[..., 1] < 12  # THRESHOLD
+        s = image_process.rgb_to_hsv(battle_ocr)[..., 2] > 128  # THRESHOLD
         s = s.astype('uint8') * 255
         # simplest digit recognition, directly applying subtraction and compare the difference
         # split digits, DFS based

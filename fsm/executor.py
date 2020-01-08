@@ -15,7 +15,7 @@ class FSMExecutor:
         del self.state_dict[state]
 
     def run(self):
-        while self.state != STATE_ERROR or self.state != STATE_FINISH:
+        while self.state != STATE_ERROR and self.state != STATE_FINISH:
             try:
                 handler = self.state_dict[self.state]  # type: StateHandler
             except KeyError:

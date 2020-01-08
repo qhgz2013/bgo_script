@@ -53,7 +53,7 @@ class SelectSupportHandler(StateHandler):
             if suc:
                 break
             _, end_pos = self._get_scrollbar_pos(img)
-            if end_pos < 0.99:
+            if 0.01 <= end_pos < 0.99:
                 self._action_scroll_down()
             else:
                 self.refresh_support()
@@ -131,8 +131,23 @@ class SelectSupportHandler(StateHandler):
 
     def refresh_support(self):
         root.info('Refreshing support')
-        sleep(0.5)
-        self.attacher.send_click(SUPPORT_REFRESH_BUTTON_X, SUPPORT_REFRESH_BUTTON_Y)
+        while True:
+            sleep(0.5)
+            self.attacher.send_click(SUPPORT_REFRESH_BUTTON_X, SUPPORT_REFRESH_BUTTON_Y)
+            # Check clickable
+            img = self.attacher.get_screenshot(CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y)
+            img = image_process.rgb_to_hsv(img)[
+                int(CV_SCREENSHOT_RESOLUTION_Y*CV_SUPPORT_REFRESH_REFUSED_DETECTION_Y1):
+                int(CV_SCREENSHOT_RESOLUTION_Y*CV_SUPPORT_REFRESH_REFUSED_DETECTION_Y2),
+                int(CV_SCREENSHOT_RESOLUTION_X*CV_SUPPORT_REFRESH_REFUSED_DETECTION_X1):
+                int(CV_SCREENSHOT_RESOLUTION_X*CV_SUPPORT_REFRESH_REFUSED_DETECTION_X2), 1]
+            if np.mean(img) < CV_SUPPORT_REFRESH_REFUSED_DETECTION_S_THRESHOLD:
+                sleep(1)
+                self.attacher.send_click(SUPPORT_REFRESH_REFUSED_CONFIRM_X, SUPPORT_REFRESH_REFUSED_CONFIRM_Y)
+                root.info('Could not refresh support temporarily, retry in 5 secs')
+                sleep(5)
+            else:
+                break
         sleep(1)
         self.attacher.send_click(SUPPORT_REFRESH_BUTTON_CONFIRM_X, SUPPORT_REFRESH_BUTTON_CONFIRM_Y)
         sleep(1)

@@ -18,11 +18,11 @@ DEFAULT_TEAM_CONFIGURATION = _team_config.FgoTeamConfiguration(
     # 助战从者ID，用于自动检测好友助战
     support_servant_id=215,
     # 助战礼装ID，用于自动检测好友助战，若不指定礼装则为0
-    support_craft_essence_id=923,
+    support_craft_essence_id=925,
     # 助战技能最低需求，未实现
     support_skill_requirement=None,
     # 助战礼装是否需要满破
-    support_craft_essence_max_break=False,
+    support_craft_essence_max_break=True,
     # 是否只选择好友助战，未实现
     friend_only=False,
 )
@@ -78,19 +78,52 @@ def apply_action(battle: int, turn: int, card_type: _typing.List[int], card_svt_
     # 注意：合理分配操作顺序，尽量遵循先技能后攻击的顺序，可以避免出现一些奇怪的问题
 
     # SAMPLE: WCBA + 大英雄 (满破虚数) + 狂兰 (50 NP) + 极地服
+
+    def _select_arthurrrrrr_card(remain_card_cnt, select_card_type, v):
+        for i in range(5):
+            if remain_card_cnt == 0:
+                break
+            if card_svt_id[i] == 48 and card_type[i] == select_card_type and v[i] == 0:
+                actions.attack(i)
+                remain_card_cnt -= 1
+                v[i] = 1
+        return remain_card_cnt
+
+    def _select_other_card(remain_card_cnt, v):
+        score_dict = {1: 1, 2: 3, 3: 2}
+        card_score = [score_dict[x] for x in card_type]
+        order = np.argsort(card_score)
+        for i in order:
+            if remain_card_cnt == 0:
+                break
+            if v[i] == 0:
+                actions.attack(i)
+                remain_card_cnt -= 1
+                v[i] = 1
+        return remain_card_cnt
+
     if battle == 1:
         # T1 : 大英雄自充 + STELLA
         # 后面两个attack用来填充剩下两张普通指令卡，大英雄炸完之后需要从队伍中移除
         actions.use_skill(16, 2).noble_phantasm(16).attack(0).attack(1).remove_servant(16)
     elif battle == 2:
         # T2 : WCBA魔放 + CBA充能 + 狂兰宝具
-        actions.use_skill(215, 0, to_servant_id=48).use_support_skill(0, to_servant_id=48)
-        actions.use_skill(215, 2, to_servant_id=48).use_skill(48, 2)
-        actions.noble_phantasm(48).attack(0).attack(1)
+        if turn == 1:
+            actions.use_skill(215, 0, to_servant_id=48).use_support_skill(0, to_servant_id=48)
+            actions.use_skill(215, 2, to_servant_id=48).use_skill(48, 2).use_skill(215, 1)
+            actions.noble_phantasm(48)
+            card_cnt = 2
+        else:
+            card_cnt = 3
+        used = np.zeros(5, 'uint8')
+        card_cnt = _select_arthurrrrrr_card(card_cnt, 2, used)
+        card_cnt = _select_arthurrrrrr_card(card_cnt, 1, used)
+        card_cnt = _select_arthurrrrrr_card(card_cnt, 3, used)
+        _select_other_card(card_cnt, used)
     else:
         if turn == 1:
             # T3 : CBA充能 + WCBA降防
-            actions.use_support_skill(2, to_servant_id=48).use_skill(215, 1).use_support_skill(1)
+            actions.use_support_skill(2, to_servant_id=48).use_support_skill(1)
             # 极地服2技能
             actions.use_clothes_skill(1, to_servant_id=48)
             # 狂兰宝具
@@ -101,29 +134,6 @@ def apply_action(battle: int, turn: int, card_type: _typing.List[int], card_svt_
             # T4 以上，默认选3张卡，优先狂兰绿卡……
             card_cnt = 3
         used = np.zeros(5, 'uint8')
-
-        def _select_arthurrrrrr_card(remain_card_cnt, select_card_type, v):
-            for i in range(5):
-                if remain_card_cnt == 0:
-                    break
-                if card_svt_id[i] == 48 and card_type[i] == select_card_type and v[i] == 0:
-                    actions.attack(i)
-                    remain_card_cnt -= 1
-                    v[i] = 1
-            return remain_card_cnt
-
-        def _select_other_card(remain_card_cnt, v):
-            score_dict = {1: 1, 2: 3, 3: 2}
-            card_score = [score_dict[x] for x in card_type]
-            order = np.argsort(card_score)
-            for i in order:
-                if remain_card_cnt == 0:
-                    break
-                if v[i] == 0:
-                    actions.attack(i)
-                    remain_card_cnt -= 1
-                    v[i] = 1
-            return remain_card_cnt
 
         # 当前发牌有狂兰的卡，优先选择绿卡
         card_cnt = _select_arthurrrrrr_card(card_cnt, 2, used)
