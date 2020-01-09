@@ -3,3 +3,9 @@ __pycache__/
 *.7z
 *.db
 *.csv
+*.pyc
+# pre-compiled opencv binaries
+*.dll
+*.pyd
+*.exe
+*.pdb

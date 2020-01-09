@@ -120,26 +120,31 @@ class BattleLoopHandler(StateHandler):
             try:
                 self.battle_loop_callback(battle, turn, command_card_type, command_card_servant_id, [],
                                           self.team_preset, action)
-                click_sequence = action.get_click_actions()
-                # if uses skill, back to servant page
+                click_sequence = action.get_skill_click_actions()
                 if len(action.skill_sequence) > 0:
+                    # if uses skill, back to servant page
                     self.attacher.send_click(ATTACK_BACK_BUTTON_X, ATTACK_BACK_BUTTON_Y)
                     sleep(1)
-                for t, click_pos in click_sequence:
-                    if t == -1:
-                        if not self._wait_can_attack_or_exit_quest():
-                            root.info('Unexpected exit quest state detected! Exit battle loop')
-                            break
-                    elif t > 0:
-                        sleep(t)
-                    if click_pos is not None:
-                        x, y = click_pos
-                        self.attacher.send_click(x, y)
+                    self._apply_click_sequence(click_sequence)
+                    self.attacher.send_click(ATTACK_BUTTON_X, ATTACK_BUTTON_Y)
+                self._apply_click_sequence(action.get_attack_click_actions())
             except Exception as ex:
                 root.error('Error while calling callback function: %s' % str(ex), exc_info=ex)
                 exit(1)
             sleep(1)
             turn += 1
+
+    def _apply_click_sequence(self, click_sequence):
+        for t, click_pos in click_sequence:
+            if t == -1:
+                if not self._wait_can_attack_or_exit_quest():
+                    root.info('Unexpected exit quest state detected! Exit battle loop')
+                    break
+            elif t > 0:
+                sleep(t)
+            if click_pos is not None:
+                x, y = click_pos
+                self.attacher.send_click(x, y)
 
     def _can_attack(self, img: np.ndarray) -> bool:
         btn_area = img[int(CV_SCREENSHOT_RESOLUTION_Y*CV_ATTACK_BUTTON_Y1):

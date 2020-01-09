@@ -95,7 +95,7 @@ class FgoBattleAction:
             self.servants[servant_pos2] = t
         return self
 
-    def get_click_actions(self) -> List[Tuple[float, Union[None, Tuple[float, float]]]]:
+    def get_skill_click_actions(self) -> List[Tuple[float, Union[None, Tuple[float, float]]]]:
         # 返回一个list，该list由多个tuple组成，代表当前turn的所有点击事件，每个tuple则只包含一个点击事件
         # tuple的格式如下：(与上一个事件的时间差t，坐标)
         # 需要点击时，则坐标为(点击的坐标x，点击的坐标y)，都是归一化到[0, 1]表示的，不需要（纯粹为了等时间的话）则为None
@@ -111,7 +111,6 @@ class FgoBattleAction:
                     click_seq.append((1, (ENEMY_XS[enemy_pos], ENEMY_Y)))
                 # 点击技能
                 click_seq.append((0.5, (SKILL_XS[servant_pos * 3 + skill_index], SKILL_Y)))
-                # first_skill = False
                 # 若是我方单体技能，则选定我方一个目标
                 if to_servant_pos != SERVANT_ID_EMPTY:
                     click_seq.append((0.5, (TO_SERVANT_X[to_servant_pos], TO_SERVANT_Y)))
@@ -142,8 +141,10 @@ class FgoBattleAction:
             else:
                 raise ValueError('program error, invalid action_id')
             click_seq.append((-1, None))
-        # 加了所有BUFF之后再出卡
-        click_seq.append((1 if len(self.skill_sequence) > 0 else 2, (ATTACK_BUTTON_X, ATTACK_BUTTON_Y)))
+        return click_seq
+
+    def get_attack_click_actions(self) -> List[Tuple[float, Union[None, Tuple[float, float]]]]:
+        click_seq = []
         # 如果是第一张卡就是宝具卡的话，需要更长一点的等待时间
         # 而且选择卡之后无法更换要攻击的敌方目标
         selected_cards = 0
