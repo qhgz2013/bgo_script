@@ -29,4 +29,4 @@ class ExitQuestHandler(StateHandler):
     def _is_in_requesting_friend_ui(self) -> bool:
         img = self.attacher.get_screenshot(CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y)
         return mean_gray_diff_err(image_process.resize(img, self._support_anchor.shape[1],
-                                                       self._support_anchor.shape[0]), img)
+                                                       self._support_anchor.shape[0]), self._support_anchor)
