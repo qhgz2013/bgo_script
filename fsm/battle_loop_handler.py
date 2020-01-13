@@ -62,6 +62,9 @@ class BattleLoopHandler(StateHandler):
         self._battle_digits = self._handle_digits()
         self._servant_matcher = ServantCommandCardMatcher(CV_FGO_DATABASE_FILE)
         self.team_preset = team_preset
+        self._current_turn_command_card_id = []
+        self._current_turn_command_card_type = []
+        self._current_turn_command_card_critical_star = []
 
     @staticmethod
     def _generate_attack_button_mask() -> np.ndarray:
@@ -99,7 +102,7 @@ class BattleLoopHandler(StateHandler):
     def run_and_transit_state(self) -> int:
         turn = 1
         last_battle = None
-        action = FgoBattleAction(self.team_preset)
+        action = FgoBattleAction(self.team_preset, self._apply_click_sequence, self._apply_command_card_changes)
         while True:
             if not self._wait_can_attack_or_exit_quest():
                 return self.forward_state
@@ -110,29 +113,41 @@ class BattleLoopHandler(StateHandler):
                 turn = 1  # Reset turn accumulator if battle changed
                 last_battle = battle
             root.info('Detected quest info: Battle: %d / %d, Turn: %d' % (battle, max_battle, turn))
-            sleep(0.5)
-            self.attacher.send_click(ATTACK_BUTTON_X, ATTACK_BUTTON_Y)
-            sleep(0.5)
-            img = self.attacher.get_screenshot(CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y)
-            command_card_servant_id, command_card_type = self._get_command_card_info(img)
+            self._apply_command_card_changes()
             action.reset()
             # do callback
             try:
-                self.battle_loop_callback(battle, turn, command_card_type, command_card_servant_id, [],
-                                          self.team_preset, action)
-                click_sequence = action.get_skill_click_actions()
-                if len(action.skill_sequence) > 0:
-                    # if uses skill, back to servant page
-                    self.attacher.send_click(ATTACK_BACK_BUTTON_X, ATTACK_BACK_BUTTON_Y)
-                    sleep(1)
-                    self._apply_click_sequence(click_sequence)
-                    self.attacher.send_click(ATTACK_BUTTON_X, ATTACK_BUTTON_Y)
-                self._apply_click_sequence(action.get_attack_click_actions())
+                self.battle_loop_callback(battle, turn, self._current_turn_command_card_type,
+                                          self._current_turn_command_card_id,
+                                          self._current_turn_command_card_critical_star, self.team_preset, action)
+                # click_sequence = action.get_skill_click_actions()
+                # if len(action.skill_sequence) > 0:
+                #     # if uses skill, back to servant page
+                #     self.attacher.send_click(ATTACK_BACK_BUTTON_X, ATTACK_BACK_BUTTON_Y)
+                #     sleep(1)
+                #     self._apply_click_sequence(click_sequence)
+                #     self.attacher.send_click(ATTACK_BUTTON_X, ATTACK_BUTTON_Y)
+                # self._apply_click_sequence(action.get_attack_click_actions())
             except Exception as ex:
                 root.error('Error while calling callback function: %s' % str(ex), exc_info=ex)
                 exit(1)
             sleep(1)
             turn += 1
+
+    def _apply_command_card_changes(self):
+        sleep(0.5)
+        self.attacher.send_click(ATTACK_BUTTON_X, ATTACK_BUTTON_Y)
+        sleep(0.5)
+        img = self.attacher.get_screenshot(CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y)
+        new_servant_id, new_card_type = self._get_command_card_info(img)
+        self._current_turn_command_card_id.clear()
+        self._current_turn_command_card_id.extend(new_servant_id)
+        self._current_turn_command_card_type.clear()
+        self._current_turn_command_card_type.extend(new_card_type)
+        self._current_turn_command_card_critical_star.clear()
+        self.attacher.send_click(ATTACK_BACK_BUTTON_X, ATTACK_BACK_BUTTON_Y)
+        sleep(0.5)
+        # implement critical star detection
 
     def _apply_click_sequence(self, click_sequence):
         for t, click_pos in click_sequence:
