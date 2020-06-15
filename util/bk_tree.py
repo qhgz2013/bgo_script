@@ -30,6 +30,10 @@ def hamming_distance_i64(x: int, y: int) -> int:
         _nbits[(xor_result >> 48) & 0xff] + _nbits[(xor_result >> 56) & 0xff]
 
 
+def hamming_distance_i128(x: int, y: int) -> int:
+    return hamming_distance_i64(x >> 64, y >> 64) + hamming_distance_i64(x & 0xffffffff, y & 0xffffffff)
+
+
 class KeyValuePairTreeNode:
     def __init__(self, key: Any, value: Any, children: Optional[Dict[Any, 'KeyValuePairTreeNode']] = None):
         self.key = key

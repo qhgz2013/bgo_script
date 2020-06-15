@@ -62,10 +62,11 @@ class SupportServantMatcher(AbstractFgoMaterialMatcher):
                 hsv_image = image_process.rgb_to_hsv(np_image)
                 self.cached_icons[image_key] = hsv_image
             anchor_servant_part = self.cached_icons[image_key][:109, ...]
-            abs_h_err = np.abs(anchor_servant_part[..., 0] - hsv_servant_part[..., 0])
+            abs_h_err = np.abs(anchor_servant_part[..., 0].astype(np.float) - hsv_servant_part[..., 0])
             # 因为hsv色域中的色相hue是一个环，所以应该从线性修正如下
             abs_h_err = np.minimum(abs_h_err, 255 - abs_h_err)
-            mean_abs_h_err = np.mean(abs_h_err)
+            abs_v_err = np.abs(anchor_servant_part[..., 2].astype(np.float) - hsv_servant_part[..., 2]) / 255.0
+            mean_abs_h_err = np.mean(abs_h_err * abs_v_err)
             if min_servant_id == 0 or mean_abs_h_err < min_abs_err:
                 min_servant_id = servant_id
                 min_abs_err = mean_abs_h_err
@@ -78,12 +79,12 @@ class ServantCommandCardMatcher(AbstractFgoMaterialMatcher):
     def __init__(self, sql_path: str = SQL_PATH):
         super(ServantCommandCardMatcher, self).__init__(sql_path)
 
-    def match(self, img_arr: np.ndarray) -> Tuple[int, int]:
+    def _match_gray_diff(self, img_arr: np.ndarray) -> int:  # Tuple[int, int]:
         # import matplotlib.pyplot as plt
         cursor = self.sqlite_connection.cursor()
         target_size = (160, 160)
         img_arr_resized = image_process.resize(img_arr, target_size[1], target_size[0])
-        servant_part = img_arr_resized[:int(0.5*target_size[0]), ...]
+        servant_part = img_arr_resized[:int(0.6*target_size[0]), ...]
         # querying servant icon database
         if self.cached_icon_meta is None:
             cursor.execute("select id, image_key from servant_command_card_icon")
@@ -91,7 +92,7 @@ class ServantCommandCardMatcher(AbstractFgoMaterialMatcher):
         # querying image data
         min_servant_id = 0
         min_abs_err = 0
-        card_color = -1
+        # card_color = -1
         for servant_id, image_key in self.cached_icon_meta:
             if image_key not in self.cached_icons:
                 cursor.execute("select image_data, name from image where image_key = ?", (image_key,))
@@ -106,22 +107,32 @@ class ServantCommandCardMatcher(AbstractFgoMaterialMatcher):
                 if np_image.shape[:2] != target_size:
                     np_image = image_process.resize(np_image, target_size[1], target_size[0])
                 self.cached_icons[image_key] = np_image, alpha
-            anchor_servant_part = self.cached_icons[image_key][0][:int(0.5*target_size[0]), ...]
+            anchor_servant_part = self.cached_icons[image_key][0][:int(0.6*target_size[0]), ...]
             abs_err = np.abs(anchor_servant_part.astype(np.float) - servant_part)
-            abs_err = abs_err * (self.cached_icons[image_key][1][:int(0.5*target_size[0]), ...] / 255)
+            abs_err = abs_err * (self.cached_icons[image_key][1][:int(0.6*target_size[0]), ...] / 255)
             mean_abs_err = np.mean(abs_err)
             if min_servant_id == 0 or mean_abs_err < min_abs_err:
                 min_servant_id = servant_id
                 min_abs_err = mean_abs_err
                 # computing card color, reverse alpha channel to choose background
-                card_bg = (1.0 - self.cached_icons[image_key][1] / 255) * img_arr_resized
-                card_bg = card_bg[15:150, 27:133, :].astype('uint8')
-                # plt.figure()
-                # plt.imshow(card_bg)
-                # plt.show()
-                card_color = np.argmax(np.mean(card_bg, (0, 1)))
+                # card_bg = (1.0 - self.cached_icons[image_key][1] / 255) * img_arr_resized
+                # card_bg = card_bg[15:150, 27:133, :].astype('uint8')
+                # card_color = np.argmax(np.mean(card_bg, (0, 1)))
+            # if servant_id == 29:
+            #     plt.figure()
+            #     plt.imshow(servant_part)
+            #     plt.show()
+            #     plt.figure()
+            #     plt.imshow(anchor_servant_part)
+            #     plt.show()
+            #     plt.figure()
+            #     plt.imshow(abs_err.astype('uint8'))
+            #     plt.show()
         cursor.close()
-        return min_servant_id, card_color
+        return min_servant_id  # , card_color
+
+    def match(self, img_arr: np.ndarray) -> int:
+        return self._match_gray_diff(img_arr)
 
 
 def deserialize_cv2_keypoint(serialized_tuple):

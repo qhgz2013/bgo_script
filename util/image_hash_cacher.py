@@ -21,15 +21,16 @@ def _compute_gray_alpha(img: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
         return img, alpha
 
 
-def mean_gray_diff_err(a: np.ndarray, b: np.ndarray, mean_gray_diff_threshold: float = 20) -> bool:
+def mean_gray_diff_err(a: np.ndarray, b: np.ndarray, mean_gray_diff_threshold: Optional[float] = 20) -> \
+        Union[bool, float]:
     """
     A common used hash conflict function, compute the absolute difference between two images, returns whether the mean
     value is less than the threshold, indicating that there are the same images.
     :param a: image array, shapes (h, w) or (h, w, c), if c > 1,
     the image will be reshape to (h, w) by computing the mean value for each channel
     :param b: image array, shapes (h, w) or (h, w, c)
-    :param mean_gray_diff_threshold: the threshold for comparing two images
-    :return: whether mean absolute difference between two images are less than specified threshold
+    :param mean_gray_diff_threshold: the threshold for comparing two images, if none, returns the difference
+    :return: whether mean absolute difference between two images are less than specified threshold, or its value
     """
     if len(a.shape) > 3 or len(b.shape) > 3:
         raise ValueError('unsupported input shape, input image must shapes (h, w, c) or (h, w)')
@@ -39,7 +40,7 @@ def mean_gray_diff_err(a: np.ndarray, b: np.ndarray, mean_gray_diff_threshold: f
     b, alpha_b = _compute_gray_alpha(b)
     gray_diff_err = np.abs(a - b) * (np.minimum(alpha_a, alpha_b) / 255.0)
     gray_diff_err = np.mean(gray_diff_err)
-    return gray_diff_err < mean_gray_diff_threshold
+    return gray_diff_err if mean_gray_diff_threshold is None else gray_diff_err < mean_gray_diff_threshold
 
 
 T = TypeVar('T')

@@ -6,11 +6,7 @@ from warnings import warn
 from time import sleep
 from typing import *
 from util import LazyValue
-
-
-def is_admin() -> bool:
-    import ctypes
-    return ctypes.windll.shell32.IsUserAnAdmin() != 0
+from winapi import is_running_as_admin
 
 
 class MumuAttacher(AbstractAttacher):
@@ -19,7 +15,7 @@ class MumuAttacher(AbstractAttacher):
     def __init__(self):
         super(MumuAttacher, self).__init__()
         self.simulator_handle = None
-        self.is_admin = LazyValue(is_admin)
+        self.is_admin = LazyValue(is_running_as_admin)
 
     def locate_handle(self) -> int:
         # SPY++:

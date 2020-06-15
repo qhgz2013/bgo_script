@@ -105,17 +105,21 @@ class FgoBattleAction:
         if self.selected_cards == 0 and enemy_location != ENEMY_LOCATION_EMPTY:
             click_seq.append((0.5, (ENEMY_XS[enemy_location], ENEMY_Y)))
         # 选卡
-        click_seq.append((0.2, (COMMAND_CARD_XS[command_card_index], COMMAND_CARD_Y)))
+        click_seq.append((1 if self.selected_cards == 0 else 0.2,
+                          (COMMAND_CARD_XS[command_card_index], COMMAND_CARD_Y)))
         self.selected_cards += 1
         self.apply_battle_action_callback(click_seq)
         return self
 
-    def use_clothes_skill(self, skill_index: int, to_servant_id: Union[int, Tuple[int, int]] = SERVANT_ID_EMPTY) \
-            -> 'FgoBattleAction':
+    def use_clothes_skill(self, skill_index: int, to_servant_id: Union[int, Tuple[int, int]] = SERVANT_ID_EMPTY,
+                          enemy_location: int = ENEMY_LOCATION_EMPTY) -> 'FgoBattleAction':
         assert 0 <= skill_index < 3, 'invalid skill index'
         # 搓按钮
-        click_seq = [(1, (CLOTHES_BUTTON_X, CLOTHES_BUTTON_Y)),
-                     (0.5, (CLOTHES_SKILL_XS[skill_index], CLOTHES_BUTTON_Y))]
+        click_seq = []
+        if enemy_location != ENEMY_LOCATION_EMPTY:
+            click_seq.append((0.5, (ENEMY_XS[enemy_location], ENEMY_Y)))
+        click_seq.append((1, (CLOTHES_BUTTON_X, CLOTHES_BUTTON_Y)))
+        click_seq.append((0.5, (CLOTHES_SKILL_XS[skill_index], CLOTHES_BUTTON_Y)))
         # 选技能
         if type(to_servant_id) == int:
             servant_pos = self._lookup_servant_position(to_servant_id)

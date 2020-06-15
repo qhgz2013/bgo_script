@@ -11,6 +11,7 @@ import os
 from matcher import ServantCommandCardMatcher
 from team_config import FgoTeamConfiguration
 from battle_action import FgoBattleAction
+from util import mean_gray_diff_err
 
 
 # DFS segmentation, original implemented in file fgo_detection.ipynb
@@ -65,6 +66,7 @@ class BattleLoopHandler(StateHandler):
         self._current_turn_command_card_id = []
         self._current_turn_command_card_type = []
         self._current_turn_command_card_critical_star = []
+        self._command_card_type_anchor = [image_process.imread(x) for x in CV_COMMAND_CARD_TYPE_FILES]
 
     @staticmethod
     def _generate_attack_button_mask() -> np.ndarray:
@@ -120,14 +122,6 @@ class BattleLoopHandler(StateHandler):
                 self.battle_loop_callback(battle, turn, self._current_turn_command_card_type,
                                           self._current_turn_command_card_id,
                                           self._current_turn_command_card_critical_star, self.team_preset, action)
-                # click_sequence = action.get_skill_click_actions()
-                # if len(action.skill_sequence) > 0:
-                #     # if uses skill, back to servant page
-                #     self.attacher.send_click(ATTACK_BACK_BUTTON_X, ATTACK_BACK_BUTTON_Y)
-                #     sleep(1)
-                #     self._apply_click_sequence(click_sequence)
-                #     self.attacher.send_click(ATTACK_BUTTON_X, ATTACK_BUTTON_Y)
-                # self._apply_click_sequence(action.get_attack_click_actions())
             except Exception as ex:
                 root.error('Error while calling callback function: %s' % str(ex), exc_info=ex)
                 exit(1)
@@ -192,7 +186,7 @@ class BattleLoopHandler(StateHandler):
                     cnt += 1
         # re-order based on x position
         cx = [(x[1] + x[2]) / 2 for x in rects]
-        rects = [x[1] for x in sorted(zip(cx, rects), key=lambda t: t[0]) if x[1][-1] > 20]  # filter out obj < 20 px
+        rects = [x[1] for x in sorted(zip(cx, rects), key=lambda t: t[0]) if x[1][-1] > CV_BATTLE_FILTER_PIXEL_THRESHOLD]
         # root.info('Digit recognition rects: %s' % str(rects))
         assert len(rects) == 3, 'Current implementation must meet that # of battles less than 10,' \
                                 ' or maybe recognition corrupted'
@@ -226,17 +220,31 @@ class BattleLoopHandler(StateHandler):
         for x1, x2 in zip(CV_COMMAND_CARD_X1S, CV_COMMAND_CARD_X2S):
             command_card = img[int(CV_SCREENSHOT_RESOLUTION_Y*CV_COMMAND_CARD_Y):,
                                int(CV_SCREENSHOT_RESOLUTION_X*x1):int(CV_SCREENSHOT_RESOLUTION_X*x2), :]
-            h = image_process.rgb_to_hsv(command_card)[..., 0]
-            score = np.logical_and(h >= CV_COMMAND_CARD_TOP_BORDER_H_LO, h < CV_COMMAND_CARD_TOP_BORDER_H_HI)
-            score = np.mean(score, -1)[:int(0.1*command_card.shape[0])]
-            y_offset = np.argmax(score)
+            card_type = 0
+            target_err = float('inf')
+            y_offset = 0
+            for idx, (command_card_type, offset) in enumerate(zip(self._command_card_type_anchor,
+                                                                  CV_COMMAND_CARD_TYPE_OFFSET)):
+                score = np.empty(30, np.float)
+                h = command_card_type.shape[0]
+                for i in range(30):
+                    score[i] = mean_gray_diff_err(command_card[75+i:75+i+h, ...], command_card_type, None)
+                min_score = np.min(score)
+                if min_score < target_err:
+                    card_type = idx
+                    target_err = min_score
+                    y_offset = (75 + np.argmin(score)) / CV_SCREENSHOT_RESOLUTION_Y - offset + CV_COMMAND_CARD_Y
+            # y_offset = np.argmax(score)
             # Extend pixels
-            command_card = img[int(CV_SCREENSHOT_RESOLUTION_Y*(CV_COMMAND_CARD_Y-0.03472))+y_offset:
-                               int(CV_SCREENSHOT_RESOLUTION_Y*(CV_COMMAND_CARD_Y+CV_COMMAND_CARD_HEIGHT+0.01945))
-                               + y_offset,
+            command_card = img[int(CV_SCREENSHOT_RESOLUTION_Y*(y_offset-0.03472)):
+                               int(CV_SCREENSHOT_RESOLUTION_Y*(y_offset+0.01945+CV_COMMAND_CARD_HEIGHT)),
                                int(CV_SCREENSHOT_RESOLUTION_X*(x1-0.03125)):
                                int(CV_SCREENSHOT_RESOLUTION_X*(x2+0.03125)), :]
-            servant_id, card_type = self._servant_matcher.match(command_card)
+            # import matplotlib.pyplot as plt
+            # plt.figure()
+            # plt.imshow(command_card)
+            # plt.show()
+            servant_id = self._servant_matcher.match(command_card)
             servant_ids.append(servant_id)
             card_types.append(card_type + 1)
         root.info('Detected command card data: Servant: %s, Type: %s (used %f sec(s))' %
@@ -264,9 +272,9 @@ class BattleLoopHandler(StateHandler):
                 sleep(0.2)
                 img = self.attacher.get_screenshot(CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y)
                 gray = np.mean(img, -1)
-                blank_val = np.mean(np.less(gray, 10))
+                blank_val = np.mean(np.less(gray, CV_IN_BATTLE_BLANK_SCREEN_THRESHOLD))
                 # skip blank screen frame
-                if blank_val >= 0.7:
+                if blank_val >= CV_IN_BATTLE_BLANK_SCREEN_RATIO:
                     continue
                 if self._can_attack(gray):
                     return True

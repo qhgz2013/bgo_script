@@ -8,7 +8,7 @@
 
 因模拟点击是基于WINAPI `PostMessage`实现的，本脚本需要以 **管理员权限** 运行
 
-1. 需要从[此处](https://zhouxuebin.club:4433/data/2020/01/fgo_new.db.zip)下载并解压数据库文件，放到`cv_data/fgo_new.db`中。 
+1. 需要从[此处](https://cdn.zhouxuebin.club/data/2020/01/fgo_new.db.zip)下载并解压数据库文件，放到`cv_data/fgo_new.db`中。 
 2. 在执行脚本前需要选好队伍、助战的职介，然后进一次需要挂机的本，在选助战界面再退出来，确保界面右边任务列表中第一个为要刷的本。
 3. 然后在`config.py`里面改自己的配队和过图的逻辑代码。
 4. 运行脚本过程中，不要最小化模拟器，确保模拟器整个窗体在屏幕范围内，个人建议：用`Ctrl`+`Win`+`D`新建一个桌面，把脚本和模拟器都放在该桌面运行，使用`Ctrl`+`Win`+`←`或`→`切换桌面。
@@ -40,7 +40,7 @@ Python 3.6 / 3.7
 
 ### 方法1
 
-python 3.7的预编译opencv模块可以直接从[此处](https://zhouxuebin.club:4433/data/2020/01/opencv_3.4.8_msvc15_x64_py37_redist.zip)直接下载，解压到该目录即可使用。
+python 3.7的预编译opencv模块可以直接从[此处](https://cdn.zhouxuebin.club/data/2020/01/opencv_3.4.8_msvc15_x64_py37_redist.zip)直接下载，解压到该目录即可使用。
 
 ### 方法2
 
