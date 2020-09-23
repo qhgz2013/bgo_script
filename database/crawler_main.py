@@ -5,6 +5,7 @@ import re
 from bs4 import BeautifulSoup
 import pandas as pd
 from io import StringIO, BytesIO
+from warnings import warn
 
 
 def initialize_sql_table(sql_conn):
@@ -35,7 +36,7 @@ def initialize_sql_table(sql_conn):
     sql_conn.commit()
 
 
-def download_image_if_not_exists(sql_cursor, image_key, image_text, url, *args, **kwargs):
+def download_image_if_not_exists(sess, sql_cursor, image_key, image_text, url, *args, **kwargs):
     assert image_key is not None and len(image_key) > 0, "image_key should not be empty"
     sql_cursor.execute("select count(*) from image where image_key = ?", (image_key,))
     if sql_cursor.fetchone()[0] == 0:
@@ -43,7 +44,7 @@ def download_image_if_not_exists(sql_cursor, image_key, image_text, url, *args, 
             print('image key', image_key, 'miss, downloading from', url)
         else:
             print('image key', image_key, '( name:', image_text, ') miss, downloading from', url)
-        request = requests.get(url, *args, **kwargs)
+        request = sess.get(url, *args, **kwargs)
         sql_cursor.execute("insert into image (image_key, name, image_data) values (?, ?, ?)",
                            (image_key, image_text, request.content))
 
@@ -51,12 +52,13 @@ def download_image_if_not_exists(sql_cursor, image_key, image_text, url, *args, 
 def retrieve_servant_icons(sql_conn):
     cursor = sql_conn.cursor()
     cursor.execute("delete from servant_icon")
+    sess = requests.session()
     icon_url = 'https://fategrandorder.fandom.com/wiki/Servant_List_by_ID'
-    html = BeautifulSoup(requests.get(icon_url).text, features='html.parser')
+    html = BeautifulSoup(sess.get(icon_url).text, features='html.parser')
     table = html.find('div', {'id': 'flytabs_ServantListByID'})
     pages = [('https://fategrandorder.fandom.com%s?action=render' % x.attrs['href']) for x in table.find_all('a')]
     for page in pages:
-        html = BeautifulSoup(requests.get(page).text, features='html.parser')
+        html = BeautifulSoup(sess.get(page).text, features='html.parser')
         table = html.find('table', {'class': 'wikitable sortable'})
         rows = table.find_all('tr')[1:]
         ids = set()
@@ -68,11 +70,13 @@ def retrieve_servant_icons(sql_conn):
             if servant_id in ids:
                 continue
             ids.add(servant_id)
-            servant_html = BeautifulSoup(requests.get(servant_url).text, features='html.parser')
-            icon_div = servant_html.find('div', {'id': 'gallery-2'})
+            servant_html = BeautifulSoup(sess.get(servant_url).text, features='html.parser')
+            # Retrieving servant icons (used for support servant auto selection)
+            icon_div = servant_html.find('div', {'class': 'tabbertab', 'title': 'Icons'})
             icon_items = icon_div.find_all('div', {'class': 'wikia-gallery-item'})
             for item in icon_items:
-                text = str(item.find('div', {'class': 'lightbox-caption'}).string)
+                caption_obj = item.find('div', {'class': 'lightbox-caption'})
+                text = caption_obj.string or ''.join(caption_obj.strings)
                 img = item.find('img')
                 img_src = img.attrs['src']
                 img_key = img.attrs['data-image-name']
@@ -80,9 +84,14 @@ def retrieve_servant_icons(sql_conn):
                 # skips portrait and without-frame images
                 if 'portrait' in text_lower or 'without frame' in text_lower:
                     continue
-                download_image_if_not_exists(cursor, img_key, text, img_src)
+                download_image_if_not_exists(sess, cursor, img_key, text, img_src)
                 cursor.execute("insert into servant_icon(id, image_key) values (?, ?)", (servant_id, img_key))
-            icon_div = servant_html.find('div', {'id': 'gallery-3'})
+            # Retrieving servant in-battle command card sprites (used for command card recognition)
+            icon_div = servant_html.find('div', {'class': 'tabbertab', 'title': 'Sprites'})
+            icon_div = icon_div or servant_html.find('div', {'class': 'tabbertab', 'title': 'Sprite'})
+            if icon_div is None:
+                warn('Could not retrieve sprites from HTML of servant #%d' % servant_id, RuntimeWarning)
+                continue
             icon_items = icon_div.find_all('div', {'class': 'wikia-gallery-item'})
             for item in icon_items:
                 text = str(item.find('div', {'class': 'lightbox-caption'}).string)
@@ -94,7 +103,7 @@ def retrieve_servant_icons(sql_conn):
                 text_lower = text.lower()
                 # skips portrait and without-frame images
                 if 'command card' in text_lower:
-                    download_image_if_not_exists(cursor, img_key, text, img_src)
+                    download_image_if_not_exists(sess, cursor, img_key, text, img_src)
                     cursor.execute("insert into servant_command_card_icon(id, image_key) values (?, ?)",
                                    (servant_id, img_key))
     cursor.close()
@@ -104,16 +113,17 @@ def retrieve_servant_icons(sql_conn):
 def retrieve_craft_essence_icons(sql_conn):
     cursor = sql_conn.cursor()
     cursor.execute("delete from craft_essence_icon")
+    sess = requests.session()
     url = 'https://fgo.wiki/w/%E7%A4%BC%E8%A3%85%E5%9B%BE%E9%89%B4'
     csv_pattern = re.compile('function\\s+get_csv\\(\\)\\s*\n\\s*{\\s*\n\\s*var\\s+raw_str\\s*=\\s*"([^"]+)"')
-    csv_str = re.search(csv_pattern, requests.get(url).text).group(1).replace('\\n', '\n')
+    csv_str = re.search(csv_pattern, sess.get(url).text).group(1).replace('\\n', '\n')
     with StringIO(csv_str) as f:
         data_frame = pd.read_csv(f)
     ids = data_frame.id
     icons = data_frame.icon
     for i in range(data_frame.shape[0]):
         img_key = icons[i].split('/')[-1]
-        download_image_if_not_exists(cursor, img_key, None, 'https://fgo.wiki%s' % icons[i])
+        download_image_if_not_exists(sess, cursor, img_key, None, 'https://fgo.wiki%s' % icons[i])
         cursor.execute("insert into craft_essence_icon(id, image_key) values (?, ?)", (int(ids[i]), img_key))
     cursor.close()
     sql_conn.commit()
@@ -121,17 +131,19 @@ def retrieve_craft_essence_icons(sql_conn):
 
 def pre_compute_sift_features(sql_conn):
     try:
-        import cv2
+        from util import sift_class, pickle_dumps
         from PIL import Image
         import numpy as np
         import pickle
     except ImportError:
         print('Required dependency (cv2, pillow, numpy) is not satisfied, skipping sift pre-computation')
         return
+    if sift_class is None:
+        print('No SIFT detector found in current OpenCV, ignored')
+        return
     # noinspection PyUnresolvedReferences
     try:
-        # noinspection PyUnresolvedReferences
-        sift = cv2.xfeatures2d_SIFT.create()
+        sift = sift_class.create()
     except cv2.error:
         print('SIFT is disable for current build, rebuild OpenCV with OPENCV_ENABLE_NONFREE with contrib modules')
         return
@@ -146,8 +158,8 @@ def pre_compute_sift_features(sql_conn):
             img = np.asarray(Image.open(f), 'uint8')
         key_points, descriptors = sift.detectAndCompute(img, None)
         key_points = [(x.pt, x.size, x.angle, x.response, x.octave, x.class_id) for x in key_points]
-        key_points_blob = pickle.dumps(key_points)
-        descriptors_blob = pickle.dumps(descriptors)
+        key_points_blob = pickle_dumps(key_points)
+        descriptors_blob = pickle_dumps(descriptors)
         cursor.execute("insert into image_sift_descriptor(image_key, key_points, descriptors) values (?, ?, ?)",
                        (image_key, key_points_blob, descriptors_blob))
     cursor.close()
