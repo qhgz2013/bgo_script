@@ -81,9 +81,10 @@ def retrieve_servant_icons(sql_conn):
                 img_src = img.attrs['src']
                 img_key = img.attrs['data-image-name']
                 text_lower = text.lower()
-                # skips portrait and without-frame images
-                if 'portrait' in text_lower or 'without frame' in text_lower:
-                    continue
+                # skips portrait, without-frame images and April Fool icons
+                for candidate in ['portrait', 'without frame', 'april', 'fool']:
+                    if candidate in text_lower:
+                        continue
                 download_image_if_not_exists(sess, cursor, img_key, text, img_src)
                 cursor.execute("insert into servant_icon(id, image_key) values (?, ?)", (servant_id, img_key))
             # Retrieving servant in-battle command card sprites (used for command card recognition)

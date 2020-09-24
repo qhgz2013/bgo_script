@@ -1,8 +1,9 @@
 import numpy as np
 from ._backend_determine import backend_determine
-from logging import root
+import logging
 
 _selected_default_func = None
+logger = logging.getLogger('bgo_script.image_process')
 
 
 def _imdecode_opencv(b: bytes) -> np.ndarray:
@@ -26,5 +27,5 @@ def imdecode(b: bytes) -> np.ndarray:
         return _selected_default_func(b)
     func_list = [_imdecode_pil, _imdecode_opencv]
     _selected_default_func, img = backend_determine(func_list, (b,))
-    root.info('selected %s for image decode' % str(_selected_default_func))
+    logger.debug('selected %s for image decode' % str(_selected_default_func))
     return img

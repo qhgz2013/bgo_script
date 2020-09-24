@@ -6,7 +6,9 @@ import win32con
 import win32ui
 from time import sleep, time
 import image_process
-from logging import root
+import logging
+
+logger = logging.getLogger('bgo_script.attacher')
 
 
 class AbstractAttacher:
@@ -62,7 +64,7 @@ class AbstractAttacher:
         :param stay_time: the interval between MOUSE BUTTON DOWN and MOUSE BUTTON UP
         :return: None
         """
-        root.info('Performing click: (%f, %f)' % (x, y))
+        logger.debug('Performing click: (%f, %f)' % (x, y))
         handle = self.handle()
         left, top, right, bottom = win32gui.GetWindowRect(handle)
         height = bottom - top
@@ -89,7 +91,7 @@ class AbstractAttacher:
         :param stay_time_after_move: the interval between MOUSE MOVE and MOUSE BUTTON UP (in seconds)
         :return: None
         """
-        root.info('Performing slide: from %s to %s' % (str(p_from), str(p_to)))
+        logger.debug('Performing slide: from %s to %s' % (str(p_from), str(p_to)))
         handle = self.handle()
         left, top, right, bottom = win32gui.GetWindowRect(handle)
         height = bottom - top
