@@ -43,7 +43,7 @@ class MumuAttacher(AbstractAttacher):
 
     def get_screenshot(self, width: Optional[int] = None, height: Optional[int] = None) -> np.ndarray:
         if self.is_minimize() and not self.__warned_minimize:
-            logging.warning('Screenshot capture is not supported for minimized window')
+            logger.warning('Screenshot capture is not supported for minimized window')
             self.__warned_minimize = True
         while True:
             while self.is_minimize():
@@ -54,14 +54,14 @@ class MumuAttacher(AbstractAttacher):
 
     def send_click(self, x: float, y: float, stay_time: float = 0.1):
         if not self.is_admin():
-            logging.warning('Could not send message to specified handle without admin privileges')
+            logger.warning('Could not send message to specified handle without admin privileges')
         else:
             super(MumuAttacher, self).send_click(x, y, stay_time)
 
     def send_slide(self, p_from: Tuple[float, float], p_to: Tuple[float, float], stay_time_before_move: float = 0.1,
                    stay_time_move: float = 0.8, stay_time_after_move: float = 0.1):
         if not self.is_admin():
-            logging.warning('Could not send message to specified handle without admin privileges')
+            logger.warning('Could not send message to specified handle without admin privileges')
         else:
             super(MumuAttacher, self).send_slide(p_from, p_to, stay_time_before_move, stay_time_move,
                                                  stay_time_after_move)

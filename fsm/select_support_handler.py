@@ -1,7 +1,7 @@
 from .state_handler import StateHandler
 from attacher import AbstractAttacher
 from matcher import SupportServantMatcher, SupportCraftEssenceMatcher
-from logging import root
+import logging
 from typing import List, Optional, Tuple, Callable, Union
 from cv_positioning import *
 from click_positioning import *
@@ -9,11 +9,15 @@ import image_process
 import numpy as np
 from time import sleep, time
 from .wait_fufu_handler import WaitFufuStateHandler
-from util import mean_gray_diff_err
+from image_process import mean_gray_diff_err
+
+logger = logging.getLogger('bgo_script.fsm')
 
 
 # TODO: multiple support configuration support
 class SelectSupportHandler(StateHandler):
+    _log_config = False
+
     def __init__(self, attacher: AbstractAttacher, forward_state: int, support_servant_id: int,
                  support_craft_essence_id: int, support_craft_essence_max_break: bool = False,
                  support_servant_minimal_skill: Optional[List[int]] = None):
@@ -45,7 +49,7 @@ class SelectSupportHandler(StateHandler):
                         (self.craft_essence_id == 0 or craft_essence_ids[i][0] == self.craft_essence_id) and \
                         (not self.craft_essence_max_break or craft_essence_ids[i][1]):
                     # servant matched
-                    root.info('Found required support')
+                    logger.info('Found required support')
                     self.attacher.send_click(0.5, (support_range[i][0] + support_range[i][1]) / 2)
                     sleep(0.5)
                     suc = True
@@ -61,54 +65,44 @@ class SelectSupportHandler(StateHandler):
         return self.forward_state
 
     def _action_scroll_down(self):
-        root.info('scrolling down')
+        logger.info('scrolling down')
         self.attacher.send_slide((0.5, 0.9), (0.5, 0.9 - SUPPORT_SCROLLDOWN_Y))
         sleep(1.5)
 
-    @staticmethod
-    def _split_support_image(img: np.ndarray) -> List[Tuple[float, float]]:
-        part = img[:, int(CV_SCREENSHOT_RESOLUTION_X*CV_SUPPORT_X1):int(CV_SCREENSHOT_RESOLUTION_X*CV_SUPPORT_X2), :]
-        hsv = image_process.rgb_to_hsv(part)
-        # check the saturation value
-        score = np.median(hsv[..., 1], -1)
-        # two-stage detection
-        stage1_valid = np.logical_and(score >= CV_SUPPORT_S_STAGE1_LO, score < CV_SUPPORT_S_STAGE1_HI)
-        stage2_valid = np.logical_and(score >= CV_SUPPORT_S_STAGE2_LO, score < CV_SUPPORT_S_STAGE2_HI)
-        y = 0
+    @classmethod
+    def _split_support_image(cls, img: np.ndarray) -> List[Tuple[float, float]]:
+        # new detection result begins here
+        part = img[:, int(CV_SUPPORT_DETECT_X1*CV_SCREENSHOT_RESOLUTION_X):
+                   int(CV_SUPPORT_DETECT_X2*CV_SCREENSHOT_RESOLUTION_X), :]
+        gray = np.mean(part, axis=2)
+        avg = np.mean(gray, axis=1)
+        td = np.zeros_like(avg)
+        td[:-1] = avg[:-1] - avg[1:]
+        # import matplotlib.pyplot as plt
+        # plt.figure()
+        # plt.plot(td)
+        # plt.show()
+        y = 150
         range_list = []
+        threshold = CV_SUPPORT_DETECT_DIFF_THRESHOLD
         while y < CV_SCREENSHOT_RESOLUTION_Y:
-            while y < CV_SCREENSHOT_RESOLUTION_Y and not stage1_valid[y]:
+            while y < CV_SCREENSHOT_RESOLUTION_Y and td[y] > -threshold:
                 y += 1
-            if y == CV_SCREENSHOT_RESOLUTION_Y:
-                break
-            begin_s1_y = y
-            while y < CV_SCREENSHOT_RESOLUTION_Y and stage1_valid[y]:
+            while y < CV_SCREENSHOT_RESOLUTION_Y and td[y] < -threshold:
                 y += 1
-            end_s1_y = y
-            s1_len = end_s1_y - begin_s1_y
-            if s1_len < CV_SUPPORT_STAGE1_LEN:
-                continue
-            # STAGE 1 -> STAGE 2 is not continuous some time, here uses a look-ahead tolerance solution within 5 px
-            begin_s2_y = y
-            lookahead_y = y
-            while lookahead_y < CV_SCREENSHOT_RESOLUTION_Y:
-                if not stage2_valid[lookahead_y]:
-                    if lookahead_y - end_s1_y < 5:
-                        begin_s2_y = lookahead_y + 1
-                    else:
-                        break
-                lookahead_y += 1
-            if begin_s2_y - end_s1_y >= 5:
-                continue
-            end_s2_y = lookahead_y
-            s2_len = end_s2_y - begin_s2_y
-            if s2_len < CV_SUPPORT_STAGE2_LEN:
-                continue
-            # amend detection result
-            range_list.append((begin_s1_y / CV_SCREENSHOT_RESOLUTION_Y - 0.0111111,
-                               end_s2_y / CV_SCREENSHOT_RESOLUTION_Y +
-                               (0.025 if s1_len < CV_SUPPORT_STAGE1_LEN2 else 0.0111111)))
-        root.info('support detection result: %s' % str(range_list))
+            begin_y = y - 1
+            while y < CV_SCREENSHOT_RESOLUTION_Y and td[y] < threshold:
+                y += 1
+            while y < CV_SCREENSHOT_RESOLUTION_Y and td[y] > threshold:
+                y += 1
+            end_y = y - 1
+            len_y = end_y - begin_y
+            if CV_SUPPORT_DETECT_Y_LEN_THRESHOLD_LO <= len_y <= CV_SUPPORT_DETECT_Y_LEN_THRESHOLD_HI:
+                range_list.append((begin_y / CV_SCREENSHOT_RESOLUTION_Y, end_y / CV_SCREENSHOT_RESOLUTION_Y))
+                logger.debug('support detection: %d -> %d (len = %d)' % (begin_y, end_y, end_y-begin_y))
+            else:
+                logger.debug('support detection: %d -> %d (len = %d) (ignored)' % (begin_y, end_y, end_y-begin_y))
+        logger.debug('support detection result: %s' % str(range_list))
         return range_list
 
     @staticmethod
@@ -130,7 +124,7 @@ class SelectSupportHandler(StateHandler):
         return start_y / score.shape[0], end_y / score.shape[0]
 
     def refresh_support(self):
-        root.info('Refreshing support')
+        logger.info('Refreshing support')
         while True:
             sleep(0.5)
             self.attacher.send_click(SUPPORT_REFRESH_BUTTON_X, SUPPORT_REFRESH_BUTTON_Y)
@@ -144,7 +138,7 @@ class SelectSupportHandler(StateHandler):
                 int(CV_SCREENSHOT_RESOLUTION_X*CV_SUPPORT_REFRESH_REFUSED_DETECTION_X2), 1]
             if np.mean(img) < CV_SUPPORT_REFRESH_REFUSED_DETECTION_S_THRESHOLD:
                 self.attacher.send_click(SUPPORT_REFRESH_REFUSED_CONFIRM_X, SUPPORT_REFRESH_REFUSED_CONFIRM_Y)
-                root.info('Could not refresh support temporarily, retry in 5 secs')
+                logger.info('Could not refresh support temporarily, retry in 5 secs')
                 sleep(5)
             else:
                 break
@@ -156,10 +150,12 @@ class SelectSupportHandler(StateHandler):
 
     def match_servant(self, img: np.ndarray, range_list: List[Tuple[float, float]]) -> List[Tuple[int, List[int]]]:
         def _empty_check(img1, img2):
-            return mean_gray_diff_err(image_process.resize(img1, img2.shape[1], img2.shape[0]), img2)
+            v = mean_gray_diff_err(image_process.resize(img1, img2.shape[1], img2.shape[0]), img2, None)
+            logger.debug('DEBUG value: empty support servant check: mean_gray_diff_err = %f' % v)
+            return v < 10
         ret, t = self._wrap_call_matcher(self.servant_matcher.match, _empty_check, img, self._support_empty_img,
                                          range_list)
-        root.info('Detected support servant ID: %s (used %f sec(s))' % (str(ret), t))
+        logger.info('Detected support servant ID: %s (used %f sec(s))' % (str(ret), t))
         # TODO: implement skill level detection here (replacing [0, 0, 0])
         return [(x, [0, 0, 0]) for x in ret]
 
@@ -168,22 +164,38 @@ class SelectSupportHandler(StateHandler):
             img1_h = int(img2.shape[1] / img1.shape[1] * img1.shape[0])
             img1 = image_process.resize(img1, img2.shape[1], img1_h)
             img1 = img1[-img2.shape[0]:, ...]
-            return mean_gray_diff_err(img1, img2)
+            v = mean_gray_diff_err(img1, img2, None)
+            logger.debug('DEBUG value: empty support craft essence check: mean_gray_diff_err = %f' % v)
+            return v < 10
         ret, t = self._wrap_call_matcher(self.craft_essence_matcher.match, _empty_check, img,
                                          self._support_craft_essence_img, range_list)
-        root.info('Detected support craft essence ID: %s (used %f sec(s))' % (str(ret), t))
+        logger.info('Detected support craft essence ID: %s (used %f sec(s))' % (str(ret), t))
         t = time()
         # detect craft essence max break state
         max_break = []
-        for y1, y2 in range_list:
+        for i, (y1, y2) in enumerate(range_list):
+            if ret[i] == 0:
+                max_break.append(False)
+                continue
             icon = img[int(CV_SCREENSHOT_RESOLUTION_Y*y1):int(CV_SCREENSHOT_RESOLUTION_Y*y2),
                        int(CV_SCREENSHOT_RESOLUTION_X*CV_SUPPORT_SERVANT_X1):
                        int(CV_SCREENSHOT_RESOLUTION_X*CV_SUPPORT_SERVANT_X2), :]
-            icon = icon[-24:-4, 133:153, :]
+            icon = icon[-23:-3, 134:154, :]
+            # import matplotlib.pyplot as plt
+            # plt.figure()
+            # plt.imshow(icon)
+            # plt.show()
             icon = image_process.resize(icon, self._support_max_break_img.shape[1],
                                         self._support_max_break_img.shape[0])
-            max_break.append(mean_gray_diff_err(icon, self._support_max_break_img))
-        root.info('Detected support craft essence max break state: %s (used %f sec(s))' % (str(max_break), time() - t))
+            # plt.figure()
+            # plt.imshow(icon)
+            # plt.show()
+            err = mean_gray_diff_err(icon, self._support_max_break_img, None)
+            hsv_err = image_process.mean_hsv_diff_err(icon, self._support_max_break_img, diff_threshold=None)
+            logger.debug('DEBUG value: support craft essence max break check: gray_diff_err = %f, hsv_err = %f' %
+                         (err, hsv_err))
+            max_break.append(err < 10)
+        logger.info('Detected support craft essence max break state: %s (used %f sec(s))' % (str(max_break), time() - t))
         return list(zip(ret, max_break))
 
     @staticmethod

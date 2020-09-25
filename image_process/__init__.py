@@ -1,6 +1,6 @@
 from .resize import resize
 from .imread import imread
-from .rgb_to_hsv import rgb_to_hsv
+from .rgb_hsv import rgb_to_hsv, hsv_to_rgb
 from .imdecode import imdecode
 from .imcmp import mean_gray_diff_err, split_rgb_alpha, split_gray_alpha, mean_hsv_diff_err
 from ._cv_sift_import import sift_class

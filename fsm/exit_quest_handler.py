@@ -5,7 +5,7 @@ from .wait_fufu_handler import WaitFufuStateHandler
 from time import sleep
 import image_process
 from cv_positioning import *
-from util import mean_gray_diff_err
+from image_process import mean_gray_diff_err
 from logging import root
 
 

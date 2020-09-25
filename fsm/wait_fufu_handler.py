@@ -3,7 +3,9 @@ from cv_positioning import *
 from attacher import AbstractAttacher
 import numpy as np
 from time import sleep, time
-from logging import root
+import logging
+
+logger = logging.getLogger('bgo_script.fsm')
 
 
 class WaitFufuStateHandler(StateHandler):
@@ -13,7 +15,7 @@ class WaitFufuStateHandler(StateHandler):
 
     def run_and_transit_state(self) -> int:
         begin_timing = time()
-        root.info('Started waiting fufu')
+        logger.debug('Started waiting fufu')
         while True:
             screenshot = self.attacher.get_screenshot(CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y)
             fufu_area = np.sum(
@@ -25,5 +27,5 @@ class WaitFufuStateHandler(StateHandler):
                 break
             sleep(0.2)
         sleep(1)
-        root.info('Ended waiting fufu, waited %f sec(s)' % (time() - begin_timing))
+        logger.debug('Ended waiting fufu, waited %f sec(s)' % (time() - begin_timing))
         return self.forward_state

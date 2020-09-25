@@ -2,7 +2,7 @@ __all__ = ['split_gray_alpha', 'split_rgb_alpha', 'mean_gray_diff_err', 'mean_hs
 
 import numpy as np
 from typing import *
-from .rgb_to_hsv import rgb_to_hsv
+from .rgb_hsv import rgb_to_hsv
 
 
 def split_rgb_alpha(img: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
@@ -75,20 +75,32 @@ def mean_gray_diff_err(a: np.ndarray, b: np.ndarray, diff_threshold: Optional[fl
     return gray_diff_err if diff_threshold is None else gray_diff_err < diff_threshold
 
 
-def mean_hsv_diff_err(a: np.ndarray, b: np.ndarray, diff_threshold: Optional[float] = 5) -> Union[bool, float]:
+def mean_hsv_diff_err(a: np.ndarray, b: np.ndarray, fmt_a: str = 'rgb', fmt_b: str = 'rgb',
+                      diff_threshold: Optional[float] = 5) -> Union[bool, float]:
     """
     Compute the difference between two image using HSV color space with new difference measuring method
 
     :param a: image array, shapes (h, w, c) or (h, w), NOTE: gray-scale image with shape (h, w) may perform bad here
     :param b: image array, shapes (h, w, c) or (h, w)
+    :param fmt_a: input image format for param a, one of "rgb", "hsv"
+    :param fmt_b: input image format for param b, one of "rgb", "hsv"
     :param diff_threshold: the threshold for comparing two images, if none, returns the difference
     :return: whether HSV difference between two images are less than specified threshold, or its value if the threshold
         leaves empty
     """
     _check_shape_equality(a, b)
-    rgb_a, alpha_a = split_rgb_alpha(a)
-    rgb_b, alpha_b = split_rgb_alpha(b)
-    hsv_a, hsv_b = rgb_to_hsv(rgb_a), rgb_to_hsv(rgb_b)
+    fmt_a, fmt_b = fmt_a.lower(), fmt_b.lower()
+    assert all([x in ['rgb', 'hsv'] for x in [fmt_a, fmt_b]]), 'Invalid input image format'
+    if fmt_a == 'rgb':
+        rgb_a, alpha_a = split_rgb_alpha(a)
+        hsv_a = rgb_to_hsv(rgb_a)
+    else:
+        hsv_a, alpha_a = split_rgb_alpha(a)
+    if fmt_b == 'rgb':
+        rgb_b, alpha_b = split_rgb_alpha(b)
+        hsv_b = rgb_to_hsv(rgb_b)
+    else:
+        hsv_b, alpha_b = split_rgb_alpha(b)
     ovr_diff = np.abs(hsv_a.astype(np.float) - hsv_b)
     # hue ring difference
     hue_diff = ovr_diff[..., 0]

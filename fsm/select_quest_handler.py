@@ -1,21 +1,27 @@
 from .state_handler import StateHandler
 from attacher import AbstractAttacher
 from click_positioning import *
-from logging import root
+import logging
 from time import time
 from image_process import imread
 from cv_positioning import *
-from util import mean_gray_diff_err
-from time import sleep
+from .eat_apple_handler import EatAppleHandler
+from .single_click_and_wait_fufu_handler import SingleClickAndWaitFufuHandler
+import numpy as np
+from typing import *
+
+logger = logging.getLogger('bgo_script.fsm')
 
 
 class SelectQuestHandler(StateHandler):
-    def __init__(self, attacher: AbstractAttacher, forward_state: int, exit_if_eat_apple_ui_detected: bool = False):
+    def __init__(self, attacher: AbstractAttacher, forward_state: int, max_ap: Optional[int] = None,
+                 eat_apple_if_necessary: bool = False):
         self.attacher = attacher
         self.forward_state = forward_state
         self._eat_apple_ui_anchor = imread(CV_EAT_APPLE_UI_FILE)
         self._last_enter_quest_time = None
-        self._exit_if_eat_apple = exit_if_eat_apple_ui_detected
+        self.eat_apple_if_necessary = eat_apple_if_necessary
+        self.max_ap = max_ap
 
     def run_and_transit_state(self) -> int:
         # todo: implement quest select
@@ -38,21 +44,26 @@ class SelectQuestHandler(StateHandler):
         current = time()
         if self._last_enter_quest_time is not None:
             used = current - self._last_enter_quest_time
-            root.info('Script performance: %f sec(s) / quest' % used)
+            logger.info('Script performance: %f sec(s) / quest' % used)
         self._last_enter_quest_time = current
+        self._estimate_ap()
         # 现在默认是选择任务列表中最上面的那个本
-        from .single_click_and_wait_fufu_handler import SingleClickAndWaitFufuHandler
         next_state = SingleClickAndWaitFufuHandler(self.attacher, FIRST_QUEST_X, FIRST_QUEST_Y, self.forward_state).\
             run_and_transit_state()
-        # make sure it's not in eat apple ui
-        img = self.attacher.get_screenshot(CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y)
-        if mean_gray_diff_err(self._eat_apple_ui_anchor, img, 3):
-            if self._exit_if_eat_apple:
-                root.error('AP is not enough to enter quest, exit process (exit_if_eat_apple_ui_detected = True)')
-                exit(0)
-            root.warning('AP is not enough to enter quest, reset to AP_CHECK state')
-            self.attacher.send_click(CANCEL_EAT_APPLE_BUTTON_X, CANCEL_EAT_APPLE_BUTTON_Y)
-            sleep(0.5)
-            from .fgo_state import STATE_CHECK_AP
-            return STATE_CHECK_AP
+        next_state = EatAppleHandler(self.attacher, next_state, self.eat_apple_if_necessary).run_and_transit_state()
         return next_state
+
+    def _estimate_ap(self):
+        screenshot = self.attacher.get_screenshot(CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y)
+        img = screenshot[int(CV_SCREENSHOT_RESOLUTION_Y*CV_AP_BAR_Y1):int(CV_SCREENSHOT_RESOLUTION_Y*CV_AP_BAR_Y2),
+                         int(CV_SCREENSHOT_RESOLUTION_X*CV_AP_BAR_X1):int(CV_SCREENSHOT_RESOLUTION_X*CV_AP_BAR_X2), 1]
+        g_val = np.average(img, 0)
+        normalized_ap_val = np.average(g_val > CV_AP_GREEN_THRESHOLD)
+        if normalized_ap_val < 0.02 or normalized_ap_val > 0.98:
+            logger.info('The AP estimation may be incorrect since it is nearly empty or full')
+        ap_correction = 0.8324 * normalized_ap_val + 0.0931  # linear correction, R^2=0.9998
+        if self.max_ap is not None:
+            ap_val = ap_correction * self.max_ap
+            logger.info('Estimated current AP: %d' % int(ap_val + 0.5))
+        else:
+            logger.info('Estimated current AP: %f%% (Max AP not configured)' % (ap_correction * 100))

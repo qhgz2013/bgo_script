@@ -1,8 +1,9 @@
 import numpy as np
 from ._backend_determine import backend_determine
-from logging import root
+import logging
 
 _selected_default_func = None
+logger = logging.getLogger('bgo_script.image_process')
 
 
 def _resize_opencv(img: np.ndarray, width: int, height: int) -> np.ndarray:
@@ -30,5 +31,5 @@ def resize(img: np.ndarray, width: int, height: int) -> np.ndarray:
         return _selected_default_func(img, width, height)
     func_list = [_resize_pil, _resize_skimage, _resize_opencv]
     _selected_default_func, resized_img = backend_determine(func_list, (img, width, height))
-    root.info('selected %s for image resizing' % str(_selected_default_func))
+    logger.debug('selected %s for image resizing' % str(_selected_default_func))
     return resized_img
