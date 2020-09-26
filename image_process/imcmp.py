@@ -54,29 +54,46 @@ def _check_shape_equality(a: np.ndarray, b: np.ndarray):
         raise ValueError('Invalid comparison: %s and %s' % (str(a.shape[:2]), str(b.shape[:2])))
 
 
-def mean_gray_diff_err(a: np.ndarray, b: np.ndarray, diff_threshold: Optional[float] = 10,
-                       fast_compute: bool = True) -> Union[bool, float]:
+def _avg(a, b):
+    return (a + b) / 2
+
+
+def _abs_diff(a, b):
+    return np.abs(a - b)
+
+
+_alpha_mode_handle_dict = {
+    'min': np.minimum,
+    'max': np.maximum,
+    'avg': _avg,
+}
+_v_mode_handle_dict = dict(_alpha_mode_handle_dict)
+_v_mode_handle_dict['diff'] = _abs_diff
+
+
+def mean_gray_diff_err(a: np.ndarray, b: np.ndarray, fast_compute: bool = True, alpha_mode: str = 'min') -> float:
     """
-    Compute the absolute difference between two gray-scale images, returns whether the mean value is less than the
-    threshold, indicating that there are the same images (if mean_gray_diff_threshold is given), or the absolute
-    difference of the two images.
+    Compute the absolute difference between two gray-scale images, returns the absolute difference of the two images.
 
     :param a: image array, shapes (h, w) or (h, w, c)
     :param b: image array, shapes (h, w) or (h, w, c)
-    :param diff_threshold: the threshold for comparing two images, if none, returns the difference
     :param fast_compute: Use average over RGB channel if true, or proceed standard RGB to gray conversion
+    :param alpha_mode: One of the "min", "max", or "avg", indicating using the minimum / maximum / mean alpha value
+        from two images
     :return: whether mean absolute difference between two images are less than specified threshold, or its value
     """
     _check_shape_equality(a, b)
+    func = _alpha_mode_handle_dict[alpha_mode.lower()]
     a, alpha_a = split_gray_alpha(a, fast_compute)
     b, alpha_b = split_gray_alpha(b, fast_compute)
-    gray_diff_err = np.abs(a - b) * (np.minimum(alpha_a, alpha_b) / 255.0)
-    gray_diff_err = np.mean(gray_diff_err)
-    return gray_diff_err if diff_threshold is None else gray_diff_err < diff_threshold
+    alpha_mask = func(alpha_a.astype(np.float), alpha_b.astype(np.float)) / 255.0
+    gray_diff_err = np.abs(a.astype(np.float) - b.astype(np.float)) * alpha_mask
+    gray_diff_err = float(np.mean(gray_diff_err))
+    return gray_diff_err
 
 
-def mean_hsv_diff_err(a: np.ndarray, b: np.ndarray, fmt_a: str = 'rgb', fmt_b: str = 'rgb',
-                      diff_threshold: Optional[float] = 5) -> Union[bool, float]:
+def mean_hsv_diff_err(a: np.ndarray, b: np.ndarray, fmt_a: str = 'rgb', fmt_b: str = 'rgb', v_mode: str = 'diff',
+                      alpha_mode: str = 'min') -> float:
     """
     Compute the difference between two image using HSV color space with new difference measuring method
 
@@ -84,13 +101,17 @@ def mean_hsv_diff_err(a: np.ndarray, b: np.ndarray, fmt_a: str = 'rgb', fmt_b: s
     :param b: image array, shapes (h, w, c) or (h, w)
     :param fmt_a: input image format for param a, one of "rgb", "hsv"
     :param fmt_b: input image format for param b, one of "rgb", "hsv"
-    :param diff_threshold: the threshold for comparing two images, if none, returns the difference
-    :return: whether HSV difference between two images are less than specified threshold, or its value if the threshold
-        leaves empty
+    :param v_mode: the mode for handling value (brightness) of two image, one of "diff" (compute the absolute
+        difference), "min" (compute the minimum brightness), "max", or "avg"
+    :param alpha_mode: One of the "min", "max", or "avg", indicating using the minimum / maximum / mean alpha value
+        from two images
+    :return: HSV difference between two images
     """
     _check_shape_equality(a, b)
     fmt_a, fmt_b = fmt_a.lower(), fmt_b.lower()
     assert all([x in ['rgb', 'hsv'] for x in [fmt_a, fmt_b]]), 'Invalid input image format'
+    alpha_func = _alpha_mode_handle_dict[alpha_mode.lower()]
+    value_func = _v_mode_handle_dict[v_mode.lower()]
     if fmt_a == 'rgb':
         rgb_a, alpha_a = split_rgb_alpha(a)
         hsv_a = rgb_to_hsv(rgb_a)
@@ -101,11 +122,12 @@ def mean_hsv_diff_err(a: np.ndarray, b: np.ndarray, fmt_a: str = 'rgb', fmt_b: s
         hsv_b = rgb_to_hsv(rgb_b)
     else:
         hsv_b, alpha_b = split_rgb_alpha(b)
-    ovr_diff = np.abs(hsv_a.astype(np.float) - hsv_b)
+    alpha_mask = alpha_func(alpha_a.astype(np.float), alpha_b.astype(np.float)) / 255.0
+    # ovr_diff = np.abs(hsv_a.astype(np.float) - hsv_b)
     # hue ring difference
-    hue_diff = ovr_diff[..., 0]
+    hue_diff = np.abs(hsv_a[..., 0].astype(np.float) - hsv_b[..., 0])
     hue_diff = np.minimum(hue_diff, 255 - hue_diff)
-    # value (brightness) coefficient
-    val_diff = ovr_diff[..., 2] / 255.0
-    err = np.mean(hue_diff * val_diff)
-    return err if diff_threshold is None else err < diff_threshold
+    # value (brightness)
+    val_diff = value_func(hsv_a[..., 2].astype(np.float), hsv_b[..., 2]) / 255.0
+    err = float(np.mean(hue_diff * val_diff * alpha_mask))
+    return err

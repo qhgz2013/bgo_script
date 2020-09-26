@@ -74,10 +74,10 @@ class BKTree:
                     node.children[distance] = new_node
                     break
 
-    def approximate_query(self, query: int, tol: int) -> List[Tuple[Any, int]]:
+    def approximate_query(self, query: int, tol: int) -> List[Tuple[Any, int, int]]:
         """
         querying all values with a distance tolerance (tol) specified to the query point, returns a list of
-        tuples (values, distance)
+        tuples (values, key, distance)
         :param query: query point
         :param tol: tolerance
         :return: all candidate values within the tolerance distance
@@ -90,7 +90,7 @@ class BKTree:
             node = nodes.pop(0)
             distance = hamming_distance_i64(node.key, query)
             if distance <= tol:
-                ret_list.append((node.value, distance))
+                ret_list.append((node.value, int(node.key), int(distance)))
             min_range = distance - tol
             max_range = distance + tol
             for child_distance in node.children:

@@ -5,7 +5,7 @@ import cv2
 from PIL import Image
 from io import BytesIO
 from util import pickle_loads
-from cv_positioning import CV_FGO_DATABASE_FILE
+from cv_positioning import *
 import image_process
 import logging
 # from typing import *
@@ -33,19 +33,20 @@ class SupportServantMatcher(AbstractFgoMaterialMatcher):
         super(SupportServantMatcher, self).__init__(sql_path)
 
     def match(self, img_arr: np.ndarray) -> int:
-        # 支援从者匹配（注意：这里忽略了匹配的礼装）
-        # 从数据库中匹配给定的截图，返回对应的从者ID（目前可以很客气地说应该是可以识别某个从者的所有卡面的，包括灵衣）
-        # 数据库记录目前更新至2020年1月的日服进度：最新从者：Foreigner 杨贵妃
         cursor = self.sqlite_connection.cursor()
-        target_size = (144, 132)
-        split_y = 105
-        img_arr_resized = image_process.resize(img_arr, target_size[1], target_size[0])
-        servant_part = img_arr_resized[:split_y, ...]
+        img_arr_resized = image_process.resize(img_arr, CV_SUPPORT_SERVANT_IMG_SIZE[1], CV_SUPPORT_SERVANT_IMG_SIZE[0])
+        servant_part = img_arr_resized[:CV_SUPPORT_SERVANT_SPLIT_Y, ...]
         hsv_servant_part = image_process.rgb_to_hsv(servant_part)
         # querying servant icon database
         if self.cached_icon_meta is None:
+            cursor.execute("select id from servant_icon order by id desc limit 1")
+            newest_svt_id = cursor.fetchone()[0]
+            cursor.execute("select count(1) from servant_icon")
+            entries = cursor.fetchone()[0]
             cursor.execute("select id, image_key from servant_icon")
             self.cached_icon_meta = cursor.fetchall()
+            logger.info('Finished querying support servant database, %d entries with newest servant id: %d' %
+                        (entries, newest_svt_id))
         # querying image data
         min_servant_id = 0
         min_abs_err = 0
@@ -54,18 +55,19 @@ class SupportServantMatcher(AbstractFgoMaterialMatcher):
                 cursor.execute("select image_data, name from image where image_key = ?", (image_key,))
                 binary_data, name = cursor.fetchone()
                 # In the newest database, the icon contains servant portrait, which is useless here.
-                if 'portrait' in name.lower() or 'without frame' in name.lower():
-                    continue
+                # if 'portrait' in name.lower() or 'without frame' in name.lower():
+                #     continue
                 pil_image = Image.open(BytesIO(binary_data))
                 # clipping alpha and opacity border
                 np_image, alpha = image_process.split_rgb_alpha(np.asarray(pil_image)[3:-3, 3:-3, :])
-                if np_image.shape[:2] != target_size:
-                    np_image = image_process.resize(np_image, target_size[1], target_size[0])
-                    alpha = image_process.resize(alpha, target_size[1], target_size[0])
+                if np_image.shape[:2] != CV_SUPPORT_SERVANT_IMG_SIZE:
+                    np_image = image_process.resize(np_image, CV_SUPPORT_SERVANT_IMG_SIZE[1],
+                                                    CV_SUPPORT_SERVANT_IMG_SIZE[0])
+                    alpha = image_process.resize(alpha, CV_SUPPORT_SERVANT_IMG_SIZE[1], CV_SUPPORT_SERVANT_IMG_SIZE[0])
                 hsv_image = image_process.rgb_to_hsv(np_image)
                 self.cached_icons[image_key] = np.concatenate([hsv_image, np.expand_dims(alpha, 2)], axis=2)
-            anchor_servant_part = self.cached_icons[image_key][:split_y, ...]
-            hsv_err = image_process.mean_hsv_diff_err(anchor_servant_part, hsv_servant_part, 'hsv', 'hsv', None)
+            anchor_servant_part = self.cached_icons[image_key][:CV_SUPPORT_SERVANT_SPLIT_Y, ...]
+            hsv_err = image_process.mean_hsv_diff_err(anchor_servant_part, hsv_servant_part, 'hsv', 'hsv')
             if min_servant_id == 0 or hsv_err < min_abs_err:
                 min_servant_id = servant_id
                 min_abs_err = hsv_err
@@ -152,25 +154,23 @@ class SupportCraftEssenceMatcher(AbstractFgoMaterialMatcher):
         self.image_cacher = image_process.ImageHashCacher(image_process.perception_hash,
                                                           image_process.mean_gray_diff_err)
 
-    ## noinspection PyUnresolvedReferences
     def match(self, img_arr: np.ndarray) -> int:
-        # EXPERIMENTAL
-        # 数据库记录目前更新至2020年1月的日服进度
-        # 注：礼装的助战缩略图和平常的小图还是有挺大偏差的，旋转裁剪缩放这种事情都能干出来，极其心不甘情不愿上SIFT算法
-        # （毕竟匹配开销太大了）
-        # 注意：这里使用cv2的contrib模块算法，在使用cmake编译时把contrib module记得include进去，
-        # 并且勾上python3和enable_nonfree再编译release
         cursor = self.sqlite_connection.cursor()
-        target_size = (144, 132)
         ratio_thresh = 0.7
-        img_arr_resized = image_process.resize(img_arr, target_size[1], target_size[0])
-        craft_essence_part = img_arr_resized[105:-3, ...]
+        img_arr_resized = image_process.resize(img_arr, CV_SUPPORT_SERVANT_IMG_SIZE[1], CV_SUPPORT_SERVANT_IMG_SIZE[0])
+        craft_essence_part = img_arr_resized[CV_SUPPORT_SERVANT_SPLIT_Y:-3, ...]
         # CACHE ACCESS
         if craft_essence_part in self.image_cacher:
             return self.image_cacher[craft_essence_part]
         if self.cached_icon_meta is None:
-            cursor.execute("select * from craft_essence_icon")
+            cursor.execute("select id from craft_essence_icon order by id desc limit 1")
+            newest_craft_essence_id = cursor.fetchone()[0]
+            cursor.execute("select count(1) from craft_essence_icon")
+            entries = cursor.fetchone()[0]
+            cursor.execute("select id, image_key from craft_essence_icon")
             self.cached_icon_meta = cursor.fetchall()
+            logger.info('Finished querying craft essence database, %d entries with newest craft essence id: %d' %
+                        (entries, newest_craft_essence_id))
         target_keypoint, target_descriptor = self.sift_detector.detectAndCompute(craft_essence_part, None)
         max_matches = 0
         max_craft_essence_id = 0
@@ -191,7 +191,7 @@ class SupportCraftEssenceMatcher(AbstractFgoMaterialMatcher):
             if len_good_matches > max_matches:
                 max_matches = len_good_matches
                 max_craft_essence_id = craft_essence_id
-                logger.debug('craft_essence_id = %d, sift_match_pts = %d' % (craft_essence_id, len_good_matches))
+                logger.debug('craft_essence_id = %d, sift_matches = %d' % (craft_essence_id, len_good_matches))
         cursor.close()
         self.image_cacher[craft_essence_part] = max_craft_essence_id
         return max_craft_essence_id

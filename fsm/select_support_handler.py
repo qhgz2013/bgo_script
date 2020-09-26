@@ -16,7 +16,6 @@ logger = logging.getLogger('bgo_script.fsm')
 
 # TODO: multiple support configuration support
 class SelectSupportHandler(StateHandler):
-    _log_config = False
 
     def __init__(self, attacher: AbstractAttacher, forward_state: int, support_servant_id: int,
                  support_craft_essence_id: int, support_craft_essence_max_break: bool = False,
@@ -77,7 +76,8 @@ class SelectSupportHandler(StateHandler):
         gray = np.mean(part, axis=2)
         avg = np.mean(gray, axis=1)
         td = np.zeros_like(avg)
-        td[:-1] = avg[:-1] - avg[1:]
+        td[:-CV_SUPPORT_TD_PIXEL] = avg[:-CV_SUPPORT_TD_PIXEL] - avg[CV_SUPPORT_TD_PIXEL:]
+        # logger.debug('support split: temporal differentiate array:\n%s' % str(td))
         # import matplotlib.pyplot as plt
         # plt.figure()
         # plt.plot(td)
@@ -85,6 +85,7 @@ class SelectSupportHandler(StateHandler):
         y = 150
         range_list = []
         threshold = CV_SUPPORT_DETECT_DIFF_THRESHOLD
+        # TODO: 修改为支持多段合并的识别模式（对上升沿和下降沿分别进行匹配）
         while y < CV_SCREENSHOT_RESOLUTION_Y:
             while y < CV_SCREENSHOT_RESOLUTION_Y and td[y] > -threshold:
                 y += 1
@@ -102,7 +103,6 @@ class SelectSupportHandler(StateHandler):
                 logger.debug('support detection: %d -> %d (len = %d)' % (begin_y, end_y, end_y-begin_y))
             else:
                 logger.debug('support detection: %d -> %d (len = %d) (ignored)' % (begin_y, end_y, end_y-begin_y))
-        logger.debug('support detection result: %s' % str(range_list))
         return range_list
 
     @staticmethod
@@ -121,6 +121,7 @@ class SelectSupportHandler(StateHandler):
             if score[y]:
                 break
             end_y = y
+        logger.debug('Scrollbar position: %d -> %d' % (start_y, end_y))
         return start_y / score.shape[0], end_y / score.shape[0]
 
     def refresh_support(self):
@@ -150,7 +151,7 @@ class SelectSupportHandler(StateHandler):
 
     def match_servant(self, img: np.ndarray, range_list: List[Tuple[float, float]]) -> List[Tuple[int, List[int]]]:
         def _empty_check(img1, img2):
-            v = mean_gray_diff_err(image_process.resize(img1, img2.shape[1], img2.shape[0]), img2, None)
+            v = mean_gray_diff_err(image_process.resize(img1, img2.shape[1], img2.shape[0]), img2)
             logger.debug('DEBUG value: empty support servant check: mean_gray_diff_err = %f' % v)
             return v < 10
         ret, t = self._wrap_call_matcher(self.servant_matcher.match, _empty_check, img, self._support_empty_img,
@@ -164,7 +165,7 @@ class SelectSupportHandler(StateHandler):
             img1_h = int(img2.shape[1] / img1.shape[1] * img1.shape[0])
             img1 = image_process.resize(img1, img2.shape[1], img1_h)
             img1 = img1[-img2.shape[0]:, ...]
-            v = mean_gray_diff_err(img1, img2, None)
+            v = mean_gray_diff_err(img1, img2)
             logger.debug('DEBUG value: empty support craft essence check: mean_gray_diff_err = %f' % v)
             return v < 10
         ret, t = self._wrap_call_matcher(self.craft_essence_matcher.match, _empty_check, img,
@@ -180,21 +181,22 @@ class SelectSupportHandler(StateHandler):
             icon = img[int(CV_SCREENSHOT_RESOLUTION_Y*y1):int(CV_SCREENSHOT_RESOLUTION_Y*y2),
                        int(CV_SCREENSHOT_RESOLUTION_X*CV_SUPPORT_SERVANT_X1):
                        int(CV_SCREENSHOT_RESOLUTION_X*CV_SUPPORT_SERVANT_X2), :]
-            icon = icon[-23:-3, 134:154, :]
+            icon = icon[-24:-4, 134:154, :]
             # import matplotlib.pyplot as plt
             # plt.figure()
             # plt.imshow(icon)
             # plt.show()
-            icon = image_process.resize(icon, self._support_max_break_img.shape[1],
-                                        self._support_max_break_img.shape[0])
+            # icon = image_process.resize(icon, self._support_max_break_img.shape[1],
+            #                             self._support_max_break_img.shape[0])
+            anchor = image_process.resize(self._support_max_break_img, icon.shape[1], icon.shape[0])
             # plt.figure()
-            # plt.imshow(icon)
+            # plt.imshow(anchor)
             # plt.show()
-            err = mean_gray_diff_err(icon, self._support_max_break_img, None)
-            hsv_err = image_process.mean_hsv_diff_err(icon, self._support_max_break_img, diff_threshold=None)
+            err = mean_gray_diff_err(icon, anchor)
+            hsv_err = image_process.mean_hsv_diff_err(icon, anchor)
             logger.debug('DEBUG value: support craft essence max break check: gray_diff_err = %f, hsv_err = %f' %
                          (err, hsv_err))
-            max_break.append(err < 10)
+            max_break.append(hsv_err < CV_SUPPORT_CRAFT_ESSENCE_MAX_BREAK_THRESHOLD)
         logger.info('Detected support craft essence max break state: %s (used %f sec(s))' % (str(max_break), time() - t))
         return list(zip(ret, max_break))
 
