@@ -2,8 +2,6 @@ import sqlite3
 import os
 import numpy as np
 import cv2
-from PIL import Image
-from io import BytesIO
 from util import pickle_loads
 from cv_positioning import *
 import image_process
@@ -15,7 +13,6 @@ SQL_PATH = CV_FGO_DATABASE_FILE
 logger = logging.getLogger('bgo_script.matcher')
 
 
-# TODO: 重构该部分代码
 class AbstractFgoMaterialMatcher:
     def __init__(self, sql_path: str = SQL_PATH):
         self.sql_path = sql_path
@@ -29,8 +26,10 @@ class AbstractFgoMaterialMatcher:
 
 
 class SupportServantMatcher(AbstractFgoMaterialMatcher):
+    __warn_size_mismatch = False
+
     def __init__(self, sql_path: str = SQL_PATH):
-        super(SupportServantMatcher, self).__init__(sql_path)
+        super().__init__(sql_path)
 
     def match(self, img_arr: np.ndarray) -> int:
         cursor = self.sqlite_connection.cursor()
@@ -52,18 +51,18 @@ class SupportServantMatcher(AbstractFgoMaterialMatcher):
         min_abs_err = 0
         for servant_id, image_key in self.cached_icon_meta:
             if image_key not in self.cached_icons:
-                cursor.execute("select image_data, name from image where image_key = ?", (image_key,))
-                binary_data, name = cursor.fetchone()
-                # In the newest database, the icon contains servant portrait, which is useless here.
-                # if 'portrait' in name.lower() or 'without frame' in name.lower():
-                #     continue
-                pil_image = Image.open(BytesIO(binary_data))
+                cursor.execute("select image_data from image where image_key = ?", (image_key,))
+                binary_data = cursor.fetchone()[0]
                 # clipping alpha and opacity border
-                np_image, alpha = image_process.split_rgb_alpha(np.asarray(pil_image)[3:-3, 3:-3, :])
+                np_image = image_process.imdecode(binary_data)[3:-3, 3:-3, :]
                 if np_image.shape[:2] != CV_SUPPORT_SERVANT_IMG_SIZE:
+                    if not self.__warn_size_mismatch:
+                        self.__warn_size_mismatch = True
+                        logger.warning('The configuration of image size for support servant matching is different from '
+                                       'database size, performance will decrease')
                     np_image = image_process.resize(np_image, CV_SUPPORT_SERVANT_IMG_SIZE[1],
                                                     CV_SUPPORT_SERVANT_IMG_SIZE[0])
-                    alpha = image_process.resize(alpha, CV_SUPPORT_SERVANT_IMG_SIZE[1], CV_SUPPORT_SERVANT_IMG_SIZE[0])
+                np_image, alpha = image_process.split_rgb_alpha(np_image)
                 hsv_image = image_process.rgb_to_hsv(np_image)
                 self.cached_icons[image_key] = np.concatenate([hsv_image, np.expand_dims(alpha, 2)], axis=2)
             anchor_servant_part = self.cached_icons[image_key][:CV_SUPPORT_SERVANT_SPLIT_Y, ...]
@@ -71,69 +70,62 @@ class SupportServantMatcher(AbstractFgoMaterialMatcher):
             if min_servant_id == 0 or hsv_err < min_abs_err:
                 min_servant_id = servant_id
                 min_abs_err = hsv_err
-                logger.debug('svt_id = %d, key = %s, hsv_err = %f' % (servant_id, image_key, hsv_err))
+                # logger.debug('svt_id = %d, key = %s, hsv_err = %f' % (servant_id, image_key, hsv_err))
         cursor.close()
         return min_servant_id
 
 
 class ServantCommandCardMatcher(AbstractFgoMaterialMatcher):
-    def __init__(self, sql_path: str = SQL_PATH):
-        super(ServantCommandCardMatcher, self).__init__(sql_path)
+    __warn_size_mismatch = False
 
-    def _match_gray_diff(self, img_arr: np.ndarray) -> int:  # Tuple[int, int]:
+    def __init__(self, sql_path: str = SQL_PATH):
+        super().__init__(sql_path)
+
+    def match(self, img_arr: np.ndarray) -> int:
         # import matplotlib.pyplot as plt
         cursor = self.sqlite_connection.cursor()
-        target_size = (160, 160)
-        img_arr_resized = image_process.resize(img_arr, target_size[1], target_size[0])
-        servant_part = img_arr_resized[:int(0.6*target_size[0]), ...]
+        target_size = CV_COMMAND_CARD_IMG_SIZE
+        img_arr_resized, img_alpha = image_process.split_rgb_alpha(image_process.resize(img_arr, target_size[1],
+                                                                                        target_size[0]))
+        hsv_img = np.concatenate([image_process.rgb_to_hsv(img_arr_resized), np.expand_dims(img_alpha, 2)], 2)
         # querying servant icon database
         if self.cached_icon_meta is None:
+            cursor.execute("select id from servant_command_card_icon order by id desc limit 1")
+            newest_svt_id = cursor.fetchone()[0]
+            cursor.execute("select count(1) from servant_command_card_icon")
+            entries = cursor.fetchone()[0]
             cursor.execute("select id, image_key from servant_command_card_icon")
             self.cached_icon_meta = cursor.fetchall()
+            logger.info('Finished querying servant command card database, %d entries with newest servant id: %d' %
+                        (entries, newest_svt_id))
         # querying image data
         min_servant_id = 0
-        min_abs_err = 0
-        # card_color = -1
+        min_err = 0
         for servant_id, image_key in self.cached_icon_meta:
             if image_key not in self.cached_icons:
                 cursor.execute("select image_data, name from image where image_key = ?", (image_key,))
                 binary_data, name = cursor.fetchone()
                 # All icon are PNG file with extra alpha channel
-                pil_image = Image.open(BytesIO(binary_data))
-                np_image = np.asarray(pil_image)
+                np_image = image_process.imdecode(binary_data)
                 # split alpha channel
                 assert np_image.shape[-1] == 4, 'Servant Icon should be RGBA channel'
-                alpha = np_image[..., -1:]
-                np_image = np_image[..., :3]
                 if np_image.shape[:2] != target_size:
+                    if not self.__warn_size_mismatch:
+                        self.__warn_size_mismatch = True
+                        logger.warning('The configuration of image size for command card matching is different from '
+                                       'database size, performance will decrease')
                     np_image = image_process.resize(np_image, target_size[1], target_size[0])
-                self.cached_icons[image_key] = np_image, alpha
-            anchor_servant_part = self.cached_icons[image_key][0][:int(0.6*target_size[0]), ...]
-            abs_err = np.abs(anchor_servant_part.astype(np.float) - servant_part)
-            abs_err = abs_err * (self.cached_icons[image_key][1][:int(0.6*target_size[0]), ...] / 255)
-            mean_abs_err = np.mean(abs_err)
-            if min_servant_id == 0 or mean_abs_err < min_abs_err:
+                np_image, alpha = image_process.split_rgb_alpha(np_image)
+                hsv_image = image_process.rgb_to_hsv(np_image)
+                self.cached_icons[image_key] = np.concatenate([hsv_image, np.expand_dims(alpha, 2)], 2)
+            anchor = self.cached_icons[image_key]
+            hsv_err = image_process.mean_hsv_diff_err(anchor, hsv_img, 'hsv', 'hsv')
+            if min_servant_id == 0 or hsv_err < min_err:
                 min_servant_id = servant_id
-                min_abs_err = mean_abs_err
-                # computing card color, reverse alpha channel to choose background
-                # card_bg = (1.0 - self.cached_icons[image_key][1] / 255) * img_arr_resized
-                # card_bg = card_bg[15:150, 27:133, :].astype('uint8')
-                # card_color = np.argmax(np.mean(card_bg, (0, 1)))
-            # if servant_id == 29:
-            #     plt.figure()
-            #     plt.imshow(servant_part)
-            #     plt.show()
-            #     plt.figure()
-            #     plt.imshow(anchor_servant_part)
-            #     plt.show()
-            #     plt.figure()
-            #     plt.imshow(abs_err.astype('uint8'))
-            #     plt.show()
+                min_err = hsv_err
+                logger.debug('svt_id = %d, key = %s, hsv_err = %f' % (servant_id, image_key, hsv_err))
         cursor.close()
-        return min_servant_id  # , card_color
-
-    def match(self, img_arr: np.ndarray) -> int:
-        return self._match_gray_diff(img_arr)
+        return min_servant_id
 
 
 def deserialize_cv2_keypoint(serialized_tuple):
@@ -191,7 +183,7 @@ class SupportCraftEssenceMatcher(AbstractFgoMaterialMatcher):
             if len_good_matches > max_matches:
                 max_matches = len_good_matches
                 max_craft_essence_id = craft_essence_id
-                logger.debug('craft_essence_id = %d, sift_matches = %d' % (craft_essence_id, len_good_matches))
+                # logger.debug('craft_essence_id = %d, sift_matches = %d' % (craft_essence_id, len_good_matches))
         cursor.close()
         self.image_cacher[craft_essence_part] = max_craft_essence_id
         return max_craft_essence_id

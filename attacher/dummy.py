@@ -8,9 +8,6 @@ logger = logging.getLogger('bgo_script.attacher.dummy')
 
 # Do nothing, except log the callings
 class DummyAttacher(AbstractAttacher):
-    def locate_handle(self) -> int:
-        return 0
-
     def get_screenshot(self, width: Optional[int] = None, height: Optional[int] = None) -> np.ndarray:
         logger.info('Method called: get_screenshot(%s, %s)' % (str(width), str(height)))
         return np.zeros([height, width, 3], dtype='uint8')

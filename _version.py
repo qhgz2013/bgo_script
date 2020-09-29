@@ -3,14 +3,16 @@ __all__ = ['VERSION']
 
 def version_wrapper() -> str:
     from util import spawn_process
-    git_tag = spawn_process('git tag --points-at HEAD')
+    git_tag = spawn_process('git tag --points-at HEAD')[1]
     if len(git_tag) > 0:
         return git_tag
     else:
-        git_branch = spawn_process('git rev-parse --abbrev-ref HEAD')
-        git_hash = spawn_process('git rev-parse --short HEAD')
-        git_time = spawn_process('git show -s --format=%cI HEAD')
-        return f'{git_branch}-{git_hash}-{git_time}'
+        git_branch = spawn_process('git rev-parse --abbrev-ref HEAD')[1]
+        git_hash = spawn_process('git rev-parse --short HEAD')[1]
+        git_time = spawn_process('git show -s --format=%cI HEAD')[1]
+        worktree_flag = spawn_process('git diff-index --quiet HEAD')[0]
+        worktree_status = '-dirty' if worktree_flag != 0 else ''
+        return f'{git_branch}-{git_hash}-{git_time}{worktree_status}'
 
 
 try:

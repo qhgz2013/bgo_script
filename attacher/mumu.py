@@ -1,4 +1,4 @@
-from . import AbstractAttacher
+from . import HandleBasedAttacher
 import win32gui
 import win32con
 import numpy as np
@@ -11,7 +11,7 @@ import logging
 logger = logging.getLogger('bgo_script.attacher')
 
 
-class MumuAttacher(AbstractAttacher):
+class MumuAttacher(HandleBasedAttacher):
     __warned_minimize = False
 
     def __init__(self):
@@ -34,6 +34,7 @@ class MumuAttacher(AbstractAttacher):
                 simulator_handle = win32gui.FindWindowEx(0, simulator_handle, 'Qt5QWindowIcon', None)
         assert window_handle > 0, 'Could not find child handle of Mumu simulator: NemuPlayer'
         self.simulator_handle = simulator_handle
+        logger.info('Located Mumu simulator handle: %d' % self.simulator_handle)
         return window_handle
 
     def is_minimize(self) -> bool:

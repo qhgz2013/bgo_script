@@ -12,19 +12,39 @@ logger = logging.getLogger('bgo_script.attacher')
 
 
 class AbstractAttacher:
+    """
+    AbstractAttacher defines the basic interface to interact with the game application
+    """
+    def get_screenshot(self, width: Optional[int] = None, height: Optional[int] = None) -> np.ndarray:
+        raise NotImplementedError
+
+    def send_click(self, x: float, y: float, stay_time: float = 0.1):
+        raise NotImplementedError
+
+    def send_slide(self, p_from: Tuple[float, float], p_to: Tuple[float, float], stay_time_before_move: float = 0.1,
+                   stay_time_move: float = 0.8, stay_time_after_move: float = 0.1):
+        raise NotImplementedError
+
+
+class HandleBasedAttacher(AbstractAttacher):
+    """
+    HandleBasedAttacher implemented common handle (hWnd) based IPC interaction with specified handle through WINAPI
+    """
     def __init__(self):
         self.handle = LazyValue(self.locate_handle)
-    
+
     def locate_handle(self) -> int:
         """
         Locate the simulator handle, used for screenshot capturing and message sending
+
         :return: The handle of the simulator, if not found, returns 0
         """
-        raise NotImplementedError()
+        raise NotImplementedError
 
     def get_screenshot(self, width: Optional[int] = None, height: Optional[int] = None) -> np.ndarray:
         """
         Get the current screenshot of simulator.
+
         :param width: the width of reshaped screenshot (in pixels), default: window width
         :param height: the height of reshaped screenshot (in pixels), default: window height
         :return: returns a numpy array shapes [h, w, c] which c = 3 in RGB order
@@ -59,6 +79,7 @@ class AbstractAttacher:
         """
         Send the click event to the simulator.
         Execution order: MOUSE BUTTON DOWN EVENT -> sleep(stay_time) -> MOUSE BUTTON UP EVENT
+
         :param x: normalized coordinate X, ranges [0, 1), re-scale is required, which depends on the window size
         :param y: normalized coordinate Y, ranges [0, 1), re-scale is required, which depends on the window size
         :param stay_time: the interval between MOUSE BUTTON DOWN and MOUSE BUTTON UP
@@ -82,6 +103,7 @@ class AbstractAttacher:
                    stay_time_move: float = 0.8, stay_time_after_move: float = 0.1):
         """
         Send the slide event to the simulator.
+
         :param p_from: normalized coordinate (X1, Y1) before sliding, ranges [0, 1), re-scale is required,
          which depends on the window size
         :param p_to: normalized coordinate (X2, Y2) after sliding, ranges [0, 1), re-rescale is required,

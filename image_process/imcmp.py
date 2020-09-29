@@ -40,7 +40,7 @@ def split_gray_alpha(img: np.ndarray, fast_compute: bool = True) -> Tuple[np.nda
     """
     img, alpha = split_rgb_alpha(img)
     if fast_compute:
-        gray = np.mean(img[..., :3], -1)
+        gray = np.round(np.mean(img[..., :3], -1)).astype('uint8')
     else:
         w = np.array([[0.2126], [0.7152], [0.0722]])
         gray = np.squeeze(np.round(np.dot(img.astype(np.float), w)).astype('uint8'))
