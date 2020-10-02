@@ -1,52 +1,50 @@
-from .state_handler import StateHandler
+from .state_handler import ConfigurableStateHandler, WaitFufuStateHandler
 from attacher import AbstractAttacher
 from matcher import SupportServantMatcher, SupportCraftEssenceMatcher
 import logging
-from typing import List, Optional, Tuple, Callable, Union
+from typing import *
 from cv_positioning import *
 from click_positioning import *
 import image_process
 import numpy as np
 from time import sleep, time
-from .wait_fufu_handler import WaitFufuStateHandler
 from image_process import mean_gray_diff_err
+from battle_control import ScriptConfiguration
+from .fgo_state import FgoState
 
 logger = logging.getLogger('bgo_script.fsm')
 
 
-# TODO: multiple support configuration support
-class SelectSupportHandler(StateHandler):
+class SelectSupportHandler(ConfigurableStateHandler):
+    _support_empty_img = image_process.imread(CV_SUPPORT_EMPTY_FILE)
+    _support_craft_essence_img = image_process.imread(CV_SUPPORT_CRAFT_ESSENCE_FILE)
+    _support_max_break_img = image_process.imread(CV_SUPPORT_CRAFT_ESSENCE_MAX_BREAK_FILE)
 
-    def __init__(self, attacher: AbstractAttacher, forward_state: int, support_servant_id: int,
-                 support_craft_essence_id: int, support_craft_essence_max_break: bool = False,
-                 support_servant_minimal_skill: Optional[List[int]] = None):
+    def __init__(self, attacher: AbstractAttacher, forward_state: FgoState, cfg: ScriptConfiguration):
+        super().__init__(cfg)
         self.attacher = attacher
         self.forward_state = forward_state
-        self.servant_id = support_servant_id
-        self.craft_essence_id = support_craft_essence_id
-        self.craft_essence_max_break = support_craft_essence_max_break
-        self.servant_skill = support_servant_minimal_skill or [0, 0, 0]
+        self._support_svt = self._cfg.team_config.support_servant
         self.servant_matcher = SupportServantMatcher(CV_FGO_DATABASE_FILE)
         self.craft_essence_matcher = SupportCraftEssenceMatcher(CV_FGO_DATABASE_FILE)
-        self._support_empty_img = image_process.imread(CV_SUPPORT_EMPTY_FILE)
-        self._support_craft_essence_img = image_process.imread(CV_SUPPORT_CRAFT_ESSENCE_FILE)
-        self._support_max_break_img = image_process.imread(CV_SUPPORT_CRAFT_ESSENCE_MAX_BREAK_FILE)
 
-    def run_and_transit_state(self) -> int:
+    def run_and_transit_state(self) -> FgoState:
         suc = False
         while True:
             sleep(0.5)
             img = self.attacher.get_screenshot(CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y)
             support_range = self._split_support_image(img)
             servant_ids = self.match_servant(img, support_range)
-            if self.craft_essence_id > 0:
+            if self._support_svt.craft_essence_id > 0:
                 craft_essence_ids = self.match_craft_essence(img, support_range)
             else:
                 craft_essence_ids = []
             for i in range(len(servant_ids)):
-                if servant_ids[i][0] == self.servant_id and \
-                        (self.craft_essence_id == 0 or craft_essence_ids[i][0] == self.craft_essence_id) and \
-                        (not self.craft_essence_max_break or craft_essence_ids[i][1]):
+                cur_svt_id = servant_ids[i][0]
+                cur_ce_id, cur_ce_max_break = craft_essence_ids[i]
+                if (self._support_svt.svt_id == 0 or self._support_svt.svt_id == cur_svt_id) and \
+                        (self._support_svt.craft_essence_id == 0 or self._support_svt.craft_essence_id == cur_ce_id) \
+                        and (not self._support_svt.craft_essence_max_break or cur_ce_max_break):
                     # servant matched
                     logger.info('Found required support')
                     self.attacher.send_click(0.5, (support_range[i][0] + support_range[i][1]) / 2)
@@ -132,7 +130,7 @@ class SelectSupportHandler(StateHandler):
             sleep(0.5)
             # Check clickable
             img = self.attacher.get_screenshot(CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y)
-            img = image_process.rgb_to_hsv(img)[
+            img = image_process.rgb_to_hsv(img[..., :3])[
                 int(CV_SCREENSHOT_RESOLUTION_Y*CV_SUPPORT_REFRESH_REFUSED_DETECTION_Y1):
                 int(CV_SCREENSHOT_RESOLUTION_Y*CV_SUPPORT_REFRESH_REFUSED_DETECTION_Y2),
                 int(CV_SCREENSHOT_RESOLUTION_X*CV_SUPPORT_REFRESH_REFUSED_DETECTION_X1):
@@ -146,7 +144,7 @@ class SelectSupportHandler(StateHandler):
         sleep(0.5)
         self.attacher.send_click(SUPPORT_REFRESH_BUTTON_CONFIRM_X, SUPPORT_REFRESH_BUTTON_CONFIRM_Y)
         sleep(1)
-        WaitFufuStateHandler(self.attacher, 0).run_and_transit_state()
+        assert WaitFufuStateHandler(self.attacher, FgoState.STATE_BEGIN).run_and_transit_state() == FgoState.STATE_BEGIN
         sleep(0.5)
 
     def match_servant(self, img: np.ndarray, range_list: List[Tuple[float, float]]) -> List[Tuple[int, List[int]]]:
@@ -197,7 +195,8 @@ class SelectSupportHandler(StateHandler):
             logger.debug('DEBUG value: support craft essence max break check: gray_diff_err = %f, hsv_err = %f' %
                          (err, hsv_err))
             max_break.append(hsv_err < CV_SUPPORT_CRAFT_ESSENCE_MAX_BREAK_THRESHOLD)
-        logger.info('Detected support craft essence max break state: %s (used %f sec(s))' % (str(max_break), time() - t))
+        logger.info('Detected support craft essence max break state: %s (used %f sec(s))' %
+                    (str(max_break), time() - t))
         return list(zip(ret, max_break))
 
     @staticmethod

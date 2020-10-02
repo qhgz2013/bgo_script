@@ -1,29 +1,27 @@
-from .state_handler import StateHandler
+from .state_handler import ConfigurableStateHandler, SingleClickAndWaitFufuHandler
 from attacher import AbstractAttacher
 from click_positioning import *
 import logging
 from time import time
 from image_process import imread
 from cv_positioning import *
-from .eat_apple_handler import EatAppleHandler
-from .single_click_and_wait_fufu_handler import SingleClickAndWaitFufuHandler
 import numpy as np
-from typing import *
+from battle_control import ScriptConfiguration
+from .fgo_state import FgoState
 
 logger = logging.getLogger('bgo_script.fsm')
 
 
-class SelectQuestHandler(StateHandler):
-    def __init__(self, attacher: AbstractAttacher, forward_state: int, max_ap: Optional[int] = None,
-                 eat_apple_if_necessary: bool = False):
+class SelectQuestHandler(ConfigurableStateHandler):
+    _eat_apple_ui_anchor = imread(CV_EAT_APPLE_UI_FILE)
+
+    def __init__(self, attacher: AbstractAttacher, forward_state: FgoState, cfg: ScriptConfiguration):
+        super().__init__(cfg)
         self.attacher = attacher
         self.forward_state = forward_state
-        self._eat_apple_ui_anchor = imread(CV_EAT_APPLE_UI_FILE)
         self._last_enter_quest_time = None
-        self.eat_apple_if_necessary = eat_apple_if_necessary
-        self.max_ap = max_ap
 
-    def run_and_transit_state(self) -> int:
+    def run_and_transit_state(self) -> FgoState:
         # todo: implement quest select
         # input: 关卡颜色和顺序
         # algorithm:
@@ -50,7 +48,6 @@ class SelectQuestHandler(StateHandler):
         # 现在默认是选择任务列表中最上面的那个本
         next_state = SingleClickAndWaitFufuHandler(self.attacher, FIRST_QUEST_X, FIRST_QUEST_Y, self.forward_state).\
             run_and_transit_state()
-        next_state = EatAppleHandler(self.attacher, next_state, self.eat_apple_if_necessary).run_and_transit_state()
         return next_state
 
     def _estimate_ap(self):
@@ -62,8 +59,8 @@ class SelectQuestHandler(StateHandler):
         if normalized_ap_val < 0.02 or normalized_ap_val > 0.98:
             logger.info('The AP estimation may be incorrect since it is nearly empty or full')
         ap_correction = 0.8324 * normalized_ap_val + 0.0931  # linear correction, R^2=0.9998
-        if self.max_ap is not None:
-            ap_val = ap_correction * self.max_ap
+        if self._cfg.max_ap is not None:
+            ap_val = ap_correction * self._cfg.max_ap
             logger.info('Estimated current AP: %d' % int(ap_val + 0.5))
         else:
             logger.info('Estimated current AP: %f%% (Max AP not configured)' % (ap_correction * 100))

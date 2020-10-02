@@ -7,3 +7,4 @@ from ._cv_sift_import import sift_class
 from .bk_tree import BKTree
 from .image_hash_cacher import ImageHashCacher
 from .phash import perception_hash
+from .dfs import split_image

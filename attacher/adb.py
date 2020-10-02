@@ -7,6 +7,8 @@ import logging
 from util import spawn_process_raw, spawn_process
 import image_process
 import struct
+import threading
+from time import sleep
 
 logger = logging.getLogger('bgo_script.attacher')
 
@@ -42,8 +44,10 @@ class AdbAttacher(AbstractAttacher):
             if self._adb is None:
                 raise RuntimeError('Could not find adb.exe in PATH, please specify it by parameter')
             logger.info('Found adb.exe in %s' % self._adb)
-        spawn_process([self._adb, 'kill-server'])
+        # spawn_process([self._adb, 'kill-server'])
         spawn_process([self._adb, 'start-server'])
+        thd = threading.Thread(target=self._shutdown_adb_server, daemon=False, name='Adb server shutdown thread')
+        thd.start()
         self._crop_16_9 = False
         self._device_screen_size = self._get_screenshot_internal().shape
         logger.debug('Device resolution: %s' % str(self._device_screen_size[1::-1]))
@@ -51,6 +55,12 @@ class AdbAttacher(AbstractAttacher):
         w = self._device_screen_size[0] / 9.0 * 16.0
         beg_x = int(round(self._device_screen_size[1] - w) / 2)
         self._16_9_screen_slice_x = slice(beg_x, beg_x + int(round(w)))
+
+    def _shutdown_adb_server(self):
+        while threading.main_thread().is_alive():
+            sleep(0.2)
+        logger.info('Main thread exited, terminate adb server process')
+        spawn_process_raw([self._adb, 'kill-server'])
 
     def _translate_normalized_coord(self, x: float, y: float) -> Tuple[int, int]:
         if self._crop_16_9:
@@ -64,9 +74,15 @@ class AdbAttacher(AbstractAttacher):
         width, height, pixel_format = struct.unpack('<3I', blob[:12])
         if pixel_format != 1:
             raise ValueError('Invalid screencap output format: Expected RGBA (0x1), but got %d' % pixel_format)
-        if len(blob) - 12 != width * height * 4:
+        begin_pos = 12
+        unused_bytes = len(blob) - 12 - width * height * 4
+        if unused_bytes == 4:
+            # in newer android system, screencap will return w, h, f (pixel format), c (color space)
+            # src code: https://github.com/aosp-mirror/platform_frameworks_base/blob/master/cmds/screencap/screencap.cpp
+            begin_pos = 16
+        elif unused_bytes != 0:
             raise ValueError('Invalid RGBA data array: length corrupted')
-        img = np.frombuffer(blob[12:], 'uint8').reshape(height, width, 4)
+        img = np.frombuffer(blob[begin_pos:], 'uint8').reshape(height, width, 4)
         # In-game detection: for most of mobile devices, condition "height < width" holds true
         if img.shape[0] > img.shape[1]:
             img = np.swapaxes(img, 0, 1)
@@ -83,8 +99,8 @@ class AdbAttacher(AbstractAttacher):
 
     def send_click(self, x: float, y: float, stay_time: float = 0.1):
         px, py = self._translate_normalized_coord(x, y)
-        stdout = _handle_adb_ipc_output(spawn_process('adb shell input touchscreen swipe %d %d %d %d %d' %
-                                                      (px, py, px, py, int(round(stay_time*1000)))))
+        stdout = _handle_adb_ipc_output(spawn_process([self._adb, 'shell', 'input touchscreen swipe %d %d %d %d %d' %
+                                                       (px, py, px, py, int(round(stay_time*1000)))]))
         if len(stdout) > 0:
             logger.debug('Adb output: %s' % stdout)
 

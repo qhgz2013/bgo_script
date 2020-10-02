@@ -17,7 +17,7 @@ class AbstractFgoMaterialMatcher:
     def __init__(self, sql_path: str = SQL_PATH):
         self.sql_path = sql_path
         assert os.path.isfile(self.sql_path), 'Given sql_path is not a file'
-        self.sqlite_connection = sqlite3.connect(self.sql_path)
+        self.sqlite_connection = sqlite3.connect(self.sql_path, check_same_thread=False)
         self.cached_icon_meta = None
         self.cached_icons = {}
 
@@ -34,7 +34,7 @@ class SupportServantMatcher(AbstractFgoMaterialMatcher):
     def match(self, img_arr: np.ndarray) -> int:
         cursor = self.sqlite_connection.cursor()
         img_arr_resized = image_process.resize(img_arr, CV_SUPPORT_SERVANT_IMG_SIZE[1], CV_SUPPORT_SERVANT_IMG_SIZE[0])
-        servant_part = img_arr_resized[:CV_SUPPORT_SERVANT_SPLIT_Y, ...]
+        servant_part = img_arr_resized[:CV_SUPPORT_SERVANT_SPLIT_Y, :, :3]
         hsv_servant_part = image_process.rgb_to_hsv(servant_part)
         # querying servant icon database
         if self.cached_icon_meta is None:

@@ -9,7 +9,7 @@ logger = logging.getLogger('bgo_script.util')
 
 def spawn_process_raw(cmd: Union[str, Sequence[str]]) -> Tuple[int, bytes, bytes]:
     logger.debug('Spawning process using command: %s' % str(cmd))
-    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     out_msg, err_msg = proc.communicate()
     return proc.returncode, out_msg, err_msg
 
