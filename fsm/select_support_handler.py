@@ -20,13 +20,14 @@ class SelectSupportHandler(ConfigurableStateHandler):
     _support_craft_essence_img = image_process.imread(CV_SUPPORT_CRAFT_ESSENCE_FILE)
     _support_max_break_img = image_process.imread(CV_SUPPORT_CRAFT_ESSENCE_MAX_BREAK_FILE)
 
+    servant_matcher = SupportServantMatcher(CV_FGO_DATABASE_FILE)
+    craft_essence_matcher = SupportCraftEssenceMatcher(CV_FGO_DATABASE_FILE)
+
     def __init__(self, attacher: AbstractAttacher, forward_state: FgoState, cfg: ScriptConfiguration):
         super().__init__(cfg)
         self.attacher = attacher
         self.forward_state = forward_state
         self._support_svt = self._cfg.team_config.support_servant
-        self.servant_matcher = SupportServantMatcher(CV_FGO_DATABASE_FILE)
-        self.craft_essence_matcher = SupportCraftEssenceMatcher(CV_FGO_DATABASE_FILE)
 
     def run_and_transit_state(self) -> FgoState:
         suc = False

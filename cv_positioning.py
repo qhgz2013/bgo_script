@@ -113,3 +113,4 @@ CV_SUPPORT_REFRESH_REFUSED_DETECTION_S_THRESHOLD = 5
 
 CV_REQUEST_SUPPORT_UI_FILE = 'cv_data/request_support_ui.png'
 CV_EAT_APPLE_UI_FILE = 'cv_data/eat_apple_ui.png'
+CV_CONTINUOUS_BATTLE_UI_FILE = 'cv_data/continuous_battle.png'

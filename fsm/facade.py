@@ -23,8 +23,8 @@ class FgoFSMFacade:
         logger.info('* This script is for academic research only, commercial usage is strictly prohibited!')
         logger.info('* 本脚本仅用作学术研究，严禁一切商业行为！')
         self.executor = FSMExecutor()
-        # self.executor.add_state_handler(s.STATE_BEGIN, DirectStateForwarder(s.STATE_BATTLE_LOOP))
-        self.executor.add_state_handler(s.STATE_BEGIN, DirectStateForwarder(s.STATE_ENTER_QUEST))
+        self.executor.add_state_handler(s.STATE_BEGIN, DirectStateForwarder(s.STATE_SELECT_QUEST))
+        # self.executor.add_state_handler(s.STATE_BEGIN, DirectStateForwarder(s.STATE_EXIT_QUEST))
         self.executor.add_state_handler(s.STATE_SELECT_QUEST,
                                         SelectQuestHandler(attacher, s.STATE_AP_CHECK_BEFORE_TEAM_CONFIG, cfg))
         self.executor.add_state_handler(s.STATE_AP_CHECK_BEFORE_TEAM_CONFIG,

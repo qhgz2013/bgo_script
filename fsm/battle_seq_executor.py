@@ -1,6 +1,6 @@
 from typing import *
 from attacher import AbstractAttacher
-from battle_control import ScriptConfiguration, CommandCardDetector
+from battle_control import ScriptConfiguration, CommandCardDetector, CommandCard, CommandCardType
 from cv_positioning import *
 from click_positioning import *
 from time import sleep
@@ -31,6 +31,10 @@ def _init_battle_vars(d: Dict[str, Any]):
 
 class BattleSequenceExecutor:
     def __init__(self, attacher: AbstractAttacher, cfg: ScriptConfiguration):
+        self.SERVANT_ID_EMPTY = SERVANT_ID_EMPTY
+        self.ENEMY_LOCATION_EMPTY = ENEMY_LOCATION_EMPTY
+        self.SERVANT_ID_SUPPORT = SERVANT_ID_SUPPORT
+
         self.attacher = attacher
         self._cfg = cfg
         self.team_config = cfg.team_config
@@ -214,3 +218,11 @@ class BattleSequenceExecutor:
             self._dispatched_cards = CommandCardDetector.detect_command_cards(img[..., :3])
         else:
             self._dispatched_cards = None
+
+    def select_remain_command_card(self, priority: Optional[Sequence[CommandCard]] = None,
+                                   avoid_chain_or_extra_atk: bool = True):
+        priority = priority or []
+        if avoid_chain_or_extra_atk:
+            pass
+        else:
+            pass

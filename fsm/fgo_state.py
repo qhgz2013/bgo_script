@@ -3,7 +3,7 @@ from enum import IntEnum
 
 class FgoState(IntEnum):
     STATE_BEGIN = 0
-    STATE_FINISH = 1
+    STATE_FINISH = -1
     STATE_ERROR = -2
 
     STATE_SELECT_QUEST = 1

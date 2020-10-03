@@ -70,7 +70,10 @@ class AdbAttacher(AbstractAttacher):
             return int(round(x * self._device_screen_size[1])), int(round(y * self._device_screen_size[0]))
 
     def _get_screenshot_internal(self) -> np.ndarray:
-        blob = _handle_adb_ipc_output(spawn_process_raw([self._adb, 'exec-out', 'screencap']))
+        # sometimes this command will halt, don't know why, so add timeout 5 secs here
+        # TODO: handle timeout situation
+        blob = _handle_adb_ipc_output(spawn_process_raw([self._adb, 'exec-out', 'screencap'], timeout=5,
+                                                        timed_out_retry=5))
         width, height, pixel_format = struct.unpack('<3I', blob[:12])
         if pixel_format != 1:
             raise ValueError('Invalid screencap output format: Expected RGBA (0x1), but got %d' % pixel_format)

@@ -5,15 +5,19 @@ import numpy as np
 import logging
 from click_positioning import *
 from time import sleep
-from image_process import imread, mean_gray_diff_err
+import image_process
 from .fgo_state import FgoState
 from battle_control import ScriptConfiguration, EatAppleType
 
 logger = logging.getLogger('bgo_script.fsm')
 
 
+def _imread_to_screen_size(path):
+    return image_process.resize(image_process.imread(path), CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y)
+
+
 class EatAppleHandler(ConfigurableStateHandler):
-    _eat_apple_ui_anchor = imread(CV_EAT_APPLE_UI_FILE)
+    _eat_apple_ui_anchor = _imread_to_screen_size(CV_EAT_APPLE_UI_FILE)
 
     def __init__(self, attacher: AbstractAttacher, forward_state: FgoState, cfg: ScriptConfiguration):
         super().__init__(cfg)
@@ -26,7 +30,7 @@ class EatAppleHandler(ConfigurableStateHandler):
             if self._cfg.eat_apple_type == EatAppleType.GoldApple:
                 # TODO: validate this behavior
                 logger.info('Performing action: eat apple')
-                self.attacher.send_click(EAT_APPLE_CLICK_X, EAT_APPLE_CLICK_Y)
+                self.attacher.send_click(EAT_GOLD_APPLE_CLICK_X, EAT_GOLD_APPLE_CLICK_Y)
                 sleep(0.5)
                 self.attacher.send_click(EAT_APPLE_CONFIRM_CLICK_X, EAT_APPLE_CONFIRM_CLICK_Y)
                 sleep(0.5)
@@ -46,6 +50,6 @@ class EatAppleHandler(ConfigurableStateHandler):
 
     @classmethod
     def is_in_eat_apple_ui(cls, img: np.ndarray):
-        v = mean_gray_diff_err(cls._eat_apple_ui_anchor, img)
+        v = image_process.mean_gray_diff_err(cls._eat_apple_ui_anchor, img)
         logger.debug('DEBUG value: mean_gray_diff_err = %f' % v)
         return v < 3
