@@ -52,8 +52,7 @@ class SelectQuestHandler(ConfigurableStateHandler):
 
     def _estimate_ap(self):
         screenshot = self.attacher.get_screenshot(CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y)
-        img = screenshot[int(CV_SCREENSHOT_RESOLUTION_Y*CV_AP_BAR_Y1):int(CV_SCREENSHOT_RESOLUTION_Y*CV_AP_BAR_Y2),
-                         int(CV_SCREENSHOT_RESOLUTION_X*CV_AP_BAR_X1):int(CV_SCREENSHOT_RESOLUTION_X*CV_AP_BAR_X2), 1]
+        img = screenshot[CV_AP_BAR_Y1:CV_AP_BAR_Y2, CV_AP_BAR_X1:CV_AP_BAR_X2, 1]
         g_val = np.average(img, 0)
         normalized_ap_val = np.average(g_val > CV_AP_GREEN_THRESHOLD)
         if normalized_ap_val < 0.02 or normalized_ap_val > 0.98:

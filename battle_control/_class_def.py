@@ -77,7 +77,7 @@ class ServantConfiguration:
 
 
 # 助战从者设置
-# 注：仅选择好友&技能等级检测未实现
+# 注：技能等级检测未实现
 class SupportServantConfiguration(ServantConfiguration):
     __slots__ = ['svt_id', 'craft_essence_id', 'craft_essence_max_break', 'friend_only', 'skill_requirement']
 

@@ -73,11 +73,13 @@ class ContinuousBattleHandler(ConfigurableStateHandler):
             if self._is_in_continuous_battle_confirm_ui():
                 logger.debug('Enable continuous battle')
                 self.attacher.send_click(CONTINUOUS_BATTLE_BUTTON_CONFIRM_X, CONTINUOUS_BATTLE_BUTTON_Y)
-                return WaitFufuStateHandler(self.attacher, self.forward_state_pos).run_and_transit_state()
+                next_state = WaitFufuStateHandler(self.attacher, self.forward_state_pos).run_and_transit_state()
             else:
                 logger.error('Continuous battle scene not detected, assume quest is exited')
                 self.attacher.send_click(CONTINUOUS_BATTLE_BUTTON_CANCEL_X, CONTINUOUS_BATTLE_BUTTON_Y)
-                return self.forward_state_neg
+                next_state = self.forward_state_neg
         else:
             self.attacher.send_click(CONTINUOUS_BATTLE_BUTTON_CANCEL_X, CONTINUOUS_BATTLE_BUTTON_Y)
-            return self.forward_state_neg
+            next_state = self.forward_state_neg
+        sleep(0.5)
+        return next_state

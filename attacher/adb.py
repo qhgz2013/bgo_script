@@ -71,7 +71,6 @@ class AdbAttacher(AbstractAttacher):
 
     def _get_screenshot_internal(self) -> np.ndarray:
         # sometimes this command will halt, don't know why, so add timeout 5 secs here
-        # TODO: handle timeout situation
         blob = _handle_adb_ipc_output(spawn_process_raw([self._adb, 'exec-out', 'screencap'], timeout=5,
                                                         timed_out_retry=5))
         width, height, pixel_format = struct.unpack('<3I', blob[:12])

@@ -6,6 +6,8 @@ from bs4 import BeautifulSoup
 import pandas as pd
 from io import StringIO, BytesIO
 from warnings import warn
+import os
+import sys
 
 
 def initialize_sql_table(sql_conn):
@@ -51,6 +53,7 @@ def download_image_if_not_exists(sess, sql_cursor, image_key, image_text, url, *
 
 def retrieve_servant_icons(sql_conn):
     cursor = sql_conn.cursor()
+    # noinspection SqlWithoutWhere
     cursor.execute("delete from servant_icon")
     sess = requests.session()
     icon_url = 'https://fategrandorder.fandom.com/wiki/Servant_List_by_ID'
@@ -82,9 +85,13 @@ def retrieve_servant_icons(sql_conn):
                 img_key = img.attrs['data-image-name']
                 text_lower = text.lower()
                 # skips portrait, without-frame images and April Fool icons
-                for candidate in ['portrait', 'without frame', 'april', 'fool']:
+                ignore = False
+                for candidate in ['portrait', 'without frame', 'april', 'fool', 'np logo']:
                     if candidate in text_lower:
-                        continue
+                        ignore = True
+                        break
+                if ignore:
+                    continue
                 download_image_if_not_exists(sess, cursor, img_key, text, img_src)
                 cursor.execute("insert into servant_icon(id, image_key) values (?, ?)", (servant_id, img_key))
             # Retrieving servant in-battle command card sprites (used for command card recognition)
@@ -113,6 +120,7 @@ def retrieve_servant_icons(sql_conn):
 
 def retrieve_craft_essence_icons(sql_conn):
     cursor = sql_conn.cursor()
+    # noinspection SqlWithoutWhere
     cursor.execute("delete from craft_essence_icon")
     sess = requests.session()
     url = 'https://fgo.wiki/w/%E7%A4%BC%E8%A3%85%E5%9B%BE%E9%89%B4'
@@ -132,10 +140,10 @@ def retrieve_craft_essence_icons(sql_conn):
 
 def pre_compute_sift_features(sql_conn):
     try:
-        from util import sift_class, pickle_dumps
+        from image_process import sift_class
+        from util import pickle_dumps
         from PIL import Image
         import numpy as np
-        import pickle
     except ImportError:
         print('Required dependency (cv2, pillow, numpy) is not satisfied, skipping sift pre-computation')
         return
@@ -168,6 +176,7 @@ def pre_compute_sift_features(sql_conn):
 
 
 def main():
+    sys.path.append(os.path.abspath(os.curdir))
     parser = argparse.ArgumentParser()
     parser.add_argument('-o', dest='output_db_path', help='the output path of the generated database', required=True)
     args = parser.parse_args()

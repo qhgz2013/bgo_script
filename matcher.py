@@ -7,7 +7,7 @@ from cv_positioning import *
 import image_process
 import logging
 # from typing import *
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 
 SQL_PATH = CV_FGO_DATABASE_FILE
 logger = logging.getLogger('bgo_script.matcher')
@@ -70,7 +70,7 @@ class SupportServantMatcher(AbstractFgoMaterialMatcher):
             if min_servant_id == 0 or hsv_err < min_abs_err:
                 min_servant_id = servant_id
                 min_abs_err = hsv_err
-                # logger.debug('svt_id = %d, key = %s, hsv_err = %f' % (servant_id, image_key, hsv_err))
+                logger.debug('svt_id = %d, key = %s, hsv_err = %f' % (servant_id, image_key, hsv_err))
         cursor.close()
         return min_servant_id
 
@@ -183,7 +183,7 @@ class SupportCraftEssenceMatcher(AbstractFgoMaterialMatcher):
             if len_good_matches > max_matches:
                 max_matches = len_good_matches
                 max_craft_essence_id = craft_essence_id
-                # logger.debug('craft_essence_id = %d, sift_matches = %d' % (craft_essence_id, len_good_matches))
+                logger.debug('craft_essence_id = %d, sift_matches = %d' % (craft_essence_id, len_good_matches))
         cursor.close()
         self.image_cacher[craft_essence_part] = max_craft_essence_id
         return max_craft_essence_id

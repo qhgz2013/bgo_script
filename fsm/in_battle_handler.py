@@ -63,19 +63,14 @@ class WaitAttackOrExitQuestHandler(ConfigurableStateHandler):
                 return FgoState.STATE_EXIT_QUEST
 
     def _can_attack(self, img: np.ndarray) -> bool:
-        btn_area = img[int(CV_SCREENSHOT_RESOLUTION_Y*CV_ATTACK_BUTTON_Y1):
-                       int(CV_SCREENSHOT_RESOLUTION_Y*CV_ATTACK_BUTTON_Y2),
-                       int(CV_SCREENSHOT_RESOLUTION_X*CV_ATTACK_BUTTON_X1):
-                       int(CV_SCREENSHOT_RESOLUTION_X*CV_ATTACK_BUTTON_X2)]
+        btn_area = img[CV_ATTACK_BUTTON_Y1:CV_ATTACK_BUTTON_Y2, CV_ATTACK_BUTTON_X1:CV_ATTACK_BUTTON_X2]
         abs_gray_diff = image_process.mean_gray_diff_err(btn_area, self._attack_button_anchor)
         logger.debug('DEBUG value: attack button mean_gray_diff_err = %f' % abs_gray_diff)
         return abs_gray_diff < CV_ATTACK_DIFF_THRESHOLD
 
     @staticmethod
     def _is_exit_quest_scene(img: np.ndarray) -> bool:
-        img = img[int(CV_SCREENSHOT_RESOLUTION_Y*CV_EXIT_QUEST_Y1):int(CV_SCREENSHOT_RESOLUTION_Y*CV_EXIT_QUEST_Y2),
-                  int(CV_SCREENSHOT_RESOLUTION_X*CV_EXIT_QUEST_X1):int(CV_SCREENSHOT_RESOLUTION_X*CV_EXIT_QUEST_X2), :]
-        img = img.copy()
+        img = img[CV_EXIT_QUEST_Y1:CV_EXIT_QUEST_Y2, CV_EXIT_QUEST_X1:CV_EXIT_QUEST_X2, :].copy()
         h, w = img.shape[:2]
         img[int(h*CV_EXIT_QUEST_TITLE_MASK_Y1):int(h*CV_EXIT_QUEST_TITLE_MASK_Y2),
             int(w*CV_EXIT_QUEST_TITLE_MASK_X1):int(w*CV_EXIT_QUEST_TITLE_MASK_Y2), :] = 0
@@ -106,11 +101,8 @@ class BattleLoopAttackHandler(ConfigurableStateHandler):
         return min_digit
 
     def _get_current_battle(self, img: np.ndarray) -> Tuple[int, int]:
-        battle_ocr = img[int(CV_SCREENSHOT_RESOLUTION_Y*CV_BATTLE_DETECTION_Y1):
-                         int(CV_SCREENSHOT_RESOLUTION_Y*CV_BATTLE_DETECTION_Y2),
-                         int(CV_SCREENSHOT_RESOLUTION_X*CV_BATTLE_DETECTION_X1):
-                         int(CV_SCREENSHOT_RESOLUTION_X*CV_BATTLE_DETECTION_X2), :]
-        s = image_process.rgb_to_hsv(battle_ocr)[..., 2] > 128  # THRESHOLD
+        img = img[CV_BATTLE_DETECTION_Y1:CV_BATTLE_DETECTION_Y2, CV_BATTLE_DETECTION_X1:CV_BATTLE_DETECTION_X2, :]
+        s = image_process.rgb_to_hsv(img)[..., 2] > 128  # THRESHOLD
         s = s.astype('uint8') * 255
         # split digits
         rects = image_process.split_image(s)

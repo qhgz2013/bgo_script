@@ -40,10 +40,7 @@ class WaitFufuStateHandler(StateHandler):
         logger.debug('Started waiting fufu')
         while True:
             screenshot = self.attacher.get_screenshot(CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y)
-            fufu_area = np.sum(
-                screenshot[int(CV_SCREENSHOT_RESOLUTION_Y*CV_FUFU_Y1):int(CV_SCREENSHOT_RESOLUTION_Y*CV_FUFU_Y2),
-                           int(CV_SCREENSHOT_RESOLUTION_X*CV_FUFU_X1):int(CV_SCREENSHOT_RESOLUTION_X*CV_FUFU_X2), :3],
-                -1)
+            fufu_area = np.sum(screenshot[CV_FUFU_Y1:CV_FUFU_Y2, CV_FUFU_X1:CV_FUFU_X2, :3], -1)
             ratio = np.average(fufu_area < CV_FUFU_BLANK_THRESHOLD)
             if ratio < CV_FUFU_BLANK_RATIO_THRESHOLD:
                 break

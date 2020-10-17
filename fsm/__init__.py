@@ -1,1 +1,1 @@
-from .facade import FgoFSMFacade
+from .facade import FgoFSMFacade, FgoFSMFacadeSelectSupport

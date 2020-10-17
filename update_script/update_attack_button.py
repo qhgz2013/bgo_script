@@ -5,8 +5,8 @@ import numpy as np
 
 
 def _generate_attack_button_mask() -> np.ndarray:
-    dx = int(CV_SCREENSHOT_RESOLUTION_X * (CV_ATTACK_BUTTON_X2 - CV_ATTACK_BUTTON_X1))
-    dy = int(CV_SCREENSHOT_RESOLUTION_Y * (CV_ATTACK_BUTTON_Y2 - CV_ATTACK_BUTTON_Y1))
+    dx = CV_ATTACK_BUTTON_X2 - CV_ATTACK_BUTTON_X1
+    dy = CV_ATTACK_BUTTON_Y2 - CV_ATTACK_BUTTON_Y1
     d = min(dx, dy)
     cx = dx / 2
     cy = dy / 2
@@ -20,10 +20,7 @@ def main():
     attacher = MumuAttacher()
     # MAKE SURE YOU'RE IN BATTLE
     img = attacher.get_screenshot(CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y)
-    battle_button = img[int(CV_SCREENSHOT_RESOLUTION_Y*CV_ATTACK_BUTTON_Y1):
-                        int(CV_SCREENSHOT_RESOLUTION_Y*CV_ATTACK_BUTTON_Y2),
-                        int(CV_SCREENSHOT_RESOLUTION_X*CV_ATTACK_BUTTON_X1):
-                        int(CV_SCREENSHOT_RESOLUTION_X*CV_ATTACK_BUTTON_X2), :]
+    battle_button = img[CV_ATTACK_BUTTON_Y1:CV_ATTACK_BUTTON_Y2, CV_ATTACK_BUTTON_X1:CV_ATTACK_BUTTON_X2, :]
     mask = _generate_attack_button_mask()
     battle_button = np.concatenate([battle_button, np.expand_dims(mask, 2)], 2)
     imsave('../cv_data/attack_button.png', battle_button)
