@@ -1,6 +1,6 @@
 from _logging_config import script_logger_root
 from attacher import MumuAttacher, AdbAttacher
-from fsm import FgoFSMFacade, FgoFSMFacadeSelectSupport
+from fsm import FgoFSMFacade, FgoFSMFacadeSelectSupport, FgoFSMFacadeBattleLoop
 import argparse
 import config
 
@@ -9,11 +9,14 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('attacher', help='Attacher type', choices=['adb', 'mumu'], default='mumu', type=str, nargs='?')
     parser.add_argument('--schemas', help='Script execution schemas, one of "full" (from enter quest to exit quest),'
-                                          ' or "support" (only perform support servant selection)',
-                        choices=['full', 'support'], default='full', required=False)
+                                          '"support" (only perform support servant selection), or "battle" (only '
+                                          'perform in-battle control)',
+                        choices=['full', 'support', 'battle'], default='full', required=False)
+    parser.add_argument('--verbose', help='Print verbose log (debug level) to screen', action='store_true',
+                        default=False)
     args = parser.parse_args()
     attacher_dict = {'adb': AdbAttacher, 'mumu': MumuAttacher}
-    schemas_dict = {'full': FgoFSMFacade, 'support': FgoFSMFacadeSelectSupport}
+    schemas_dict = {'full': FgoFSMFacade, 'support': FgoFSMFacadeSelectSupport, 'battle': FgoFSMFacadeBattleLoop}
     attacher_class = attacher_dict.get(args.attacher.lower(), None)
     schemas_class = schemas_dict.get(args.schemas.lower(), None)
     if attacher_class is None:

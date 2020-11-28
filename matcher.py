@@ -59,7 +59,8 @@ class SupportServantMatcher(AbstractFgoMaterialMatcher):
                     if not self.__warn_size_mismatch:
                         self.__warn_size_mismatch = True
                         logger.warning('The configuration of image size for support servant matching is different from '
-                                       'database size, performance will decrease')
+                                       'database size, performance will decrease: servant id: %d, key: %s' %
+                                       (servant_id, image_key))
                     np_image = image_process.resize(np_image, CV_SUPPORT_SERVANT_IMG_SIZE[1],
                                                     CV_SUPPORT_SERVANT_IMG_SIZE[0])
                 np_image, alpha = image_process.split_rgb_alpha(np_image)
@@ -82,11 +83,18 @@ class ServantCommandCardMatcher(AbstractFgoMaterialMatcher):
         super().__init__(sql_path)
 
     def match(self, img_arr: np.ndarray) -> int:
-        # import matplotlib.pyplot as plt
+        blur_radius = 2
         cursor = self.sqlite_connection.cursor()
         target_size = CV_COMMAND_CARD_IMG_SIZE
-        img_arr_resized, img_alpha = image_process.split_rgb_alpha(image_process.resize(img_arr, target_size[1],
-                                                                                        target_size[0]))
+        # import matplotlib.pyplot as plt
+        # plt.figure()
+        # plt.imshow(img_arr)
+        # plt.show()
+        img_arr_resized = image_process.resize(img_arr, target_size[1], target_size[0])
+        img_arr_resized, img_alpha = image_process.split_rgb_alpha(img_arr_resized)
+        # use blur to remove high frequency noise introduced by interpolation, but blurring with alpha channel will
+        # produce some weird artifacts on the edge of alpha, same ops to db images
+        img_arr_resized = image_process.gauss_blur(img_arr_resized, blur_radius)
         hsv_img = np.concatenate([image_process.rgb_to_hsv(img_arr_resized), np.expand_dims(img_alpha, 2)], 2)
         # querying servant icon database
         if self.cached_icon_meta is None:
@@ -113,12 +121,16 @@ class ServantCommandCardMatcher(AbstractFgoMaterialMatcher):
                     if not self.__warn_size_mismatch:
                         self.__warn_size_mismatch = True
                         logger.warning('The configuration of image size for command card matching is different from '
-                                       'database size, performance will decrease')
+                                       'database size, performance will decrease: servant id: %d, key: %s' %
+                                       (servant_id, image_key))
                     np_image = image_process.resize(np_image, target_size[1], target_size[0])
+                np_image = image_process.gauss_blur(np_image, blur_radius)
                 np_image, alpha = image_process.split_rgb_alpha(np_image)
                 hsv_image = image_process.rgb_to_hsv(np_image)
+                # weighted by alpha channel size
                 self.cached_icons[image_key] = np.concatenate([hsv_image, np.expand_dims(alpha, 2)], 2)
             anchor = self.cached_icons[image_key]
+            # err_map = image_process.mean_hsv_diff_err_dbg(anchor, hsv_img, 'hsv', 'hsv')
             hsv_err = image_process.mean_hsv_diff_err(anchor, hsv_img, 'hsv', 'hsv')
             if min_servant_id == 0 or hsv_err < min_err:
                 min_servant_id = servant_id
@@ -152,6 +164,9 @@ class SupportCraftEssenceMatcher(AbstractFgoMaterialMatcher):
         img_arr_resized = image_process.resize(img_arr, CV_SUPPORT_SERVANT_IMG_SIZE[1], CV_SUPPORT_SERVANT_IMG_SIZE[0])
         craft_essence_part = img_arr_resized[CV_SUPPORT_SERVANT_SPLIT_Y:-3, ...]
         # CACHE ACCESS
+        cache_key = self.image_cacher.get(craft_essence_part, None)
+        if cache_key is not None:
+            return cache_key
         if craft_essence_part in self.image_cacher:
             return self.image_cacher[craft_essence_part]
         if self.cached_icon_meta is None:

@@ -54,3 +54,50 @@ def split_image(img: np.ndarray, threshold: Any = 127) -> List[List[int]]:
                 rects.append(rect)
                 cnt += 1
     return rects
+
+
+def extend_alpha_1px(alpha: np.ndarray) -> np.ndarray:
+    """
+    Extend the edge of alpha mask by 1 pixel
+    :param alpha: original alpha mask, shape (h, w) with uint8 type
+    :return: extended alpha mask
+    """
+    if len(alpha.shape) == 3 and alpha.shape[-1] == 1:
+        alpha = np.squeeze(alpha, -1)
+    elif len(alpha.shape) != 2:
+        raise ValueError('Invalid alpha shape')
+    v = np.zeros_like(alpha, dtype='uint8')
+    for y in range(alpha.shape[0]):
+        for x in range(alpha.shape[1]):
+            if alpha[y, x] > 127:
+                # broadcast
+                if y > 0:
+                    v[y-1, x] |= 1
+                if y < alpha.shape[0] - 1:
+                    v[y+1, x] |= 2
+                if x > 0:
+                    v[y, x-1] |= 4
+                if x < alpha.shape[1] - 1:
+                    v[y, x+1] |= 8
+    alpha_new = np.empty_like(alpha, dtype=np.float)
+    for y in range(alpha.shape[0]):
+        for x in range(alpha.shape[1]):
+            c = 0
+            t = 0
+            if v[y, x] & 1:
+                c += 1
+                t += alpha[y+1, x]
+            if v[y, x] & 2:
+                c += 1
+                t += alpha[y-1, x]
+            if v[y, x] & 4:
+                c += 1
+                t += alpha[y, x+1]
+            if v[y, x] & 8:
+                c += 1
+                t += alpha[y, x-1]
+            if c > 0:
+                alpha_new[y, x] = t / c
+            else:
+                alpha_new[y, x] = 0
+    return np.round(np.maximum(alpha_new, alpha)).astype('uint8')

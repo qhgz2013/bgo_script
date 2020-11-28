@@ -52,6 +52,7 @@ def download_image_if_not_exists(sess, sql_cursor, image_key, image_text, url, *
 
 
 def retrieve_servant_icons(sql_conn):
+    scale_down_ptn = re.compile(r'/scale-to-(width|height)-down/\d+')
     cursor = sql_conn.cursor()
     # noinspection SqlWithoutWhere
     cursor.execute("delete from servant_icon")
@@ -109,6 +110,7 @@ def retrieve_servant_icons(sql_conn):
                 img_src = img.attrs['src']
                 img_key = img.attrs['data-image-name']
                 text_lower = text.lower()
+                img_src = re.sub(scale_down_ptn, '', img_src)
                 # skips portrait and without-frame images
                 if 'command card' in text_lower:
                     download_image_if_not_exists(sess, cursor, img_key, text, img_src)

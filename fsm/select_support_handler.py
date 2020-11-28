@@ -9,10 +9,34 @@ import image_process
 import numpy as np
 from time import sleep, time
 from image_process import mean_gray_diff_err
-from battle_control import ScriptConfiguration, SupportServantConfiguration
+from battle_control import ScriptConfiguration, ServantConfiguration
 from .fgo_state import FgoState
 
 logger = logging.getLogger('bgo_script.fsm')
+
+
+# NOT implemented: NP level detection
+class SupportServant(ServantConfiguration):
+    def __init__(self, svt_id: int, craft_essence_id: int, craft_essence_max_break: bool = False,
+                 is_friend: bool = False, skill_level: Optional[List[Optional[int]]] = None, np_lv: int = 0):
+        super().__init__(svt_id, craft_essence_id)
+        self.craft_essence_max_break = craft_essence_max_break
+        self.is_friend = is_friend
+        self.skill_level = skill_level
+        self.np_lv = np_lv
+
+    def __repr__(self):
+        s = '<SupportServant for svt. %d and c.e. %d' % (self.svt_id, self.craft_essence_id)
+        attr = []
+        if self.craft_essence_max_break:
+            attr.append('max break')
+        if self.is_friend:
+            attr.append('friend')
+        if self.skill_level:
+            attr.append('skill: %s' % str(self.skill_level))
+        attr_str = ', '.join(attr)
+        s += (' (%s)' % attr_str) if len(attr_str) > 0 else ''
+        return s + '>'
 
 
 class SelectSupportHandler(ConfigurableStateHandler):
@@ -43,9 +67,9 @@ class SelectSupportHandler(ConfigurableStateHandler):
                 cur_svt_id = svt_data[i].svt_id
                 cur_ce_id = svt_data[i].craft_essence_id
                 cur_ce_max_break = svt_data[i].craft_essence_max_break
-                cur_ce_friend = svt_data[i].friend_only
+                cur_ce_friend = svt_data[i].is_friend
                 if (self._support_svt.svt_id == 0 or self._support_svt.svt_id == cur_svt_id) and \
-                        (self._support_svt.craft_essence_id == 0 or self._support_svt.craft_essence_id == cur_ce_id) \
+                        (0 in self._support_svt.craft_essence_id or cur_ce_id in self._support_svt.craft_essence_id) \
                         and (not self._support_svt.craft_essence_max_break or cur_ce_max_break) and \
                         (not self._support_svt.friend_only or cur_ce_friend):
                     # servant matched
@@ -150,8 +174,7 @@ class SelectSupportHandler(ConfigurableStateHandler):
         assert WaitFufuStateHandler(self.attacher, FgoState.STATE_BEGIN).run_and_transit_state() == FgoState.STATE_BEGIN
         sleep(0.5)
 
-    def match_support_servant(self, img: np.ndarray, range_list: List[Tuple[int, int]]) \
-            -> List[SupportServantConfiguration]:
+    def match_support_servant(self, img: np.ndarray, range_list: List[Tuple[int, int]]) -> List[SupportServant]:
         # match servant
         def _servant_empty_check(img1, img2):
             v = mean_gray_diff_err(image_process.resize(img1, img2.shape[1], img2.shape[0]), img2)
@@ -159,7 +182,7 @@ class SelectSupportHandler(ConfigurableStateHandler):
             return v < 10
         svt_id, t = self._wrap_call_matcher(self.servant_matcher.match, _servant_empty_check, img,
                                             self._support_empty_img, range_list)
-        logger.info('Detected support servant ID: %s (used %f sec(s))' % (str(svt_id), t))
+        logger.debug('Detected support servant ID: %s (used %f sec(s))' % (str(svt_id), t))
 
         # match craft essence
         def _craft_essence_empty_check(img1, img2):
@@ -171,8 +194,8 @@ class SelectSupportHandler(ConfigurableStateHandler):
             return v < 10
         ce_id, t = self._wrap_call_matcher(self.craft_essence_matcher.match, _craft_essence_empty_check, img,
                                            self._support_craft_essence_img, range_list)
-        logger.info('Detected support craft essence ID: %s (used %f sec(s))' % (str(ce_id), t))
-        ret_list = [SupportServantConfiguration(x, y) for x, y in zip(svt_id, ce_id)]
+        logger.debug('Detected support craft essence ID: %s (used %f sec(s))' % (str(ce_id), t))
+        ret_list = [SupportServant(x, y) for x, y in zip(svt_id, ce_id)]
         for i, (y1, y2) in enumerate(range_list):
             # detect craft essence max break state
             if ce_id[i] == 0:
@@ -192,7 +215,7 @@ class SelectSupportHandler(ConfigurableStateHandler):
 
             # detect friend state
             if svt_id[i] == 0:
-                ret_list[i].friend_only = False  # use friend_only as is_friend indicator, TODO: use separate class
+                ret_list[i].is_friend = False
             else:
                 friend_img = img[y1+CV_SUPPORT_FRIEND_DETECT_Y1:y1+CV_SUPPORT_FRIEND_DETECT_Y2,
                                  CV_SUPPORT_FRIEND_DETECT_X1:CV_SUPPORT_FRIEND_DETECT_X2, :]
@@ -200,9 +223,9 @@ class SelectSupportHandler(ConfigurableStateHandler):
                 friend_part_binary = np.greater_equal(np.mean(friend_img[..., :2], 2),
                                                       CV_SUPPORT_FRIEND_DISCRETE_THRESHOLD)
                 is_friend = np.mean(friend_part_binary) > CV_SUPPORT_FRIEND_DETECT_THRESHOLD
-                ret_list[i].friend_only = is_friend
+                ret_list[i].is_friend = is_friend
         # TODO: implement skill level detection here (replacing [0, 0, 0])
-        logger.debug('Detected support servant info: %s' % str(ret_list))
+        logger.info('Detected support servant info: %s' % str(ret_list))
         return ret_list
 
     @staticmethod

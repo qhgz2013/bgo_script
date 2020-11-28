@@ -53,14 +53,88 @@ class DispatchedCommandCard(CommandCard):
 
 class BattleController:
     def __init__(self, battle_executor: 'BattleSequenceExecutor'):
+        """
+        DO NOT OVERLOAD __INIT__ METHOD OF BATTLE CONTROLLER! Use __initialize__ instead.
+        :param battle_executor: executor instance
+        """
         self.executor = battle_executor
+
+    def __initialize__(self):
+        """
+        Order: __init__ -> __initialize__ -> turn(s) -> __finalize__, battle related flags or control variables can be
+        set here
+
+        :return: none
+        """
+        pass
+
+    def __turn_initialize__(self, current_battle: int, max_battle: int, turn: int):
+        """
+        For each turn: __turn_initialize__ -> __call__ -> __turn_finalize__, turn-related flags or variables can be set
+        here
+
+        :param current_battle: current battle
+        :param max_battle: max battle
+        :param turn: current turn (turn will be reset to 1 if battle changes, accumulation is meaningless)
+        :return: none
+        """
+        pass
+
+    def __turn_finalize__(self, current_battle: int, max_battle: int, turn: int):
+        """
+        For each turn: __turn_initialize__ -> __call__ -> __turn_finalize__, post-turn actions is defined here
+
+        :param current_battle: current battle
+        :param max_battle: max battle
+        :param turn: current turn (turn will be reset to 1 if battle changes, accumulation is meaningless)
+        :return: none
+        """
+        pass
+
+    def __finalize__(self):
+        """
+        Order: __init__ -> __initialize__ -> turn(s) -> __finalize__, post-battle related codes are here
+
+        :return: none
+        """
+        pass
 
     def __call__(self, current_battle: int, max_battle: int, turn: int,
                  dispatched_cards: Optional[Sequence[DispatchedCommandCard]]):
+        """
+        For each turn: __turn_initialize__ -> __call__ -> __turn_finalize__, post-turn actions is defined here
+
+        :param current_battle: current battle
+        :param max_battle: max battle
+        :param turn: current turn (turn will be reset to 1 if battle changes, accumulation is meaningless)
+        :param dispatched_cards: list of dispatched command cards if enabled command card detection, or none otherwise
+        :return: none
+        """
         raise NotImplementedError
 
+    # noinspection PyMethodMayBeStatic,PyUnusedLocal
+    def __require_battle_card_detection__(self, current_battle: int, max_battle: int, turn: int) -> bool:
+        """
+        This function will be called right after __turn_initialize__ to determine whether a battle card detection
+        should be performed in current turn.
+
+        NOTE FOR COMPATIBILITY: This functionality is disabled when "detect_command_card" field in global script
+        configuration is set (no matter true or false), to enable it, please set detect_command_card=None.
+
+        :param current_battle: current battle
+        :param max_battle: max battle
+        :param turn: current turn (turn will be reset to 1 if battle changes, accumulation is meaningless)
+        :return: a flag telling whether the battle card should be detected, which is set to false by default
+        """
+        return False
+
     def __getattr__(self, item):
-        return getattr(self.executor, item)
+        # forwarding actions
+        assert isinstance(item, str), 'Invalid call for __getattr__ in BattleController'
+        if not item.startswith('_'):
+            return getattr(self.executor, item)
+        else:
+            return object.__getattribute__(self, item)
 
 
 # 配队时使用的从者设置
@@ -81,15 +155,19 @@ class ServantConfiguration:
 class SupportServantConfiguration(ServantConfiguration):
     __slots__ = ['svt_id', 'craft_essence_id', 'craft_essence_max_break', 'friend_only', 'skill_requirement']
 
-    def __init__(self, svt_id: int, craft_essence_id: int, craft_essence_max_break: bool = False,
+    def __init__(self, svt_id: int, craft_essence_id: Union[int, Sequence[int]], craft_essence_max_break: bool = False,
                  friend_only: bool = False, skill_requirement: Optional[Sequence[int]] = None):
         super().__init__(svt_id, craft_essence_id)
+        if isinstance(self.craft_essence_id, int):
+            self.craft_essence_id = (self.craft_essence_id,)
+        else:
+            self.craft_essence_id = tuple(self.craft_essence_id)
         self.craft_essence_max_break = craft_essence_max_break
         self.friend_only = friend_only
         self.skill_requirement = skill_requirement
 
     def __repr__(self):
-        s = '<SupportServantConfiguration for svt. %d and c.e. %d' % (self.svt_id, self.craft_essence_id)
+        s = '<SupportServantConfiguration for svt. %d and c.e. %s' % (self.svt_id, str(self.craft_essence_id))
         if self.craft_essence_max_break:
             s += ' (max break)'
         if self.friend_only:

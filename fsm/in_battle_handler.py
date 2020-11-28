@@ -1,10 +1,9 @@
-from .state_handler import ConfigurableStateHandler, StateHandler, WaitFufuStateHandler
+from .state_handler import ConfigurableStateHandler, WaitFufuStateHandler
 from attacher import AbstractAttacher
 from typing import *
 from cv_positioning import *
-from click_positioning import *
 from .fgo_state import FgoState
-from time import time, sleep
+from time import sleep
 import image_process
 import numpy as np
 import logging
@@ -52,6 +51,7 @@ class WaitAttackOrExitQuestHandler(ConfigurableStateHandler):
             img = self.attacher.get_screenshot(CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y)[..., :3]
             gray = np.mean(img, -1)
             blank_val = np.mean(np.less(gray, CV_IN_BATTLE_BLANK_SCREEN_THRESHOLD))
+            logger.debug('DEBUG VALUE: blank ratio: %f' % blank_val)
             # skip blank screen frame
             if blank_val >= CV_IN_BATTLE_BLANK_SCREEN_RATIO:
                 continue
@@ -102,14 +102,18 @@ class BattleLoopAttackHandler(ConfigurableStateHandler):
 
     def _get_current_battle(self, img: np.ndarray) -> Tuple[int, int]:
         img = img[CV_BATTLE_DETECTION_Y1:CV_BATTLE_DETECTION_Y2, CV_BATTLE_DETECTION_X1:CV_BATTLE_DETECTION_X2, :]
-        s = image_process.rgb_to_hsv(img)[..., 2] > 128  # THRESHOLD
+        s = np.greater(image_process.rgb_to_hsv(img)[..., 2], CV_BATTLE_DIGIT_THRESHOLD)
         s = s.astype('uint8') * 255
         # split digits
         rects = image_process.split_image(s)
         # re-order based on x position
-        cx = [(x[1] + x[2]) / 2 for x in rects]
+        cx = [(x[1] + x[3]) / 2 for x in rects]
         rects = [x[1] for x in sorted(zip(cx, rects), key=lambda t: t[0])
                  if x[1][-1] > CV_BATTLE_FILTER_PIXEL_THRESHOLD]
+        logger.debug('Digit rects: %s' % str(rects))
+        if len(rects) != 3:
+            logger.warning('Detected %d rects, it is incorrect' % len(rects))
+        # TODO: add rough shape check
         assert len(rects) == 3, 'Current implementation must meet that # of battles less than 10,' \
                                 ' or maybe recognition corrupted'
         return self._digit_recognize(self._normalize_image(s, rects[0], [20, 10])), \
@@ -138,59 +142,12 @@ class BattleLoopAttackHandler(ConfigurableStateHandler):
         # transfer execution to controller
         var['BATTLE_LOOP_NEXT_STATE'] = FgoState.STATE_BATTLE_LOOP_ATK
         var['SGN_BATTLE_STATE_CHANGED'].set()
+        # BattleController will be executed here!
+        # once SGN_BATTLE_STATE_CHANGED is set, BattleSequenceExecutor will call corresponding BattleController to
+        # perform user-defined actions (using skills, attacks, NPs, etc), until SGN_WAIT_STATE_TRANSITION is set by the
+        # executor to transfer control back to the FSM.
         sgn = var['SGN_WAIT_STATE_TRANSITION']
         logger.debug('Wait SGN_WAIT_STATE_TRANSITION')
         sgn.wait()
         sgn.clear()
         return FgoState.STATE_BATTLE_LOOP_WAIT_ATK_OR_EXIT
-
-
-# class BattleLoopHandler(ConfigurableStateHandler):
-#     def __init__(self, attacher: AbstractAttacher, forward_state: int, cfg: ScriptConfiguration):
-#         super().__init__(cfg)
-#         self.attacher = attacher
-#         self.forward_state = forward_state
-#
-#     def run_and_transit_state(self) -> int:
-#         turn = 1
-#         last_battle = None
-#         while True:
-#             if not self._wait_can_attack_or_exit_quest():
-#                 return self.forward_state
-#             sleep(0.5)
-#             img = self.attacher.get_screenshot(CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y)[..., :3]
-#             battle, max_battle = self._get_current_battle(img)
-#             if last_battle is None or last_battle != battle:
-#                 turn = 1  # Reset turn accumulator if battle changed
-#                 last_battle = battle
-#             logger.info('Detected quest info: Battle: %d / %d, Turn: %d' % (battle, max_battle, turn))
-#             # do callback
-#             try:
-#                 self._delegated_executor(battle, max_battle, turn)
-#             except Exception as ex:
-#                 logger.critical('Error while calling callback function: %s' % str(ex), exc_info=ex)
-#                 exit(1)
-#             sleep(1)
-#             turn += 1
-#
-#     def _apply_click_sequence(self, click_sequence):
-#         for t, click_pos in click_sequence:
-#             if t == -1:
-#                 if not self._wait_can_attack_or_exit_quest():
-#                     logger.warning('Unexpected exit quest state detected! Exit battle loop')
-#                     break
-#             elif t > 0:
-#                 sleep(t)
-#             if click_pos is not None:
-#                 x, y = click_pos
-#                 self.attacher.send_click(x, y)
-#
-#     @staticmethod
-#     def _save_img(img, fname):
-#         if len(img.shape) == 2:
-#             new_img = np.zeros([img.shape[0], img.shape[1], 3], 'uint8')
-#             for i in range(3):
-#                 new_img[..., i] = img
-#             img = new_img
-#         import skimage.io
-#         skimage.io.imsave(fname, img)

@@ -1,4 +1,4 @@
-__all__ = ['split_gray_alpha', 'split_rgb_alpha', 'mean_gray_diff_err', 'mean_hsv_diff_err']
+__all__ = ['split_gray_alpha', 'split_rgb_alpha', 'mean_gray_diff_err', 'mean_hsv_diff_err', 'mean_hsv_diff_err_dbg']
 
 import numpy as np
 from typing import *
@@ -92,8 +92,8 @@ def mean_gray_diff_err(a: np.ndarray, b: np.ndarray, fast_compute: bool = True, 
     return gray_diff_err
 
 
-def mean_hsv_diff_err(a: np.ndarray, b: np.ndarray, fmt_a: str = 'rgb', fmt_b: str = 'rgb', v_mode: str = 'diff',
-                      alpha_mode: str = 'min') -> float:
+def mean_hsv_diff_err_dbg(a: np.ndarray, b: np.ndarray, fmt_a: str = 'rgb', fmt_b: str = 'rgb', v_mode: str = 'diff',
+                          alpha_mode: str = 'min') -> np.ndarray:
     """
     Compute the difference between two image using HSV color space with new difference measuring method
 
@@ -105,7 +105,7 @@ def mean_hsv_diff_err(a: np.ndarray, b: np.ndarray, fmt_a: str = 'rgb', fmt_b: s
         difference), "min" (compute the minimum brightness), "max", or "avg"
     :param alpha_mode: One of the "min", "max", or "avg", indicating using the minimum / maximum / mean alpha value
         from two images
-    :return: HSV difference between two images
+    :return: pixel-wise error between two images, shapes (h, w)
     """
     _check_shape_equality(a, b)
     fmt_a, fmt_b = fmt_a.lower(), fmt_b.lower()
@@ -129,5 +129,23 @@ def mean_hsv_diff_err(a: np.ndarray, b: np.ndarray, fmt_a: str = 'rgb', fmt_b: s
     hue_diff = np.minimum(hue_diff, 255 - hue_diff)
     # value (brightness)
     val_diff = value_func(hsv_a[..., 2].astype(np.float), hsv_b[..., 2]) / 255.0
-    err = float(np.mean(hue_diff * val_diff * alpha_mask))
+    return hue_diff * val_diff * alpha_mask
+
+
+def mean_hsv_diff_err(a: np.ndarray, b: np.ndarray, fmt_a: str = 'rgb', fmt_b: str = 'rgb', v_mode: str = 'diff',
+                      alpha_mode: str = 'min') -> float:
+    """
+    Compute the difference between two image using HSV color space with new difference measuring method
+
+    :param a: image array, shapes (h, w, c) or (h, w), NOTE: gray-scale image with shape (h, w) may perform bad here
+    :param b: image array, shapes (h, w, c) or (h, w)
+    :param fmt_a: input image format for param a, one of "rgb", "hsv"
+    :param fmt_b: input image format for param b, one of "rgb", "hsv"
+    :param v_mode: the mode for handling value (brightness) of two image, one of "diff" (compute the absolute
+        difference), "min" (compute the minimum brightness), "max", or "avg"
+    :param alpha_mode: One of the "min", "max", or "avg", indicating using the minimum / maximum / mean alpha value
+        from two images
+    :return: HSV difference between two images
+    """
+    err = float(np.mean(mean_hsv_diff_err_dbg(a, b, fmt_a, fmt_b, v_mode, alpha_mode)))
     return err
