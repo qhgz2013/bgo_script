@@ -1,5 +1,5 @@
 from battle_control import ScriptConfiguration, EatAppleType, BattleController, DispatchedCommandCard, \
-    TeamConfiguration, ServantConfiguration, SupportServantConfiguration
+    TeamConfiguration, ServantConfiguration, SupportServantConfiguration, SupportCraftEssenceConfiguration
 from typing import *
 
 
@@ -87,38 +87,51 @@ class NailGrabberController(BattleController):
             self.use_clothes_skill(0, 219).noble_phantasm(120).noble_phantasm(219).attack(0)
 
 
+class TmpController(BattleController):
+    def __call__(self, battle: int, max_battle: int, turn: int, cards: Optional[Sequence[DispatchedCommandCard]]):
+        if battle == 1:
+            self.use_skill(215, 0, 29).use_support_skill(0, 29).use_clothes_skill(1, 29)
+            self.noble_phantasm(29).attack(0).attack(1)
+        elif battle == 2:
+            self.use_skill(215, 2, 29)
+            self.noble_phantasm(29).attack(0).attack(1)
+        elif battle == 3:
+            self.use_support_skill(2, 29).use_support_skill(1).use_skill(215, 1)
+            self.noble_phantasm(29).attack(0).attack(1)
+
+
 shell_grabber_team = TeamConfiguration([
-    ServantConfiguration(svt_id=215, craft_essence_id=0),
-    ServantConfiguration(svt_id=16, craft_essence_id=0),
-    SupportServantConfiguration(svt_id=215, craft_essence_id=910, craft_essence_max_break=True),
-    ServantConfiguration(svt_id=14, craft_essence_id=0),
-    ServantConfiguration(svt_id=106, craft_essence_id=0),
-    ServantConfiguration(svt_id=59, craft_essence_id=0)
+    ServantConfiguration(svt_id=215),
+    ServantConfiguration(svt_id=16),
+    SupportServantConfiguration(svt_id=215, craft_essence_cfg=SupportCraftEssenceConfiguration(910, max_break=True)),
+    ServantConfiguration(svt_id=14),
+    ServantConfiguration(svt_id=106),
+    ServantConfiguration(svt_id=59)
 ])
 
 nail_grabber_team = TeamConfiguration([
-    ServantConfiguration(svt_id=219, craft_essence_id=0),
-    ServantConfiguration(svt_id=120, craft_essence_id=0),
-    ServantConfiguration(svt_id=16, craft_essence_id=0),
-    SupportServantConfiguration(svt_id=37, craft_essence_id=910, craft_essence_max_break=True),
-    ServantConfiguration(svt_id=163, craft_essence_id=0),
-    ServantConfiguration(svt_id=106, craft_essence_id=0)
+    ServantConfiguration(svt_id=219),
+    ServantConfiguration(svt_id=120),
+    ServantConfiguration(svt_id=16),
+    SupportServantConfiguration(svt_id=37, craft_essence_cfg=SupportCraftEssenceConfiguration(910, max_break=True)),
+    ServantConfiguration(svt_id=163),
+    ServantConfiguration(svt_id=106)
 ])
 
 tmp = TeamConfiguration([
-    ServantConfiguration(svt_id=215, craft_essence_id=0),
-    ServantConfiguration(svt_id=16, craft_essence_id=0),
-    SupportServantConfiguration(svt_id=215, craft_essence_id=1112, craft_essence_max_break=True),
-    ServantConfiguration(svt_id=14, craft_essence_id=0),
-    ServantConfiguration(svt_id=106, craft_essence_id=0),
-    ServantConfiguration(svt_id=59, craft_essence_id=0)
+    ServantConfiguration(svt_id=215),
+    ServantConfiguration(svt_id=29),
+    SupportServantConfiguration(svt_id=215, craft_essence_cfg=SupportCraftEssenceConfiguration(1124, max_break=True),
+                                skill_requirement=[10, 10, 10]),
+    ServantConfiguration(svt_id=14),
+    ServantConfiguration(svt_id=106),
+    ServantConfiguration(svt_id=59)
 ])
 
 DEFAULT_CONFIG = ScriptConfiguration(
     eat_apple_type=EatAppleType.DontEatMyApple,
-    battle_controller=ShellGrabberController,
-    team_config=shell_grabber_team,
+    battle_controller=TmpController,
+    team_config=tmp,
     max_ap=142,
-    detect_command_card=False,
     enable_continuous_battle_feature=True
 )

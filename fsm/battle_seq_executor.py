@@ -26,6 +26,7 @@ def _init_battle_vars(d: Dict[str, Any]):
     d['CURRENT_BATTLE'] = 0
     d['MAX_BATTLE'] = 0
     d['TURN'] = 0
+    d['DELEGATE_THREAD_EXCEPTION'] = None
 
 
 class BattleSequenceExecutor:
@@ -80,15 +81,15 @@ class BattleSequenceExecutor:
             type_exc = type(ex)
             logger.critical('Unexpected exception raised in controller thread (type: %s.%s): %s' %
                             (type_exc.__module__, type_exc.__qualname__, str(ex)))
-            import sys
-            sys.exit(1)
+            var['DELEGATE_THREAD_EXCEPTION'] = ex
         finally:
             self._controller.__finalize__()
+            var['SGN_WAIT_STATE_TRANSITION'].set()
 
     def _emit_new_turn(self, current_battle: int, max_battle: int, turn: int):
         self._reset_turn_state()
         self._controller.__turn_initialize__(current_battle, max_battle, turn)
-        self.refresh_command_card_list()
+        self._refresh_command_card_list()
         self._controller.__call__(current_battle, max_battle, turn, self._dispatched_cards)
         self._controller.__turn_finalize__(current_battle, max_battle, turn)
 
@@ -244,21 +245,36 @@ class BattleSequenceExecutor:
         self._submit_click_event(TIME_WAIT_ATTACK_BUTTON, None)
         return self
 
-    def refresh_command_card_list(self):
+    def _refresh_command_card_list(self, force: bool = False):
         # backward compatibility
-        if self.cfg.detect_command_card is None:
-            should_detect_command_card = self._controller.__require_battle_card_detection__()
-        if self.detect_cmd_cards:
+        var = self.cfg.DO_NOT_MODIFY_BATTLE_VARS
+        if force:
+            should_detect_command_card = True
+        elif self.cfg.detect_command_card is None:
+            should_detect_command_card = self._controller.__require_battle_card_detection__(
+                var['CURRENT_BATTLE'], var['MAX_BATTLE'], var['TURN'])
+        else:
+            should_detect_command_card = self.cfg.detect_command_card
+        if should_detect_command_card:
             self._enter_attack_mode()
             sleep(0.5)
             img = self.attacher.get_screenshot(CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y)
-            self._dispatched_cards = CommandCardDetector.detect_command_cards(img[..., :3])
+            new_cards = CommandCardDetector.detect_command_cards(img[..., :3])
+            if self._dispatched_cards is None:
+                self._dispatched_cards = new_cards
+            else:
+                self._dispatched_cards.clear()
+                self._dispatched_cards.extend(new_cards)
         else:
             self._dispatched_cards = None
 
-    # noinspection PyMethodMayBeStatic, PyUnusedLocal
+    def refresh_command_card_list(self):
+        self._refresh_command_card_list(force=True)
+
+    # noinspection PyMethodMayBeStatic, PyUnusedLocal,PyUnreachableCode
     def select_remain_command_card(self, priority: Optional[Sequence[CommandCard]] = None,
                                    avoid_chain_or_extra_atk: bool = True):
+        raise NotImplementedError
         priority = priority or []
         if avoid_chain_or_extra_atk:
             pass

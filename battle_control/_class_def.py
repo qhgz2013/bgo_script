@@ -2,6 +2,9 @@ from enum import IntEnum
 from typing import *
 if TYPE_CHECKING:
     from fsm.battle_seq_executor import BattleSequenceExecutor
+__all__ = ['CommandCard', 'CommandCardType', 'EatAppleType', 'DispatchedCommandCard', 'BattleController',
+           'ServantConfiguration', 'SupportCraftEssenceConfiguration', 'SupportServantConfiguration',
+           'TeamConfiguration']
 
 
 # 指令卡类型
@@ -140,36 +143,43 @@ class BattleController:
 # 配队时使用的从者设置
 # 注：自动配队未实现
 class ServantConfiguration:
-    __slots__ = ['svt_id', 'craft_essence_id']
+    __slots__ = ['svt_id']
 
-    def __init__(self, svt_id: int, craft_essence_id: int):
+    def __init__(self, svt_id: int):
         self.svt_id = svt_id
-        self.craft_essence_id = craft_essence_id
 
     def __repr__(self):
-        return '<ServantConfiguration for svt. %d and c.e. %d>' % (self.svt_id, self.craft_essence_id)
+        return f'<ServantConfiguration svt: {self.svt_id}>'
+
+
+class SupportCraftEssenceConfiguration:
+    __slots__ = ['id', 'max_break']
+
+    def __init__(self, id_: int, max_break: bool = False):
+        self.id = id_
+        self.max_break = max_break
+
+    def __repr__(self):
+        return f'<SupportCraftEssenceConfiguration id: {self.id}, max_break: {self.max_break}'
 
 
 # 助战从者设置
-# 注：技能等级检测未实现
 class SupportServantConfiguration(ServantConfiguration):
-    __slots__ = ['svt_id', 'craft_essence_id', 'craft_essence_max_break', 'friend_only', 'skill_requirement']
+    __slots__ = ['svt_id', 'craft_essence_cfg', 'friend_only', 'skill_requirement']
 
-    def __init__(self, svt_id: int, craft_essence_id: Union[int, Sequence[int]], craft_essence_max_break: bool = False,
-                 friend_only: bool = False, skill_requirement: Optional[Sequence[int]] = None):
-        super().__init__(svt_id, craft_essence_id)
-        if isinstance(self.craft_essence_id, int):
-            self.craft_essence_id = (self.craft_essence_id,)
-        else:
-            self.craft_essence_id = tuple(self.craft_essence_id)
-        self.craft_essence_max_break = craft_essence_max_break
+    def __init__(self, svt_id: int, craft_essence_cfg: Union[SupportCraftEssenceConfiguration,
+                                                             Sequence[SupportCraftEssenceConfiguration]],
+                 craft_essence_max_break: bool = False, friend_only: bool = False,
+                 skill_requirement: Optional[Sequence[int]] = None):
+        super().__init__(svt_id)
+        self.craft_essence_cfg = craft_essence_cfg
+        if isinstance(self.craft_essence_cfg, SupportCraftEssenceConfiguration):
+            self.craft_essence_cfg = [self.craft_essence_cfg]
         self.friend_only = friend_only
         self.skill_requirement = skill_requirement
 
     def __repr__(self):
-        s = '<SupportServantConfiguration for svt. %d and c.e. %s' % (self.svt_id, str(self.craft_essence_id))
-        if self.craft_essence_max_break:
-            s += ' (max break)'
+        s = f'<SupportServantConfiguration svt: {self.svt_id} and {len(self.craft_essence_cfg)} c.e. config(s)'
         if self.friend_only:
             s += ' (friend only)'
         if self.skill_requirement:

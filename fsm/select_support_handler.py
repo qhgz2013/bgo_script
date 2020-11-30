@@ -11,6 +11,8 @@ from time import sleep, time
 from image_process import mean_gray_diff_err
 from battle_control import ScriptConfiguration, ServantConfiguration
 from .fgo_state import FgoState
+from util import DigitRecognizer
+
 
 logger = logging.getLogger('bgo_script.fsm')
 
@@ -19,14 +21,15 @@ logger = logging.getLogger('bgo_script.fsm')
 class SupportServant(ServantConfiguration):
     def __init__(self, svt_id: int, craft_essence_id: int, craft_essence_max_break: bool = False,
                  is_friend: bool = False, skill_level: Optional[List[Optional[int]]] = None, np_lv: int = 0):
-        super().__init__(svt_id, craft_essence_id)
+        super().__init__(svt_id)
+        self.craft_essence_id = craft_essence_id
         self.craft_essence_max_break = craft_essence_max_break
         self.is_friend = is_friend
         self.skill_level = skill_level
         self.np_lv = np_lv
 
     def __repr__(self):
-        s = '<SupportServant for svt. %d and c.e. %d' % (self.svt_id, self.craft_essence_id)
+        s = '<SupportServant for svt: %d and craft essence: %d' % (self.svt_id, self.craft_essence_id)
         attr = []
         if self.craft_essence_max_break:
             attr.append('max break')
@@ -42,6 +45,7 @@ class SupportServant(ServantConfiguration):
 class SelectSupportHandler(ConfigurableStateHandler):
     _support_empty_img = image_process.imread(CV_SUPPORT_EMPTY_FILE)
     _support_craft_essence_img = image_process.imread(CV_SUPPORT_CRAFT_ESSENCE_FILE)
+    _support_craft_essence_img_resized = None  # assigned in run-time
     _support_max_break_img = image_process.imread(CV_SUPPORT_CRAFT_ESSENCE_MAX_BREAK_FILE)
     _scroll_down_y_mapper = {MumuAttacher: SUPPORT_SCROLLDOWN_Y_MUMU, AdbAttacher: SUPPORT_SCROLLDOWN_Y_ADB}
 
@@ -55,6 +59,7 @@ class SelectSupportHandler(ConfigurableStateHandler):
         self._support_svt = self._cfg.team_config.support_servant
         # noinspection PyTypeChecker
         self._scroll_down_y = self._scroll_down_y_mapper[type(attacher)]
+        self._digit_recognizer = DigitRecognizer(CV_SUPPORT_SKILL_DIGIT_DIR)
 
     def run_and_transit_state(self) -> FgoState:
         suc = False
@@ -64,14 +69,7 @@ class SelectSupportHandler(ConfigurableStateHandler):
             support_range = self._split_support_image(img)
             svt_data = self.match_support_servant(img, support_range)
             for i in range(len(svt_data)):
-                cur_svt_id = svt_data[i].svt_id
-                cur_ce_id = svt_data[i].craft_essence_id
-                cur_ce_max_break = svt_data[i].craft_essence_max_break
-                cur_ce_friend = svt_data[i].is_friend
-                if (self._support_svt.svt_id == 0 or self._support_svt.svt_id == cur_svt_id) and \
-                        (0 in self._support_svt.craft_essence_id or cur_ce_id in self._support_svt.craft_essence_id) \
-                        and (not self._support_svt.craft_essence_max_break or cur_ce_max_break) and \
-                        (not self._support_svt.friend_only or cur_ce_friend):
+                if self._check_config(svt_data[i]):
                     # servant matched
                     logger.info('Found required support')
                     self.attacher.send_click(0.5, (support_range[i][0] + support_range[i][1]) /
@@ -88,6 +86,36 @@ class SelectSupportHandler(ConfigurableStateHandler):
                 self.refresh_support()
         sleep(1)
         return self.forward_state
+
+    def _check_config(self, detected_svt: SupportServant):
+        required_svt = self._support_svt
+        if required_svt is None:
+            raise ValueError('Support servant is not configured in current team configuration')
+        # servant match
+        if required_svt.svt_id != 0 and self._support_svt.svt_id != detected_svt.svt_id:
+            return False
+        # friend match
+        if required_svt.friend_only and (not detected_svt.is_friend):
+            return False
+        # skill level match
+        if required_svt.skill_requirement is not None:
+            required_skill = required_svt.skill_requirement
+            detected_skill = detected_svt.skill_level
+            for i in range(3):
+                if required_skill[i] is None:
+                    continue
+                if detected_skill[i] is None or detected_skill[i] < required_skill[i]:
+                    return False
+        # multiple craft essence configuration support
+        for craft_essence_cfg in required_svt.craft_essence_cfg:
+            # if one of the config is satisfied, then return true
+            craft_essence_id_matched = \
+                craft_essence_cfg.id == 0 or craft_essence_cfg.id == detected_svt.craft_essence_id
+            craft_essence_max_break_matched = (not craft_essence_cfg.max_break) or detected_svt.craft_essence_max_break
+            craft_essence_matched = craft_essence_id_matched and craft_essence_max_break_matched
+            if craft_essence_matched:
+                return True
+        return False
 
     def _action_scroll_down(self):
         logger.info('scrolling down')
@@ -192,6 +220,7 @@ class SelectSupportHandler(ConfigurableStateHandler):
             v = mean_gray_diff_err(img1, img2)
             logger.debug('DEBUG value: empty support craft essence check: mean_gray_diff_err = %f' % v)
             return v < 10
+        # todo fix bug when empty servant and non-empty craft essence
         ce_id, t = self._wrap_call_matcher(self.craft_essence_matcher.match, _craft_essence_empty_check, img,
                                            self._support_craft_essence_img, range_list)
         logger.debug('Detected support craft essence ID: %s (used %f sec(s))' % (str(ce_id), t))
@@ -204,27 +233,73 @@ class SelectSupportHandler(ConfigurableStateHandler):
                 icon = img[y1:y2, CV_SUPPORT_SERVANT_X1:CV_SUPPORT_SERVANT_X2, :]
                 icon = icon[CV_SUPPORT_CRAFT_ESSENCE_MAX_BREAK_Y1:CV_SUPPORT_CRAFT_ESSENCE_MAX_BREAK_Y2,
                             CV_SUPPORT_CRAFT_ESSENCE_MAX_BREAK_X1:CV_SUPPORT_CRAFT_ESSENCE_MAX_BREAK_X2, :]
-                # icon = image_process.resize(icon, self._support_max_break_img.shape[1],
-                #                             self._support_max_break_img.shape[0])
-                anchor = image_process.resize(self._support_max_break_img, icon.shape[1], icon.shape[0])
+                if self._support_craft_essence_img_resized is None:
+                    # reduce unnecessary resize ops
+                    anchor = image_process.resize(self._support_max_break_img, icon.shape[1], icon.shape[0])
+                    self._support_craft_essence_img_resized = anchor
+                else:
+                    anchor = self._support_craft_essence_img_resized
                 # err = mean_gray_diff_err(icon, anchor)
                 hsv_err = image_process.mean_hsv_diff_err(icon, anchor)
                 # logger.debug('DEBUG value: support craft essence max break check: gray_diff_err = %f, hsv_err = %f' %
                 #              (err, hsv_err))
                 ret_list[i].craft_essence_max_break = hsv_err < CV_SUPPORT_CRAFT_ESSENCE_MAX_BREAK_THRESHOLD
 
-            # detect friend state
+            # skip when support servant is empty
             if svt_id[i] == 0:
-                ret_list[i].is_friend = False
-            else:
-                friend_img = img[y1+CV_SUPPORT_FRIEND_DETECT_Y1:y1+CV_SUPPORT_FRIEND_DETECT_Y2,
-                                 CV_SUPPORT_FRIEND_DETECT_X1:CV_SUPPORT_FRIEND_DETECT_X2, :]
-                # omit B channel here
-                friend_part_binary = np.greater_equal(np.mean(friend_img[..., :2], 2),
-                                                      CV_SUPPORT_FRIEND_DISCRETE_THRESHOLD)
-                is_friend = np.mean(friend_part_binary) > CV_SUPPORT_FRIEND_DETECT_THRESHOLD
-                ret_list[i].is_friend = is_friend
-        # TODO: implement skill level detection here (replacing [0, 0, 0])
+                continue
+            # detect friend state
+            friend_img = img[y1+CV_SUPPORT_FRIEND_DETECT_Y1:y1+CV_SUPPORT_FRIEND_DETECT_Y2,
+                             CV_SUPPORT_FRIEND_DETECT_X1:CV_SUPPORT_FRIEND_DETECT_X2, :]
+            # omit B channel here
+            friend_part_binary = np.greater_equal(np.mean(friend_img[..., :2], 2),
+                                                  CV_SUPPORT_FRIEND_DISCRETE_THRESHOLD)
+            is_friend = np.mean(friend_part_binary) > CV_SUPPORT_FRIEND_DETECT_THRESHOLD
+            ret_list[i].is_friend = is_friend
+
+            # skill level detection
+            skill_img = img[y1+CV_SUPPORT_SKILL_BOX_OFFSET_Y:y1+CV_SUPPORT_SKILL_BOX_OFFSET_Y+CV_SUPPORT_SKILL_BOX_SIZE,
+                            CV_SUPPORT_SKILL_BOX_OFFSET_X1:CV_SUPPORT_SKILL_BOX_OFFSET_X2, :3].copy()
+            gray = np.mean(skill_img, -1)
+            vertical_diff = np.zeros_like(gray, dtype=np.float32)
+            step_size = CV_SUPPORT_SKILL_V_DIFF_STEP_SIZE  # pixel offset for computing abs difference
+            vertical_diff[:-step_size, :] = np.abs(gray[:-step_size, :] - gray[step_size:, :])
+            # just use the first several pixels and last several pixels to determine
+            edge_size = CV_SUPPORT_SKILL_V_DIFF_EDGE_SIZE
+            skills = []
+            for j in range(3):
+                begin_x = j * (CV_SUPPORT_SKILL_BOX_MARGIN_X + CV_SUPPORT_SKILL_BOX_SIZE)
+                v_diff_current_skill = np.mean(vertical_diff[:, begin_x:begin_x+CV_SUPPORT_SKILL_BOX_SIZE], -1)
+                max_v_diff = np.maximum(np.max(v_diff_current_skill[:edge_size]),
+                                        np.max(v_diff_current_skill[-edge_size:]))
+                if max_v_diff > CV_SUPPORT_SKILL_V_DIFF_THRESHOLD:
+                    # digit recognition, using SSIM metric, split by S (-> 0) and V (-> 255)
+                    current_skill_img = skill_img[:, begin_x:begin_x + CV_SUPPORT_SKILL_BOX_SIZE, :]
+                    hsv = image_process.rgb_to_hsv(current_skill_img).astype(np.float32)
+                    img_digit_part = (1. - hsv[..., 1] / 255.) * (hsv[..., 2] / 255.)
+                    img_digit_part = img_digit_part[30:, 3:30]
+                    bin_digits = np.greater_equal(img_digit_part, CV_SUPPORT_SKILL_BINARIZATION_THRESHOLD)
+                    digit_segments = image_process.split_image(bin_digits)
+                    digits = []
+                    for segment in sorted(digit_segments, key=lambda x: (x.max_x + x.min_x)):
+                        if 50 < segment.associated_pixels.shape[0] < 150 \
+                                and abs(segment.min_y + segment.max_y - 26) <= 3 \
+                                and segment.max_x - segment.min_x < 14 <= segment.max_y - segment.min_y:
+                            digits.append(self._digit_recognizer.recognize(segment.get_image_segment()))
+                    if len(digits) == 2:
+                        skill_lvl = digits[0] * 10 + digits[1]
+                        if skill_lvl != 10:
+                            logger.warning(f'Invalid 2 digits skill level: expected 10, but got {skill_lvl}, set to 10')
+                            skill_lvl = 10
+                    else:
+                        skill_lvl = digits[0]
+                        if skill_lvl == 0:
+                            logger.warning(f'Invalid 1 digit skill level: expected 1~9, but got {skill_lvl}')
+                    skills.append(skill_lvl)
+                else:
+                    # skill unavailable
+                    skills.append(None)
+            ret_list[i].skill_level = skills
         logger.info('Detected support servant info: %s' % str(ret_list))
         return ret_list
 

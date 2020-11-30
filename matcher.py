@@ -154,7 +154,8 @@ class SupportCraftEssenceMatcher(AbstractFgoMaterialMatcher):
         if image_process.sift_class is None:
             raise RuntimeError('SIFT is disabled due to current OpenCV binaries')
         self.sift_detector = image_process.sift_class.create()
-        self.flann_matcher = cv2.DescriptorMatcher_create(cv2.DescriptorMatcher_FLANNBASED)
+        self.matcher = cv2.DescriptorMatcher_create(cv2.DescriptorMatcher_FLANNBASED)
+        # self.matcher = cv2.BFMatcher()
         self.image_cacher = image_process.ImageHashCacher(image_process.perception_hash,
                                                           image_process.mean_gray_diff_err)
 
@@ -162,7 +163,7 @@ class SupportCraftEssenceMatcher(AbstractFgoMaterialMatcher):
         cursor = self.sqlite_connection.cursor()
         ratio_thresh = 0.7
         img_arr_resized = image_process.resize(img_arr, CV_SUPPORT_SERVANT_IMG_SIZE[1], CV_SUPPORT_SERVANT_IMG_SIZE[0])
-        craft_essence_part = img_arr_resized[CV_SUPPORT_SERVANT_SPLIT_Y:-3, ...]
+        craft_essence_part = img_arr_resized[CV_SUPPORT_SERVANT_SPLIT_Y:-3, 2:-2, :]
         # CACHE ACCESS
         cache_key = self.image_cacher.get(craft_essence_part, None)
         if cache_key is not None:
@@ -178,18 +179,18 @@ class SupportCraftEssenceMatcher(AbstractFgoMaterialMatcher):
             self.cached_icon_meta = cursor.fetchall()
             logger.info('Finished querying craft essence database, %d entries with newest craft essence id: %d' %
                         (entries, newest_craft_essence_id))
-        target_keypoint, target_descriptor = self.sift_detector.detectAndCompute(craft_essence_part, None)
+        _, target_descriptor = self.sift_detector.detectAndCompute(craft_essence_part, None)
         max_matches = 0
         max_craft_essence_id = 0
         for craft_essence_id, image_key in self.cached_icon_meta:
             if image_key not in self.cached_icons:
-                cursor.execute("select key_points, descriptors from image_sift_descriptor where image_key = ?",
-                               (image_key,))
-                keypoint_blob, descriptor_blob = cursor.fetchone()
-                keypoint = [deserialize_cv2_keypoint(x) for x in pickle_loads(keypoint_blob)]
+                cursor.execute("select descriptors from image_sift_descriptor where image_key = ?", (image_key,))
+                descriptor_blob = cursor.fetchone()[0]
+                # keypoint = [deserialize_cv2_keypoint(x) for x in pickle_loads(keypoint_blob)]
                 descriptors = pickle_loads(descriptor_blob)
-                self.cached_icons[image_key] = {'key_point': keypoint, 'descriptor': descriptors}
-            knn_matches = self.flann_matcher.knnMatch(target_descriptor, self.cached_icons[image_key]['descriptor'], 2)
+                self.cached_icons[image_key] = descriptors  # {'key_point': keypoint, 'descriptor': descriptors}
+            knn_matches = self.matcher.knnMatch(target_descriptor, self.cached_icons[image_key], 2)
+            # knn_matches = self.matcher.match(target_descriptor, self.cached_icons[image_key]['descriptor'])
             good_matches = []
             for m, n in knn_matches:
                 if m.distance < ratio_thresh * n.distance:

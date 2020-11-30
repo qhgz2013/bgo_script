@@ -52,24 +52,22 @@ def download_image_if_not_exists(sess, sql_cursor, image_key, image_text, url, *
 
 
 def retrieve_servant_icons(sql_conn):
+    prefix = 'https://fategrandorder.fandom.com'
     scale_down_ptn = re.compile(r'/scale-to-(width|height)-down/\d+')
     cursor = sql_conn.cursor()
     # noinspection SqlWithoutWhere
     cursor.execute("delete from servant_icon")
     sess = requests.session()
-    icon_url = 'https://fategrandorder.fandom.com/wiki/Servant_List_by_ID'
+    icon_url = f'{prefix}/wiki/Servant_List_by_ID'
     html = BeautifulSoup(sess.get(icon_url).text, features='html.parser')
-    table = html.find('div', {'id': 'flytabs_ServantListByID'})
-    pages = [('https://fategrandorder.fandom.com%s?action=render' % x.attrs['href']) for x in table.find_all('a')]
-    for page in pages:
-        html = BeautifulSoup(sess.get(page).text, features='html.parser')
-        table = html.find('table', {'class': 'wikitable sortable'})
+    tables = html.find_all('table', {'class': 'wikitable'})
+    ids = set()
+    for i, table in enumerate(tables):
         rows = table.find_all('tr')[1:]
-        ids = set()
-        for row in rows:
+        for j, row in enumerate(rows):
             cols = row.find_all('td')
-            servant_url = cols[1].a.attrs['href']
-            print('retrieving', servant_url)
+            servant_url = prefix + cols[1].a.attrs['href']
+            print(f'retrieving {i+1}/{len(tables)} -> {j+1}/{len(rows)}: {servant_url} ')
             servant_id = int(str(cols[-1].string).replace('\n', '').replace(' ', ''))
             if servant_id in ids:
                 continue
@@ -85,6 +83,7 @@ def retrieve_servant_icons(sql_conn):
                 img_src = img.attrs['src']
                 img_key = img.attrs['data-image-name']
                 text_lower = text.lower()
+                img_src = re.sub(scale_down_ptn, '', img_src)
                 # skips portrait, without-frame images and April Fool icons
                 ignore = False
                 for candidate in ['portrait', 'without frame', 'april', 'fool', 'np logo']:
@@ -127,15 +126,31 @@ def retrieve_craft_essence_icons(sql_conn):
     sess = requests.session()
     url = 'https://fgo.wiki/w/%E7%A4%BC%E8%A3%85%E5%9B%BE%E9%89%B4'
     csv_pattern = re.compile('function\\s+get_csv\\(\\)\\s*\n\\s*{\\s*\n\\s*var\\s+raw_str\\s*=\\s*"([^"]+)"')
+    # craft_essence_url_pattern = re.compile('(/images/[0-9a-f]/[0-9a-f]{2}/[^ ]+)')
     csv_str = re.search(csv_pattern, sess.get(url).text).group(1).replace('\\n', '\n')
     with StringIO(csv_str) as f:
         data_frame = pd.read_csv(f)
     ids = data_frame.id
-    icons = data_frame.icon
+    # changed from icon to full image
+    name_link = data_frame.name_link
+    name = data_frame.name
     for i in range(data_frame.shape[0]):
-        img_key = icons[i].split('/')[-1]
-        download_image_if_not_exists(sess, cursor, img_key, None, 'https://fgo.wiki%s' % icons[i])
-        cursor.execute("insert into craft_essence_icon(id, image_key) values (?, ?)", (int(ids[i]), img_key))
+        img_key = name_link[i]
+        html_url = f'https://fgo.wiki/w/{img_key}'
+        try:
+            print(f'retrieving {i+1}/{data_frame.shape[0]} {html_url}')
+            resp = sess.get(html_url)
+            assert resp.ok, f'HTTP request failed with status code {resp.status_code}'
+            html = BeautifulSoup(resp.text, features='html.parser').find('td', attrs={'id': f'CEGraph-{ids[i]}'})
+            img_attrs = html.find('img').attrs
+            # original image is not used here, too big!
+            # candidate_src = img_attrs['data-srcset']
+            # img_url = 'https://fgo.wiki' + re.search(craft_essence_url_pattern, candidate_src).group(1)
+            img_url = 'https://fgo.wiki' + img_attrs['data-src']
+            download_image_if_not_exists(sess, cursor, img_key, name[i], img_url)
+            cursor.execute("insert into craft_essence_icon(id, image_key) values (?, ?)", (int(ids[i]), img_key))
+        except Exception as ex:
+            print(f'Failed to download {name[i]} (id: {ids[i]}): {ex}')
     cursor.close()
     sql_conn.commit()
 
@@ -184,7 +199,7 @@ def main():
     args = parser.parse_args()
     conn = sqlite3.connect(args.output_db_path)
     initialize_sql_table(conn)
-    retrieve_servant_icons(conn)
+    # retrieve_servant_icons(conn)
     retrieve_craft_essence_icons(conn)
     pre_compute_sift_features(conn)
     conn.close()

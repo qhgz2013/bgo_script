@@ -31,7 +31,9 @@ def main():
     try:
         script.run()
     except Exception as ex:
-        script_logger_root.critical('Exception while executing script: %s' % str(ex), exc_info=ex, stack_info=True)
+        ex_type = type(ex)
+        script_logger_root.critical(f'Exception while executing script: ({ex_type.__module__}.{ex_type.__qualname__}) '
+                                    f'"{str(ex)}"', exc_info=ex, stack_info=True)
 
 
 if __name__ == '__main__':

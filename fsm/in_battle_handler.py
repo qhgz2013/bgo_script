@@ -7,23 +7,11 @@ from time import sleep
 import image_process
 import numpy as np
 import logging
-import os
+from util import DigitRecognizer
 from battle_control import ScriptConfiguration
 from .battle_seq_executor import BattleSequenceExecutor
 
 logger = logging.getLogger('bgo_script.fsm')
-
-
-def _handle_digits(battle_digit_dir: str):
-    files = os.listdir(battle_digit_dir)
-    digit_dict = {}
-    for file in files:
-        file_no_ext, _ = os.path.splitext(file)
-        img = image_process.imread(os.path.join(battle_digit_dir, file))
-        if len(img.shape) == 3:
-            img = np.mean(img, -1)
-        digit_dict[int(file_no_ext)] = img
-    return digit_dict
 
 
 class EnterQuestHandler(ConfigurableStateHandler):
@@ -51,7 +39,7 @@ class WaitAttackOrExitQuestHandler(ConfigurableStateHandler):
             img = self.attacher.get_screenshot(CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y)[..., :3]
             gray = np.mean(img, -1)
             blank_val = np.mean(np.less(gray, CV_IN_BATTLE_BLANK_SCREEN_THRESHOLD))
-            logger.debug('DEBUG VALUE: blank ratio: %f' % blank_val)
+            logger.debug('DEBUG value: blank ratio: %f' % blank_val)
             # skip blank screen frame
             if blank_val >= CV_IN_BATTLE_BLANK_SCREEN_RATIO:
                 continue
@@ -84,21 +72,22 @@ class WaitAttackOrExitQuestHandler(ConfigurableStateHandler):
 
 
 class BattleLoopAttackHandler(ConfigurableStateHandler):
-    _battle_digits = _handle_digits(CV_BATTLE_DIGIT_DIRECTORY)
+    # _battle_digits = image_process.read_digit_label_dir(CV_BATTLE_DIGIT_DIRECTORY)
 
     def __init__(self, attacher: AbstractAttacher, cfg: ScriptConfiguration):
         super().__init__(cfg)
         self.attacher = attacher
+        self._digit_recognizer = DigitRecognizer(CV_BATTLE_DIGIT_DIRECTORY)
 
-    def _digit_recognize(self, digit_img: np.ndarray) -> int:
-        min_digit = None
-        min_error = float('inf')
-        for candidate_digit in self._battle_digits:
-            abs_err = np.mean(np.abs(digit_img.astype(np.float) - self._battle_digits[candidate_digit]))
-            if abs_err < min_error:
-                min_error = abs_err
-                min_digit = candidate_digit
-        return min_digit
+    # def _digit_recognize(self, digit_img: np.ndarray) -> int:
+    #     min_digit = None
+    #     min_error = float('inf')
+    #     for candidate_digit in self._battle_digits:
+    #         abs_err = np.mean(np.abs(digit_img.astype(np.float) - self._battle_digits[candidate_digit]))
+    #         if abs_err < min_error:
+    #             min_error = abs_err
+    #             min_digit = candidate_digit
+    #     return min_digit
 
     def _get_current_battle(self, img: np.ndarray) -> Tuple[int, int]:
         img = img[CV_BATTLE_DETECTION_Y1:CV_BATTLE_DETECTION_Y2, CV_BATTLE_DETECTION_X1:CV_BATTLE_DETECTION_X2, :]
@@ -107,25 +96,19 @@ class BattleLoopAttackHandler(ConfigurableStateHandler):
         # split digits
         rects = image_process.split_image(s)
         # re-order based on x position
-        cx = [(x[1] + x[3]) / 2 for x in rects]
+        cx = [(x.min_x + x.max_x) / 2 for x in rects]
         rects = [x[1] for x in sorted(zip(cx, rects), key=lambda t: t[0])
-                 if x[1][-1] > CV_BATTLE_FILTER_PIXEL_THRESHOLD]
+                 if x[1].associated_pixels.shape[0] > CV_BATTLE_FILTER_PIXEL_THRESHOLD]
         logger.debug('Digit rects: %s' % str(rects))
         if len(rects) != 3:
             logger.warning('Detected %d rects, it is incorrect' % len(rects))
         # TODO: add rough shape check
         assert len(rects) == 3, 'Current implementation must meet that # of battles less than 10,' \
                                 ' or maybe recognition corrupted'
-        return self._digit_recognize(self._normalize_image(s, rects[0], [20, 10])), \
-            self._digit_recognize(self._normalize_image(s, rects[-1], [20, 10]))
-
-    @staticmethod
-    def _normalize_image(img: np.ndarray, rect: List[int], target_size: List[int]) -> np.ndarray:
-        crop_img = img[rect[0]:rect[2], rect[1]:rect[3]]
-        resized_img = image_process.resize(crop_img, target_size[1]-2, target_size[0]-2)
-        extended_img = np.zeros([target_size[0], target_size[1]], dtype=crop_img.dtype)
-        extended_img[1:-1, 1:-1] = resized_img
-        return extended_img
+        # return self._digit_recognize(image_process.normalize_image(rects[0].get_image_segment(), [20, 10])), \
+        #     self._digit_recognize(image_process.normalize_image(rects[-1].get_image_segment(), [20, 10]))
+        return self._digit_recognizer.recognize(rects[0].get_image_segment()), \
+            self._digit_recognizer.recognize(rects[-1].get_image_segment())
 
     def run_and_transit_state(self) -> FgoState:
         var = self._cfg.DO_NOT_MODIFY_BATTLE_VARS
@@ -150,4 +133,8 @@ class BattleLoopAttackHandler(ConfigurableStateHandler):
         logger.debug('Wait SGN_WAIT_STATE_TRANSITION')
         sgn.wait()
         sgn.clear()
+        exc = var['DELEGATE_THREAD_EXCEPTION']
+        if exc is not None:
+            # re-raise exception which is raised in delegate thread
+            raise exc
         return FgoState.STATE_BATTLE_LOOP_WAIT_ATK_OR_EXIT

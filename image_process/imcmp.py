@@ -71,7 +71,8 @@ _v_mode_handle_dict = dict(_alpha_mode_handle_dict)
 _v_mode_handle_dict['diff'] = _abs_diff
 
 
-def mean_gray_diff_err(a: np.ndarray, b: np.ndarray, fast_compute: bool = True, alpha_mode: str = 'min') -> float:
+def mean_gray_diff_err(a: np.ndarray, b: np.ndarray, fast_compute: bool = True, alpha_mode: str = 'min',
+                       abs_diff: bool = True) -> float:
     """
     Compute the absolute difference between two gray-scale images, returns the absolute difference of the two images.
 
@@ -80,6 +81,7 @@ def mean_gray_diff_err(a: np.ndarray, b: np.ndarray, fast_compute: bool = True, 
     :param fast_compute: Use average over RGB channel if true, or proceed standard RGB to gray conversion
     :param alpha_mode: One of the "min", "max", or "avg", indicating using the minimum / maximum / mean alpha value
         from two images
+    :param abs_diff: use absolute gray difference
     :return: whether mean absolute difference between two images are less than specified threshold, or its value
     """
     _check_shape_equality(a, b)
@@ -87,8 +89,10 @@ def mean_gray_diff_err(a: np.ndarray, b: np.ndarray, fast_compute: bool = True, 
     a, alpha_a = split_gray_alpha(a, fast_compute)
     b, alpha_b = split_gray_alpha(b, fast_compute)
     alpha_mask = func(alpha_a.astype(np.float), alpha_b.astype(np.float)) / 255.0
-    gray_diff_err = np.abs(a.astype(np.float) - b.astype(np.float)) * alpha_mask
-    gray_diff_err = float(np.mean(gray_diff_err))
+    gray_diff_err = a.astype(np.float) - b.astype(np.float)
+    if abs_diff:
+        gray_diff_err = np.abs(gray_diff_err)
+    gray_diff_err = float(np.mean(gray_diff_err * alpha_mask))
     return gray_diff_err
 
 
