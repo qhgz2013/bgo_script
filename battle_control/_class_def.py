@@ -4,7 +4,7 @@ if TYPE_CHECKING:
     from fsm.battle_seq_executor import BattleSequenceExecutor
 __all__ = ['CommandCard', 'CommandCardType', 'EatAppleType', 'DispatchedCommandCard', 'BattleController',
            'ServantConfiguration', 'SupportCraftEssenceConfiguration', 'SupportServantConfiguration',
-           'TeamConfiguration']
+           'TeamConfiguration', 'CommandCardNotFoundException']
 
 
 # 指令卡类型
@@ -169,8 +169,7 @@ class SupportServantConfiguration(ServantConfiguration):
 
     def __init__(self, svt_id: int, craft_essence_cfg: Union[SupportCraftEssenceConfiguration,
                                                              Sequence[SupportCraftEssenceConfiguration]],
-                 craft_essence_max_break: bool = False, friend_only: bool = False,
-                 skill_requirement: Optional[Sequence[int]] = None):
+                 friend_only: bool = False, skill_requirement: Optional[Sequence[int]] = None):
         super().__init__(svt_id)
         self.craft_essence_cfg = craft_essence_cfg
         if isinstance(self.craft_essence_cfg, SupportCraftEssenceConfiguration):
@@ -210,3 +209,7 @@ class TeamConfiguration:
                 self.self_owned_servants.append(svt)
         if self.support_location is None:
             raise ValueError('Could not find support servant in the team configuration')
+
+
+class CommandCardNotFoundException(Exception):
+    pass

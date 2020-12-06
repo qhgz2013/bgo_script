@@ -1,5 +1,6 @@
 from battle_control import ScriptConfiguration, EatAppleType, BattleController, DispatchedCommandCard, \
-    TeamConfiguration, ServantConfiguration, SupportServantConfiguration, SupportCraftEssenceConfiguration
+    TeamConfiguration, ServantConfiguration, SupportServantConfiguration, SupportCraftEssenceConfiguration, \
+    CommandCardType
 from typing import *
 
 
@@ -121,17 +122,72 @@ nail_grabber_team = TeamConfiguration([
 tmp = TeamConfiguration([
     ServantConfiguration(svt_id=215),
     ServantConfiguration(svt_id=29),
-    SupportServantConfiguration(svt_id=215, craft_essence_cfg=SupportCraftEssenceConfiguration(1124, max_break=True),
+    SupportServantConfiguration(svt_id=215, craft_essence_cfg=SupportCraftEssenceConfiguration(1123, max_break=False),
                                 skill_requirement=[10, 10, 10]),
     ServantConfiguration(svt_id=14),
     ServantConfiguration(svt_id=106),
     ServantConfiguration(svt_id=59)
 ])
 
+# wcba + 孔明 + 宝石狂兰，5加成
+christmas_team_1 = TeamConfiguration([
+    ServantConfiguration(215), ServantConfiguration(48), ServantConfiguration(37),
+    SupportServantConfiguration(215, SupportCraftEssenceConfiguration(1126, True), skill_requirement=[10, 10, 10]),
+    ServantConfiguration(1), ServantConfiguration(2)
+])
+
+
+class ChristmasTeam1Controller(BattleController):
+    def __initialize__(self):
+        self.order_changed = False
+        self.use_cba_skill_in_battle2 = False
+
+    # def __require_battle_card_detection__(self, current_battle: int, max_battle: int, turn: int) -> bool:
+    #     return current_battle > 1
+
+    def _select_card(self, battle):
+        v = 0
+        for t in [CommandCardType.Quick, CommandCardType.Buster, CommandCardType.Arts]:
+            v += self.select_command_card(48, t)
+        if v == 0 and battle == 2:
+            # 没有狂兰卡，2面交降防
+            self.use_cba_skill_in_battle2 = True
+            self.use_skill(215, 1)
+        for t in [CommandCardType.Buster, CommandCardType.Arts, CommandCardType.Quick]:
+            for svt_id in [215, self.SERVANT_ID_SUPPORT]:
+                self.select_command_card(svt_id, t)
+
+    def __call__(self, battle: int, max_battle: int, turn: int, cards: Optional[Sequence[DispatchedCommandCard]]):
+        if battle == 1:
+            self.use_skill(37, 1).use_skill(37, 2).use_skill(215, 0, 48)
+            self.noble_phantasm(48).attack(0).attack(1)
+        elif battle == 2:
+            if not self.order_changed:
+                self.use_skill(37, 0, 48)
+                self.use_clothes_skill(2, (37, self.SERVANT_ID_SUPPORT))
+                self.refresh_command_card_list()
+            else:
+                self.order_change(37, self.SERVANT_ID_SUPPORT)
+            self.order_changed = True
+            self.use_support_skill(0, 48).use_skill(215, 2, 48).use_skill(48, 2).use_skill(48, 0)
+            self.noble_phantasm(48)
+            self._select_card(battle)
+        elif battle == 3:
+            if not self.order_changed:
+                self.order_change(37, self.SERVANT_ID_SUPPORT)
+                self.order_changed = True
+            if turn == 1:
+                self.use_support_skill(2, 48).use_support_skill(1).use_clothes_skill(0)
+                if not self.use_cba_skill_in_battle2:
+                    self.use_skill(215, 1)
+                self.noble_phantasm(48)
+            self._select_card(battle)
+
+
 DEFAULT_CONFIG = ScriptConfiguration(
-    eat_apple_type=EatAppleType.DontEatMyApple,
-    battle_controller=TmpController,
-    team_config=tmp,
+    eat_apple_type=EatAppleType.GoldApple,
+    battle_controller=ChristmasTeam1Controller,
+    team_config=christmas_team_1,
     max_ap=142,
     enable_continuous_battle_feature=True
 )

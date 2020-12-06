@@ -6,7 +6,7 @@ from util import pickle_loads
 from cv_positioning import *
 import image_process
 import logging
-# from typing import *
+from typing import *
 # import matplotlib.pyplot as plt
 
 SQL_PATH = CV_FGO_DATABASE_FILE
@@ -82,7 +82,7 @@ class ServantCommandCardMatcher(AbstractFgoMaterialMatcher):
     def __init__(self, sql_path: str = SQL_PATH):
         super().__init__(sql_path)
 
-    def match(self, img_arr: np.ndarray) -> int:
+    def match(self, img_arr: np.ndarray, candidate_servant_list: Optional[List[int]] = None) -> int:
         blur_radius = 2
         cursor = self.sqlite_connection.cursor()
         target_size = CV_COMMAND_CARD_IMG_SIZE
@@ -103,39 +103,48 @@ class ServantCommandCardMatcher(AbstractFgoMaterialMatcher):
             cursor.execute("select count(1) from servant_command_card_icon")
             entries = cursor.fetchone()[0]
             cursor.execute("select id, image_key from servant_command_card_icon")
-            self.cached_icon_meta = cursor.fetchall()
+            result = cursor.fetchall()
+            svt_id_img_key_list = dict()  # type: Dict[int, List[str]]
+            for id_, image_key in result:
+                if id_ not in svt_id_img_key_list:
+                    svt_id_img_key_list[id_] = []
+                svt_id_img_key_list[id_].append(image_key)
+            self.cached_icon_meta = svt_id_img_key_list
             logger.info('Finished querying servant command card database, %d entries with newest servant id: %d' %
                         (entries, newest_svt_id))
         # querying image data
+        query_target = set(candidate_servant_list) or self.cached_icon_meta.keys()
         min_servant_id = 0
         min_err = 0
-        for servant_id, image_key in self.cached_icon_meta:
-            if image_key not in self.cached_icons:
-                cursor.execute("select image_data, name from image where image_key = ?", (image_key,))
-                binary_data, name = cursor.fetchone()
-                # All icon are PNG file with extra alpha channel
-                np_image = image_process.imdecode(binary_data)
-                # split alpha channel
-                assert np_image.shape[-1] == 4, 'Servant Icon should be RGBA channel'
-                if np_image.shape[:2] != target_size:
-                    if not self.__warn_size_mismatch:
-                        self.__warn_size_mismatch = True
-                        logger.warning('The configuration of image size for command card matching is different from '
-                                       'database size, performance will decrease: servant id: %d, key: %s' %
-                                       (servant_id, image_key))
-                    np_image = image_process.resize(np_image, target_size[1], target_size[0])
-                np_image = image_process.gauss_blur(np_image, blur_radius)
-                np_image, alpha = image_process.split_rgb_alpha(np_image)
-                hsv_image = image_process.rgb_to_hsv(np_image)
-                # weighted by alpha channel size
-                self.cached_icons[image_key] = np.concatenate([hsv_image, np.expand_dims(alpha, 2)], 2)
-            anchor = self.cached_icons[image_key]
-            # err_map = image_process.mean_hsv_diff_err_dbg(anchor, hsv_img, 'hsv', 'hsv')
-            hsv_err = image_process.mean_hsv_diff_err(anchor, hsv_img, 'hsv', 'hsv')
-            if min_servant_id == 0 or hsv_err < min_err:
-                min_servant_id = servant_id
-                min_err = hsv_err
-                logger.debug('svt_id = %d, key = %s, hsv_err = %f' % (servant_id, image_key, hsv_err))
+        for servant_id in query_target:
+            image_keys = self.cached_icon_meta[servant_id]
+            for image_key in image_keys:
+                if image_key not in self.cached_icons:
+                    cursor.execute("select image_data, name from image where image_key = ?", (image_key,))
+                    binary_data, name = cursor.fetchone()
+                    # All icon are PNG file with extra alpha channel
+                    np_image = image_process.imdecode(binary_data)
+                    # split alpha channel
+                    assert np_image.shape[-1] == 4, 'Servant Icon should be RGBA channel'
+                    if np_image.shape[:2] != target_size:
+                        if not self.__warn_size_mismatch:
+                            self.__warn_size_mismatch = True
+                            logger.warning('The configuration of image size for command card matching is different from'
+                                           ' database size, performance will decrease: servant id: %d, key: %s' %
+                                           (servant_id, image_key))
+                        np_image = image_process.resize(np_image, target_size[1], target_size[0])
+                    np_image = image_process.gauss_blur(np_image, blur_radius)
+                    np_image, alpha = image_process.split_rgb_alpha(np_image)
+                    hsv_image = image_process.rgb_to_hsv(np_image)
+                    # weighted by alpha channel size
+                    self.cached_icons[image_key] = np.concatenate([hsv_image, np.expand_dims(alpha, 2)], 2)
+                anchor = self.cached_icons[image_key]
+                # err_map = image_process.mean_hsv_diff_err_dbg(anchor, hsv_img, 'hsv', 'hsv')
+                hsv_err = image_process.mean_hsv_diff_err(anchor, hsv_img, 'hsv', 'hsv')
+                if min_servant_id == 0 or hsv_err < min_err:
+                    min_servant_id = servant_id
+                    min_err = hsv_err
+                    logger.debug('svt_id = %d, key = %s, hsv_err = %f' % (servant_id, image_key, hsv_err))
         cursor.close()
         return min_servant_id
 

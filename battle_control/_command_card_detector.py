@@ -32,12 +32,15 @@ class CommandCardDetector:
     _command_card_support_rev_alpha = _rev_alpha(CV_COMMAND_CARD_SUPPORT_ANCHOR_FILE)
 
     @staticmethod
-    def detect_command_cards(img: np.ndarray) -> List[DispatchedCommandCard]:
+    def detect_command_cards(img: np.ndarray, candidate_servant_list: Optional[List[int]] = None) \
+            -> List[DispatchedCommandCard]:
         """
         Detect in-battle command card for current turn (attack button must be pressed before calling this method!)
 
         :param img: In-game screenshot, with shape (h, w, 3) in RGB format or (h, w, 4) in RGBA format (A channel will
          be ignored)
+        :param candidate_servant_list: An optional parameter, the servant id list to be queried (leave "None" to perform
+         full database query)
         :return: A list containing command card info
         """
         assert len(img.shape) == 3, 'Invalid image shape, expected RGB format'
@@ -88,7 +91,7 @@ class CommandCardDetector:
                       CV_COMMAND_CARD_SUPPORT_X1:CV_COMMAND_CARD_SUPPORT_X2] = \
                     CommandCardDetector._command_card_support_rev_alpha
             command_card = np.concatenate([command_card, np.expand_dims(alpha, 2)], 2)
-            servant_id = CommandCardDetector._servant_matcher.match(command_card)
+            servant_id = CommandCardDetector._servant_matcher.match(command_card, candidate_servant_list)
             ret_list.append(DispatchedCommandCard(servant_id, CommandCardType(card_type+1), card_idx, is_support, 0))
         logger.info('Detected command card data: %s (used %f sec(s))' % (str(ret_list), time() - t))
         return ret_list

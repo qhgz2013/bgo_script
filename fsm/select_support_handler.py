@@ -272,6 +272,7 @@ class SelectSupportHandler(ConfigurableStateHandler):
                 v_diff_current_skill = np.mean(vertical_diff[:, begin_x:begin_x+CV_SUPPORT_SKILL_BOX_SIZE], -1)
                 max_v_diff = np.maximum(np.max(v_diff_current_skill[:edge_size]),
                                         np.max(v_diff_current_skill[-edge_size:]))
+                logger.debug(f'DEBUG value: max_v_diff = {max_v_diff}')
                 if max_v_diff > CV_SUPPORT_SKILL_V_DIFF_THRESHOLD:
                     # digit recognition, using SSIM metric, split by S (-> 0) and V (-> 255)
                     current_skill_img = skill_img[:, begin_x:begin_x + CV_SUPPORT_SKILL_BOX_SIZE, :]

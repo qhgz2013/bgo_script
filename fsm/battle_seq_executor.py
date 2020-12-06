@@ -1,6 +1,6 @@
 from typing import *
 from attacher import AbstractAttacher
-from battle_control import ScriptConfiguration, CommandCardDetector, CommandCard
+from battle_control import ScriptConfiguration, CommandCardDetector, CommandCardType
 from cv_positioning import *
 from click_positioning import *
 from time import sleep
@@ -29,9 +29,15 @@ def _init_battle_vars(d: Dict[str, Any]):
     d['DELEGATE_THREAD_EXCEPTION'] = None
 
 
+# TODO: 重构这个类，数据库加上宝具的色卡字段
 class BattleSequenceExecutor:
-    def __init__(self, attacher: AbstractAttacher, cfg: ScriptConfiguration, enable_card_reselection_feat: bool = True):
-        # enable_card_reselection_feat: when it is set, command cards (including NPs)
+    def __init__(self, attacher: AbstractAttacher, cfg: ScriptConfiguration, enable_card_reselection_feat: bool = True,
+                 enable_fast_cmd_card_detect: bool = True):
+        # enable_card_reselection_feat: when it is set, command cards (including NPs) will be auto-reselected when
+        #     re-entering the command card selection UI (the re-enter happens when command card selection is interrupted
+        #     by an inappropriate order like using another skill
+        # enable_fast_cmd_card_detect: when it is set, command card detection will only match the servants in the team,
+        #     rather than matching all the servants in the database
         self.SERVANT_ID_EMPTY = SERVANT_ID_EMPTY
         self.ENEMY_LOCATION_EMPTY = ENEMY_LOCATION_EMPTY
         self.SERVANT_ID_SUPPORT = SERVANT_ID_SUPPORT
@@ -40,6 +46,7 @@ class BattleSequenceExecutor:
         self.cfg = cfg
         self.team_config = cfg.team_config
         self.enable_card_reselection_feature = enable_card_reselection_feat
+        self.enable_fast_cmd_card_detect = enable_fast_cmd_card_detect
         _init_battle_vars(cfg.DO_NOT_MODIFY_BATTLE_VARS)
         self._controller = cfg.battle_controller(self)
         # use another thread to keep execution context while running __call__
@@ -49,16 +56,22 @@ class BattleSequenceExecutor:
         self.cfg.DO_NOT_MODIFY_BATTLE_VARS['SGN_THD_INIT_FINISHED'].wait()
         logger.debug('Thread initialized with TID = %d' % thd.ident)
         self._attack_button_clicked = False
-        self._dispatched_cards = None
+        self._dispatched_cards = []
         self._selected_cmd_cards = []
         self._servants = [x.svt_id for x in self.team_config.self_owned_servants]
         self._servants.insert(self.team_config.support_location, SERVANT_ID_SUPPORT)
         self._last_selected_enemy = None
+        # tracking selected command card type and servant ids
+        self._selected_cmd_card_type = set()
+        self._selected_cmd_card_svt_id = set()
 
     def _reset_turn_state(self):
         self._attack_button_clicked = False
         self._selected_cmd_cards = []
         self._last_selected_enemy = None
+        self._dispatched_cards.clear()
+        self._selected_cmd_card_type.clear()
+        self._selected_cmd_card_svt_id.clear()
 
     def _thd_callback(self):
         var = self.cfg.DO_NOT_MODIFY_BATTLE_VARS
@@ -119,7 +132,9 @@ class BattleSequenceExecutor:
             # re-select previous selected command cards (when executing ATTACK/NP -> SKILL -> ATTACK/NP sequence)
             if self.enable_card_reselection_feature and len(self._selected_cmd_cards) > 0:
                 logger.debug('Enabled card reselection feature: perform %d selection' % len(self._selected_cmd_cards))
-                for call_fn, args in self._selected_cmd_cards:
+                previous_selected_cards = self._selected_cmd_cards
+                self._selected_cmd_cards = []  # keep it empty while doing re-selection
+                for call_fn, args in previous_selected_cards:
                     call_fn(*args)
 
     def _exit_attack_mode(self):
@@ -163,6 +178,7 @@ class BattleSequenceExecutor:
 
     def use_skill(self, servant_id: int, skill_index: int, to_servant_id: int = SERVANT_ID_EMPTY,
                   enemy_location: int = ENEMY_LOCATION_EMPTY) -> 'BattleSequenceExecutor':
+        # TODO add argument check
         servant_pos = self._lookup_servant_position(servant_id)
         assert 0 <= servant_pos < 3, 'Could not find servant in current team'
         to_servant_pos = self._lookup_servant_position(to_servant_id)
@@ -182,39 +198,40 @@ class BattleSequenceExecutor:
                           enemy_location: int = ENEMY_LOCATION_EMPTY) -> 'BattleSequenceExecutor':
         return self.use_skill(SERVANT_ID_SUPPORT, skill_index, to_servant_id, enemy_location)
 
-    def _noble_phantasm(self, servant_id: int, enemy_location: int = ENEMY_LOCATION_EMPTY):
+    def noble_phantasm(self, servant_id: int, enemy_location: int = ENEMY_LOCATION_EMPTY) -> 'BattleSequenceExecutor':
         servant_pos = self._lookup_servant_position(servant_id)
         assert 0 <= servant_pos < 3, 'Could not find servant in current team'
+        assert enemy_location == ENEMY_LOCATION_EMPTY or 0 <= enemy_location < 3, 'Invalid enemy location'
         assert len(self._selected_cmd_cards) < 3, 'Reached attack limitation (3 attacks per turn)'
         # 未出卡前指定敌方单体
         self._enter_attack_mode()
         self._select_enemy(enemy_location)
         # 点宝具（第一张卡选宝具的话会等更长的时间）
         self._submit_click_event(2 if len(self._selected_cmd_cards) == 0 else 0.5, (NP_XS[servant_pos], NP_Y))
-
-    def noble_phantasm(self, servant_id: int, enemy_location: int = ENEMY_LOCATION_EMPTY) -> 'BattleSequenceExecutor':
-        self._noble_phantasm(servant_id, enemy_location)
-        self._selected_cmd_cards.append((self._noble_phantasm, (servant_id, enemy_location)))
+        self._selected_cmd_cards.append((self.noble_phantasm, (servant_id, enemy_location)))
         return self
 
     def support_noble_phantasm(self, enemy_location: int = ENEMY_LOCATION_EMPTY) -> 'BattleSequenceExecutor':
         return self.noble_phantasm(SERVANT_ID_SUPPORT, enemy_location)
 
-    def _attack(self, command_card_index: int, enemy_location: int = ENEMY_LOCATION_EMPTY):
+    def attack(self, command_card_index: int, enemy_location: int = ENEMY_LOCATION_EMPTY) -> 'BattleSequenceExecutor':
+        assert 0 <= command_card_index < 5, 'Invalid command card index'
+        assert enemy_location == ENEMY_LOCATION_EMPTY or 0 <= enemy_location < 3, 'Invalid enemy location'
         assert len(self._selected_cmd_cards) < 3, 'Reached attack limitation (3 attacks per turn)'
         self._enter_attack_mode()
         self._select_enemy(enemy_location)
         # 选卡
         self._submit_click_event(1 if len(self._selected_cmd_cards) == 0 else 0.2,
                                  (COMMAND_CARD_XS[command_card_index], COMMAND_CARD_Y))
-
-    def attack(self, command_card_index: int, enemy_location: int = ENEMY_LOCATION_EMPTY) -> 'BattleSequenceExecutor':
-        self._attack(command_card_index, enemy_location)
-        self._selected_cmd_cards.append((self._attack, (command_card_index, enemy_location)))
+        if len(self._dispatched_cards) > 0:
+            self._selected_cmd_card_type.add(self._dispatched_cards[command_card_index].card_type)
+            self._selected_cmd_card_svt_id.add(self._dispatched_cards[command_card_index].svt_id)
+        self._selected_cmd_cards.append((self.attack, (command_card_index, enemy_location)))
         return self
 
     def use_clothes_skill(self, skill_index: int, to_servant_id: Union[int, Tuple[int, int]] = SERVANT_ID_EMPTY,
                           enemy_location: int = ENEMY_LOCATION_EMPTY) -> 'BattleSequenceExecutor':
+        # TODO add argument check
         assert 0 <= skill_index < 3, 'invalid skill index'
         self._exit_attack_mode()
         self._select_enemy(enemy_location)
@@ -253,30 +270,57 @@ class BattleSequenceExecutor:
         elif self.cfg.detect_command_card is None:
             should_detect_command_card = self._controller.__require_battle_card_detection__(
                 var['CURRENT_BATTLE'], var['MAX_BATTLE'], var['TURN'])
+            if should_detect_command_card is None:
+                logger.warning(f'Method __require_battle_card_detection__ from controller {type(self._controller)} '
+                               f'returned nothing, treated as false')
+                should_detect_command_card = False
+            elif not isinstance(should_detect_command_card, bool):
+                logger.warning(f'Method __require_battle_card_detection__ from controller {type(self._controller)}'
+                               f' returned a value with type {type(should_detect_command_card)} (Expected: bool)')
+                # convert to bool
+                should_detect_command_card = should_detect_command_card != 0
         else:
             should_detect_command_card = self.cfg.detect_command_card
+        self._dispatched_cards.clear()
         if should_detect_command_card:
             self._enter_attack_mode()
             sleep(0.5)
             img = self.attacher.get_screenshot(CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y)
-            new_cards = CommandCardDetector.detect_command_cards(img[..., :3])
-            if self._dispatched_cards is None:
-                self._dispatched_cards = new_cards
+            if self.enable_fast_cmd_card_detect:
+                candidate_svt = [x if x != SERVANT_ID_SUPPORT else self.team_config.support_servant.svt_id
+                                 for x in self._servants[:3]]
             else:
-                self._dispatched_cards.clear()
-                self._dispatched_cards.extend(new_cards)
-        else:
-            self._dispatched_cards = None
+                candidate_svt = None
+            new_cards = CommandCardDetector.detect_command_cards(img[..., :3], candidate_svt)
+            self._dispatched_cards.extend(new_cards)
 
     def refresh_command_card_list(self):
         self._refresh_command_card_list(force=True)
 
-    # noinspection PyMethodMayBeStatic, PyUnusedLocal,PyUnreachableCode
-    def select_remain_command_card(self, priority: Optional[Sequence[CommandCard]] = None,
-                                   avoid_chain_or_extra_atk: bool = True):
+    def _check_command_card_detected_in_current_turn(self):
+        if len(self._dispatched_cards) == 0:
+            self._refresh_command_card_list(force=True)
+
+    def select_remain_command_card(self, avoid_chain: bool = True, avoid_ex_attack: bool = True):
+        self._check_command_card_detected_in_current_turn()
+        logger.warning(f'Called to not implemented method select_remain_command_card,'
+                       f' args: {avoid_chain}, {avoid_ex_attack}')
         raise NotImplementedError
-        priority = priority or []
-        if avoid_chain_or_extra_atk:
-            pass
+
+    def select_command_card(self, servant_id: int, command_card_type: Optional[CommandCardType] = None,
+                            max_select_cnt: int = 3, enemy_location: int = ENEMY_LOCATION_EMPTY) -> int:
+        self._check_command_card_detected_in_current_turn()
+        cards = self._dispatched_cards
+        if command_card_type is not None:
+            cards = [x for x in cards if x.card_type == command_card_type]
+        if servant_id == SERVANT_ID_SUPPORT:
+            cards = [x for x in cards if x.is_support]
+        elif servant_id < 0:
+            raise ValueError('Invalid servant id')
         else:
-            pass
+            cards = [x for x in cards if x.svt_id == servant_id and not x.is_support]
+        cards_to_select = min(max_select_cnt, len(cards), 3 - len(self._selected_cmd_cards))
+        for i in range(cards_to_select):
+            self.attack(cards[i].location,
+                        enemy_location if len(self._selected_cmd_cards) == 0 else ENEMY_LOCATION_EMPTY)
+        return cards_to_select

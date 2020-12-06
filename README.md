@@ -39,6 +39,15 @@
 `max_ap`可选的最大AP值；  
 `enable_continuous_battle_feature`为是否使用连续出击，默认true，就算是否也只是退到选关界面再进去而已。
 
+## 助战从者配置 `SupportServantConfiguration`
+
+`svt_id`指定助战从者ID  
+`skill_requirement`为一个list，指定三个技能的等级，`None`视为某个技能等级不做要求；  
+`craft_essence_cfg`为礼装配置，可由list指定多个配置。该参数保证检测到助战的礼装符合其中一个配置；  
+`friend_only`为bool，指定是否只选择好友助战（默认false）。
+
+`SupportCraftEssenceConfiguration`共有两个参数，一个是礼装ID，另外一个是是否要求礼装满破。
+
 ## BattleController的API
 
 全部可以直接`self.`调用，详细可以见`fsm/battle_seq_executor.py`下的`BattleSequenceExecutor`类的所有公开方法。主要包含：
