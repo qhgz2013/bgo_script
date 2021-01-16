@@ -8,19 +8,13 @@ import logging
 from time import time
 from matcher import ServantCommandCardMatcher
 
-logger = logging.getLogger('bgo_script.battle_control')
-
-
-def _rev_alpha(file):
-    img = image_process.imread(file)
-    _, alpha = image_process.split_rgb_alpha(img)
-    return 255 - alpha
+logger = logging.getLogger('bgo_script.bgo_game')
 
 
 def _proc_cmd_card_alpha():
     ret = []
     for file in CV_COMMAND_CARD_MASK:
-        ret.append(_rev_alpha(file))
+        ret.append(image_process.rev_alpha_from_file(file))
     return ret
 
 
@@ -29,7 +23,7 @@ class CommandCardDetector:
     _command_card_rev_alpha = _proc_cmd_card_alpha()
     _servant_matcher = ServantCommandCardMatcher()
     _command_card_support_anchor = image_process.imread(CV_COMMAND_CARD_SUPPORT_ANCHOR_FILE)
-    _command_card_support_rev_alpha = _rev_alpha(CV_COMMAND_CARD_SUPPORT_ANCHOR_FILE)
+    _command_card_support_rev_alpha = image_process.rev_alpha_from_file(CV_COMMAND_CARD_SUPPORT_ANCHOR_FILE)
 
     @staticmethod
     def detect_command_cards(img: np.ndarray, candidate_servant_list: Optional[List[int]] = None) \
@@ -74,9 +68,10 @@ class CommandCardDetector:
             # support detection
             support_part = command_card[CV_COMMAND_CARD_SUPPORT_Y1:CV_COMMAND_CARD_SUPPORT_Y2,
                                         CV_COMMAND_CARD_SUPPORT_X1:CV_COMMAND_CARD_SUPPORT_X2, :]
-            err = image_process.mean_hsv_diff_err(support_part, CommandCardDetector._command_card_support_anchor)
-            logger.debug('DEBUG value: command card support detection, hsv_err = %f' % err)
-            is_support = err < CV_COMMAND_CARD_SUPPORT_HSV_THRESHOLD
+            # err = image_process.mean_hsv_diff_err(support_part, CommandCardDetector._command_card_support_anchor)
+            err = image_process.mean_gray_diff_err(support_part, CommandCardDetector._command_card_support_anchor)
+            logger.debug('DEBUG value: command card support detection, gray_err = %f' % err)
+            is_support = err < CV_COMMAND_CARD_SUPPORT_GRAY_THRESHOLD
             # mask command card: concat RGB with extra alpha channel
             alpha = CommandCardDetector._command_card_rev_alpha[card_type]
             if command_card.shape[:2] != alpha.shape[:2]:

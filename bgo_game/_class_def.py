@@ -3,8 +3,7 @@ from typing import *
 if TYPE_CHECKING:
     from fsm.battle_seq_executor import BattleSequenceExecutor
 __all__ = ['CommandCard', 'CommandCardType', 'EatAppleType', 'DispatchedCommandCard', 'BattleController',
-           'ServantConfiguration', 'SupportCraftEssenceConfiguration', 'SupportServantConfiguration',
-           'TeamConfiguration', 'CommandCardNotFoundException']
+           'ServantConfig', 'SupportCraftEssenceConfig', 'SupportServantConfig', 'TeamConfig', 'CommandCardNotFound']
 
 
 # 指令卡类型
@@ -12,6 +11,7 @@ class CommandCardType(IntEnum):
     Buster = 1
     Quick = 2
     Arts = 3
+    Extra = 101
 
 
 class EatAppleType(IntEnum):
@@ -142,17 +142,17 @@ class BattleController:
 
 # 配队时使用的从者设置
 # 注：自动配队未实现
-class ServantConfiguration:
+class ServantConfig:
     __slots__ = ['svt_id']
 
     def __init__(self, svt_id: int):
         self.svt_id = svt_id
 
     def __repr__(self):
-        return f'<ServantConfiguration svt: {self.svt_id}>'
+        return f'<ServantConfig svt: {self.svt_id}>'
 
 
-class SupportCraftEssenceConfiguration:
+class SupportCraftEssenceConfig:
     __slots__ = ['id', 'max_break']
 
     def __init__(self, id_: int, max_break: bool = False):
@@ -160,25 +160,25 @@ class SupportCraftEssenceConfiguration:
         self.max_break = max_break
 
     def __repr__(self):
-        return f'<SupportCraftEssenceConfiguration id: {self.id}, max_break: {self.max_break}'
+        return f'<SupportCraftEssenceConfig id: {self.id}, max_break: {self.max_break}'
 
 
 # 助战从者设置
-class SupportServantConfiguration(ServantConfiguration):
+class SupportServantConfig(ServantConfig):
     __slots__ = ['svt_id', 'craft_essence_cfg', 'friend_only', 'skill_requirement']
 
-    def __init__(self, svt_id: int, craft_essence_cfg: Union[SupportCraftEssenceConfiguration,
-                                                             Sequence[SupportCraftEssenceConfiguration]],
+    def __init__(self, svt_id: int, craft_essence_cfg: Union[SupportCraftEssenceConfig,
+                                                             Sequence[SupportCraftEssenceConfig]],
                  friend_only: bool = False, skill_requirement: Optional[Sequence[int]] = None):
         super().__init__(svt_id)
         self.craft_essence_cfg = craft_essence_cfg
-        if isinstance(self.craft_essence_cfg, SupportCraftEssenceConfiguration):
+        if isinstance(self.craft_essence_cfg, SupportCraftEssenceConfig):
             self.craft_essence_cfg = [self.craft_essence_cfg]
         self.friend_only = friend_only
         self.skill_requirement = skill_requirement
 
     def __repr__(self):
-        s = f'<SupportServantConfiguration svt: {self.svt_id} and {len(self.craft_essence_cfg)} c.e. config(s)'
+        s = f'<SupportServantConfig svt: {self.svt_id} and {len(self.craft_essence_cfg)} c.e. config(s)'
         if self.friend_only:
             s += ' (friend only)'
         if self.skill_requirement:
@@ -187,20 +187,20 @@ class SupportServantConfiguration(ServantConfiguration):
 
 
 # 出击队伍设置
-class TeamConfiguration:
-    def __init__(self, servants: Sequence[ServantConfiguration]):
+class TeamConfig:
+    def __init__(self, servants: Sequence[ServantConfig]):
         assert len(servants) == 6, 'Invalid team configuration, servants must be 6'
         self.servants = servants
-        self.self_owned_servants = []  # type: List[ServantConfiguration]
-        self.support_servant = None  # type: Optional[SupportServantConfiguration]
+        self.self_owned_servants = []  # type: List[ServantConfig]
+        self.support_servant = None  # type: Optional[SupportServantConfig]
         self.support_location = None  # type: Optional[int]
         self._apply_servant_list()
 
     def _apply_servant_list(self):
         for i, svt in enumerate(self.servants):
-            assert isinstance(svt, ServantConfiguration), \
-                '%s is not a subclass of ServantConfiguration' % str(type(svt))
-            if isinstance(svt, SupportServantConfiguration):
+            assert isinstance(svt, ServantConfig), \
+                '%s is not a subclass of ServantConfig' % str(type(svt))
+            if isinstance(svt, SupportServantConfig):
                 if self.support_location is not None:
                     raise ValueError('Multiple support servant found, check your team configuration')
                 self.support_location = i
@@ -211,5 +211,5 @@ class TeamConfiguration:
             raise ValueError('Could not find support servant in the team configuration')
 
 
-class CommandCardNotFoundException(Exception):
+class CommandCardNotFound(Exception):
     pass

@@ -8,5 +8,5 @@ from .bk_tree import BKTree
 from .image_hash_cacher import ImageHashCacher
 from .phash import perception_hash
 from .gauss_blur import gauss_blur
-from .misc import extend_alpha_1px, split_image, ImageSegment, normalize_image, read_digit_label_dir
+from .misc import extend_alpha_1px, split_image, ImageSegment, normalize_image, read_digit_label_dir, rev_alpha_from_file
 from .run_benchmark import run_all_benchmark

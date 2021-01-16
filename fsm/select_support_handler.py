@@ -9,7 +9,7 @@ import image_process
 import numpy as np
 from time import sleep, time
 from image_process import mean_gray_diff_err
-from battle_control import ScriptConfiguration, ServantConfiguration
+from bgo_game import ScriptConfig, ServantConfig
 from .fgo_state import FgoState
 from util import DigitRecognizer
 
@@ -18,7 +18,7 @@ logger = logging.getLogger('bgo_script.fsm')
 
 
 # NOT implemented: NP level detection
-class SupportServant(ServantConfiguration):
+class SupportServant(ServantConfig):
     def __init__(self, svt_id: int, craft_essence_id: int, craft_essence_max_break: bool = False,
                  is_friend: bool = False, skill_level: Optional[List[Optional[int]]] = None, np_lv: int = 0):
         super().__init__(svt_id)
@@ -45,14 +45,15 @@ class SupportServant(ServantConfiguration):
 class SelectSupportHandler(ConfigurableStateHandler):
     _support_empty_img = image_process.imread(CV_SUPPORT_EMPTY_FILE)
     _support_craft_essence_img = image_process.imread(CV_SUPPORT_CRAFT_ESSENCE_FILE)
-    _support_craft_essence_img_resized = None  # assigned in run-time
+    _support_craft_essence_img2 = image_process.imread(CV_SUPPORT_CRAFT_ESSENCE_FILE2)
+    _support_craft_essence_img_resized = None  # assigned in run-time, resized _support_max_break_img
     _support_max_break_img = image_process.imread(CV_SUPPORT_CRAFT_ESSENCE_MAX_BREAK_FILE)
     _scroll_down_y_mapper = {MumuAttacher: SUPPORT_SCROLLDOWN_Y_MUMU, AdbAttacher: SUPPORT_SCROLLDOWN_Y_ADB}
 
     servant_matcher = SupportServantMatcher(CV_FGO_DATABASE_FILE)
     craft_essence_matcher = SupportCraftEssenceMatcher(CV_FGO_DATABASE_FILE)
 
-    def __init__(self, attacher: AbstractAttacher, forward_state: FgoState, cfg: ScriptConfiguration):
+    def __init__(self, attacher: AbstractAttacher, forward_state: FgoState, cfg: ScriptConfig):
         super().__init__(cfg)
         self.attacher = attacher
         self.forward_state = forward_state
@@ -138,7 +139,7 @@ class SelectSupportHandler(ConfigurableStateHandler):
         y = 150
         range_list = []
         threshold = CV_SUPPORT_DETECT_DIFF_THRESHOLD
-        # TODO: 修改为支持多段合并的识别模式（对上升沿和下降沿分别进行匹配）
+        # TODO [PRIOR: nice-to-have]: 修改为支持多段合并的识别模式（对上升沿和下降沿分别进行匹配）
         while y < CV_SCREENSHOT_RESOLUTION_Y:
             while y < CV_SCREENSHOT_RESOLUTION_Y and td[y] > -threshold:
                 y += 1
@@ -220,9 +221,9 @@ class SelectSupportHandler(ConfigurableStateHandler):
             v = mean_gray_diff_err(img1, img2)
             logger.debug('DEBUG value: empty support craft essence check: mean_gray_diff_err = %f' % v)
             return v < 10
-        # todo fix bug when empty servant and non-empty craft essence
         ce_id, t = self._wrap_call_matcher(self.craft_essence_matcher.match, _craft_essence_empty_check, img,
-                                           self._support_craft_essence_img, range_list)
+                                           [self._support_craft_essence_img, self._support_craft_essence_img2],
+                                           range_list)
         logger.debug('Detected support craft essence ID: %s (used %f sec(s))' % (str(ce_id), t))
         ret_list = [SupportServant(x, y) for x, y in zip(svt_id, ce_id)]
         for i, (y1, y2) in enumerate(range_list):
@@ -307,14 +308,21 @@ class SelectSupportHandler(ConfigurableStateHandler):
     @staticmethod
     def _wrap_call_matcher(func: Callable[[np.ndarray], int],
                            empty_check_func: Callable[[np.ndarray, np.ndarray], bool],
-                           img: np.ndarray, empty_img: Union[np.ndarray, None],
+                           img: np.ndarray, empty_img: Optional[Union[np.ndarray, Sequence[np.ndarray]]],
                            range_list: List[Tuple[int, int]]) -> Tuple[List[int], float]:
         t = time()
         ret = []
         for y1, y2 in range_list:
             icon = img[y1:y2, CV_SUPPORT_SERVANT_X1:CV_SUPPORT_SERVANT_X2, :]
-            if empty_img is not None and empty_check_func(icon, empty_img):
-                ret.append(0)
-            else:
-                ret.append(func(icon))
+            if empty_img is not None:
+                if isinstance(empty_img, np.ndarray):
+                    empty_img = [empty_img]
+                is_empty = False
+                for img2 in empty_img:
+                    if empty_check_func(icon, img2):
+                        ret.append(0)
+                        is_empty = True
+                        break
+                if not is_empty:
+                    ret.append(func(icon))
         return ret, time() - t

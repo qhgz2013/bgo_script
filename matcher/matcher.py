@@ -156,6 +156,7 @@ def deserialize_cv2_keypoint(serialized_tuple):
                         _class_id=serialized_tuple[5])
 
 
+# todo [PRIOR: high]: Multi-process support
 class SupportCraftEssenceMatcher(AbstractFgoMaterialMatcher):
     # noinspection PyUnresolvedReferences
     def __init__(self, sql_path: str = SQL_PATH):

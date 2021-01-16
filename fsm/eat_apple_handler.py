@@ -7,7 +7,7 @@ from click_positioning import *
 from time import sleep
 import image_process
 from .fgo_state import FgoState
-from battle_control import ScriptConfiguration, EatAppleType
+from bgo_game import ScriptConfig, EatAppleType
 
 logger = logging.getLogger('bgo_script.fsm')
 
@@ -22,7 +22,7 @@ class EatAppleHandler(ConfigurableStateHandler):
                  EatAppleType.BronzeApple: EAT_BRONZE_APPLE_CLICK_Y, EatAppleType.SaintQuartz: EAT_SAINT_QUARTZ_CLICK_Y}
     __warned_eat_saint_quartz = False
 
-    def __init__(self, attacher: AbstractAttacher, forward_state: FgoState, cfg: ScriptConfiguration):
+    def __init__(self, attacher: AbstractAttacher, forward_state: FgoState, cfg: ScriptConfig):
         super().__init__(cfg)
         self.attacher = attacher
         self.forward_state = forward_state
@@ -43,7 +43,7 @@ class EatAppleHandler(ConfigurableStateHandler):
                 self.attacher.send_click(EAT_APPLE_CLICK_X, self._y_mapper[self._cfg.eat_apple_type])
                 sleep(0.5)
                 self.attacher.send_click(EAT_APPLE_CONFIRM_CLICK_X, EAT_APPLE_CONFIRM_CLICK_Y)
-                sleep(0.5)
+                sleep(2)
                 return WaitFufuStateHandler(self.attacher, self.forward_state).run_and_transit_state()
         else:
             logger.debug('Eat apple scene not presented, operation skipped')

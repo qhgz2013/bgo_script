@@ -6,7 +6,7 @@ import image_process
 from cv_positioning import *
 from image_process import mean_gray_diff_err
 import logging
-from battle_control import ScriptConfiguration
+from bgo_game import ScriptConfig
 from .fgo_state import FgoState
 
 logger = logging.getLogger('bgo_script.fsm')
@@ -56,7 +56,7 @@ class ContinuousBattleHandler(ConfigurableStateHandler):
     _anchor = _imread_to_screen_size(CV_CONTINUOUS_BATTLE_UI_FILE)
 
     def __init__(self, attacher: AbstractAttacher, forward_state_pos: FgoState, forward_state_neg: FgoState,
-                 cfg: ScriptConfiguration):
+                 cfg: ScriptConfig):
         super().__init__(cfg)
         self.attacher = attacher
         self.forward_state_pos = forward_state_pos

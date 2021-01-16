@@ -1,15 +1,15 @@
-from ._class_def import EatAppleType, TeamConfiguration, BattleController
+from ._class_def import EatAppleType, TeamConfig, BattleController
 from typing import *
 import logging
 
-logger = logging.getLogger('bgo_script.battle_control')
+logger = logging.getLogger('bgo_script.bgo_game')
 
 
 # 定义脚本的全局变量，传入facade中用作初始化所有状态以及状态转移所执行的动作
-class ScriptConfiguration:
+class ScriptConfig:
     def __init__(self, eat_apple_type: EatAppleType, battle_controller: Type[BattleController],
-                 team_config: TeamConfiguration, max_ap: Optional[int] = None,
-                 detect_command_card: Optional[bool] = None, enable_continuous_battle_feature: bool = True):
+                 team_config: TeamConfig, max_ap: Optional[int] = None, detect_command_card: Optional[bool] = None,
+                 enable_continuous_battle_feature: bool = True):
         self.eat_apple_type = eat_apple_type
         self.battle_controller = battle_controller
         self.team_config = team_config

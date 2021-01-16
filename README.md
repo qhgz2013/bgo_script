@@ -32,21 +32,21 @@
 
 `TmpController`中的`__call__`负责决定每T战斗需要执行的操作，包括使用技能，放宝具，选卡。
 
-`ScriptConfiguration`为全局设置，初始化参数如下：  
+`ScriptConfig`为全局设置，初始化参数如下：  
 `eat_apple_type`决定是否吃苹果以及吃的苹果类型，若不吃苹果，则会在AP不足时退出执行；  
 `battle_controller`是负责执行自动战斗操作的类；  
 `team_config`为队伍设置（未实现配队功能），初始化的参数为队伍的顺序，目前仅作选助战用；  
 `max_ap`可选的最大AP值；  
 `enable_continuous_battle_feature`为是否使用连续出击，默认true，就算是否也只是退到选关界面再进去而已。
 
-## 助战从者配置 `SupportServantConfiguration`
+## 助战从者配置 `SupportServantConfig`
 
 `svt_id`指定助战从者ID  
 `skill_requirement`为一个list，指定三个技能的等级，`None`视为某个技能等级不做要求；  
 `craft_essence_cfg`为礼装配置，可由list指定多个配置。该参数保证检测到助战的礼装符合其中一个配置；  
 `friend_only`为bool，指定是否只选择好友助战（默认false）。
 
-`SupportCraftEssenceConfiguration`共有两个参数，一个是礼装ID，另外一个是是否要求礼装满破。
+`SupportCraftEssenceConfig`共有两个参数，一个是礼装ID，另外一个是是否要求礼装满破。
 
 ## BattleController的API
 
@@ -100,7 +100,7 @@ cv2.xfeatures2d_SIFT.create()  # OpenCV 3.x
 
 ## 使用方式
 
-1. 下载并解压数据库文件（包含从者、礼装图片的数据）[fgo_new.db](https://cdn.zhouxuebin.club/data/2020/11/fgo_new.zip)到`cv_data`文件夹中。
+1. 下载并解压数据库文件（包含从者、礼装图片的数据）[fgo_new.db](https://cdn.zhouxuebin.club/data/2020/12/fgo_new.zip)到`cv_data`文件夹中。
 2. 运行脚本：默认使用Mumu模拟器，执行完整的进本
 ```bash
 python main.py

@@ -1,7 +1,7 @@
 __all__ = ['StateHandler', 'ConfigurableStateHandler', 'WaitFufuStateHandler', 'DirectStateForwarder',
            'SingleClickHandler', 'SingleClickAndWaitFufuHandler']
 from abc import ABC
-from battle_control import ScriptConfiguration
+from bgo_game import ScriptConfig
 from .fgo_state import FgoState
 from attacher import AbstractAttacher
 from time import sleep, time
@@ -18,7 +18,7 @@ class StateHandler:
 
 
 class ConfigurableStateHandler(StateHandler, ABC):
-    def __init__(self, cfg: ScriptConfiguration):
+    def __init__(self, cfg: ScriptConfig):
         self._cfg = cfg
 
 

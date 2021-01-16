@@ -6,7 +6,7 @@ from time import time
 from image_process import imread
 from cv_positioning import *
 import numpy as np
-from battle_control import ScriptConfiguration
+from bgo_game import ScriptConfig
 from .fgo_state import FgoState
 
 logger = logging.getLogger('bgo_script.fsm')
@@ -15,14 +15,14 @@ logger = logging.getLogger('bgo_script.fsm')
 class SelectQuestHandler(ConfigurableStateHandler):
     _eat_apple_ui_anchor = imread(CV_EAT_APPLE_UI_FILE)
 
-    def __init__(self, attacher: AbstractAttacher, forward_state: FgoState, cfg: ScriptConfiguration):
+    def __init__(self, attacher: AbstractAttacher, forward_state: FgoState, cfg: ScriptConfig):
         super().__init__(cfg)
         self.attacher = attacher
         self.forward_state = forward_state
         self._last_enter_quest_time = None
 
     def run_and_transit_state(self) -> FgoState:
-        # todo: implement quest select
+        # todo [PRIOR: low]: implement quest select
         # input: 关卡颜色和顺序
         # algorithm:
         # 0. 将滚动条拖到最上方

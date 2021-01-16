@@ -1,18 +1,22 @@
 from typing import *
 from attacher import AbstractAttacher
-from battle_control import ScriptConfiguration, CommandCardDetector, CommandCardType
+from bgo_game import ScriptConfig, CommandCardDetector, CommandCardType, DispatchedCommandCard
 from cv_positioning import *
 from click_positioning import *
 from time import sleep
 import threading
 import logging
 from .fgo_state import FgoState
+import sqlite3
+import numpy as np
 
 logger = logging.getLogger('bgo_script.fsm')
 SERVANT_ID_EMPTY = -1
 ENEMY_LOCATION_EMPTY = -1
 SERVANT_ID_SUPPORT = -2
 TIME_WAIT_ATTACK_BUTTON = -1
+NP_CARD_TYPE_EMPTY = -1
+_cache_np_card_type = None
 
 
 def _init_battle_vars(d: Dict[str, Any]):
@@ -29,9 +33,32 @@ def _init_battle_vars(d: Dict[str, Any]):
     d['DELEGATE_THREAD_EXCEPTION'] = None
 
 
-# TODO: 重构这个类，数据库加上宝具的色卡字段
+def _fetch_np_card_type() -> Dict[int, int]:
+    global _cache_np_card_type
+    if _cache_np_card_type is None:
+        conn = sqlite3.connect(CV_FGO_DATABASE_FILE)
+        csr = conn.cursor()
+        try:
+            # if exception is raised here, try downloading the newest database or generate it from code
+            logger.debug("Querying servant noble phantasm type")
+            csr.execute("select id, np_type from servant_np")
+            _cache_np_card_type = {k: v for k, v in csr.fetchall()}
+            csr.execute("select id from servant_np order by id desc limit 1")
+            max_id = csr.fetchone()[0]
+            logger.debug(f'Queried {len(_cache_np_card_type)} entries with newest servant id {max_id}')
+        finally:
+            csr.close()
+            conn.close()
+    return _cache_np_card_type
+
+
+def _get_svt_id_from_cmd_card(card: DispatchedCommandCard):
+    return SERVANT_ID_SUPPORT if card.is_support else card.svt_id
+
+
+# TODO [PRIOR: middle]: 重构这个类，增加宇宙凛的指令卡变色
 class BattleSequenceExecutor:
-    def __init__(self, attacher: AbstractAttacher, cfg: ScriptConfiguration, enable_card_reselection_feat: bool = True,
+    def __init__(self, attacher: AbstractAttacher, cfg: ScriptConfig, enable_card_reselection_feat: bool = True,
                  enable_fast_cmd_card_detect: bool = True):
         # enable_card_reselection_feat: when it is set, command cards (including NPs) will be auto-reselected when
         #     re-entering the command card selection UI (the re-enter happens when command card selection is interrupted
@@ -41,6 +68,7 @@ class BattleSequenceExecutor:
         self.SERVANT_ID_EMPTY = SERVANT_ID_EMPTY
         self.ENEMY_LOCATION_EMPTY = ENEMY_LOCATION_EMPTY
         self.SERVANT_ID_SUPPORT = SERVANT_ID_SUPPORT
+        self.NP_CARD_TYPE_EMPTY = NP_CARD_TYPE_EMPTY
 
         self.attacher = attacher
         self.cfg = cfg
@@ -61,6 +89,7 @@ class BattleSequenceExecutor:
         self._servants = [x.svt_id for x in self.team_config.self_owned_servants]
         self._servants.insert(self.team_config.support_location, SERVANT_ID_SUPPORT)
         self._last_selected_enemy = None
+        self._np_type = _fetch_np_card_type()
         # tracking selected command card type and servant ids
         self._selected_cmd_card_type = set()
         self._selected_cmd_card_svt_id = set()
@@ -112,6 +141,16 @@ class BattleSequenceExecutor:
                 if team_servant_id == servant_id:
                     return i
         return -1
+
+    def _translate_servant_id(self, servant_id: int) -> int:
+        if servant_id == SERVANT_ID_SUPPORT:
+            return self.cfg.team_config.support_servant.svt_id
+        elif servant_id == SERVANT_ID_EMPTY:
+            return SERVANT_ID_EMPTY
+        elif servant_id > 0:
+            return servant_id
+        else:
+            raise KeyError(f'Invalid lookup servant id: {servant_id}')
 
     def _submit_click_event(self, t: float, loc: Optional[Tuple[float, float]] = None):
         if t == TIME_WAIT_ATTACK_BUTTON:
@@ -177,8 +216,9 @@ class BattleSequenceExecutor:
         return self
 
     def use_skill(self, servant_id: int, skill_index: int, to_servant_id: int = SERVANT_ID_EMPTY,
-                  enemy_location: int = ENEMY_LOCATION_EMPTY) -> 'BattleSequenceExecutor':
-        # TODO add argument check
+                  enemy_location: int = ENEMY_LOCATION_EMPTY, np_card_type: int = NP_CARD_TYPE_EMPTY) \
+            -> 'BattleSequenceExecutor':
+        # TODO [PRIOR: middle]: add argument check
         servant_pos = self._lookup_servant_position(servant_id)
         assert 0 <= servant_pos < 3, 'Could not find servant in current team'
         to_servant_pos = self._lookup_servant_position(to_servant_id)
@@ -190,13 +230,16 @@ class BattleSequenceExecutor:
         # 若是我方单体技能，则选定我方一个目标
         if to_servant_pos != SERVANT_ID_EMPTY:
             self._submit_click_event(0.5, (TO_SERVANT_X[to_servant_pos], TO_SERVANT_Y))
+        elif np_card_type != NP_CARD_TYPE_EMPTY:
+            raise NotImplementedError('Specifying NP card type in unsupported yet')
         self._submit_click_event(1, None)
         self._submit_click_event(TIME_WAIT_ATTACK_BUTTON, None)
         return self
 
     def use_support_skill(self, skill_index: int, to_servant_id: int = SERVANT_ID_EMPTY,
-                          enemy_location: int = ENEMY_LOCATION_EMPTY) -> 'BattleSequenceExecutor':
-        return self.use_skill(SERVANT_ID_SUPPORT, skill_index, to_servant_id, enemy_location)
+                          enemy_location: int = ENEMY_LOCATION_EMPTY, np_card_type: int = NP_CARD_TYPE_EMPTY) \
+            -> 'BattleSequenceExecutor':
+        return self.use_skill(SERVANT_ID_SUPPORT, skill_index, to_servant_id, enemy_location, np_card_type)
 
     def noble_phantasm(self, servant_id: int, enemy_location: int = ENEMY_LOCATION_EMPTY) -> 'BattleSequenceExecutor':
         servant_pos = self._lookup_servant_position(servant_id)
@@ -209,6 +252,12 @@ class BattleSequenceExecutor:
         # 点宝具（第一张卡选宝具的话会等更长的时间）
         self._submit_click_event(2 if len(self._selected_cmd_cards) == 0 else 0.5, (NP_XS[servant_pos], NP_Y))
         self._selected_cmd_cards.append((self.noble_phantasm, (servant_id, enemy_location)))
+        real_svt_id = self._translate_servant_id(servant_id)
+        if real_svt_id in self._np_type:
+            self._selected_cmd_card_svt_id.add(servant_id)  # not real_svt_id here
+            self._selected_cmd_card_type.add(self._np_type[real_svt_id])
+        else:
+            logger.warning(f'Could not find NP data for servant {real_svt_id}')
         return self
 
     def support_noble_phantasm(self, enemy_location: int = ENEMY_LOCATION_EMPTY) -> 'BattleSequenceExecutor':
@@ -224,14 +273,15 @@ class BattleSequenceExecutor:
         self._submit_click_event(1 if len(self._selected_cmd_cards) == 0 else 0.2,
                                  (COMMAND_CARD_XS[command_card_index], COMMAND_CARD_Y))
         if len(self._dispatched_cards) > 0:
+            # command card selection tracking is disabled when no dispatched command card data available
             self._selected_cmd_card_type.add(self._dispatched_cards[command_card_index].card_type)
-            self._selected_cmd_card_svt_id.add(self._dispatched_cards[command_card_index].svt_id)
+            self._selected_cmd_card_svt_id.add(_get_svt_id_from_cmd_card(self._dispatched_cards[command_card_index]))
         self._selected_cmd_cards.append((self.attack, (command_card_index, enemy_location)))
         return self
 
     def use_clothes_skill(self, skill_index: int, to_servant_id: Union[int, Tuple[int, int]] = SERVANT_ID_EMPTY,
                           enemy_location: int = ENEMY_LOCATION_EMPTY) -> 'BattleSequenceExecutor':
-        # TODO add argument check
+        # TODO [PRIOR: middle]: add argument check
         assert 0 <= skill_index < 3, 'invalid skill index'
         self._exit_attack_mode()
         self._select_enemy(enemy_location)
@@ -287,8 +337,7 @@ class BattleSequenceExecutor:
             sleep(0.5)
             img = self.attacher.get_screenshot(CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y)
             if self.enable_fast_cmd_card_detect:
-                candidate_svt = [x if x != SERVANT_ID_SUPPORT else self.team_config.support_servant.svt_id
-                                 for x in self._servants[:3]]
+                candidate_svt = [self._translate_servant_id(x) for x in self._servants[:3]]
             else:
                 candidate_svt = None
             new_cards = CommandCardDetector.detect_command_cards(img[..., :3], candidate_svt)
@@ -301,11 +350,79 @@ class BattleSequenceExecutor:
         if len(self._dispatched_cards) == 0:
             self._refresh_command_card_list(force=True)
 
-    def select_remain_command_card(self, avoid_chain: bool = True, avoid_ex_attack: bool = True):
+    def select_remain_command_card(self, max_select_cnt: int = 3, avoid_chain: bool = True,
+                                   avoid_ex_attack: bool = True):
+        # avoid_chain includes avoid_ex_attack (brave chain)
+        attack_needs_re_detect = len(self._dispatched_cards) == 0
         self._check_command_card_detected_in_current_turn()
-        logger.warning(f'Called to not implemented method select_remain_command_card,'
-                       f' args: {avoid_chain}, {avoid_ex_attack}')
-        raise NotImplementedError
+        if attack_needs_re_detect:
+            re_detect_list = [args[0] for func, args in self._selected_cmd_cards if func == self.attack]
+            self._selected_cmd_card_type.update([self._dispatched_cards[x].card_type.value for x in re_detect_list])
+            self._selected_cmd_card_svt_id.update([self._dispatched_cards[x].svt_id for x in re_detect_list])
+        # raise NotImplementedError('Selecting remain command card is not implemented in current version')
+        cards_to_select = min(3 - len(self._selected_cmd_cards), max_select_cnt)
+        # index bit space: (pos2, pos1, pos0), (A Q B), value bit space: (card4, card3, card2, card1, card0, init)
+        state_space = np.zeros([8, 8], dtype=np.int32)
+        init_x, init_y = 0, 0
+        svt_id_pos_mapper = {svt_id: i for i, svt_id in enumerate(self._servants[:3])}
+        card_idx_pos_mapper = [svt_id_pos_mapper[_get_svt_id_from_cmd_card(x)] for x in self._dispatched_cards]
+        for selected_svt_id in self._selected_cmd_card_svt_id:
+            init_y |= 1 << svt_id_pos_mapper[selected_svt_id]
+        for card_type in self._selected_cmd_card_type:
+            init_x |= 1 << (card_type - 1)
+        state_space[init_y, init_x] = 1
+        selected_card_idx = {args[0] for func, args in self._selected_cmd_cards if func == self.attack}
+        card_idx_to_select = set(range(5)).difference(selected_card_idx)
+        for i in range(cards_to_select):
+            new_state_space = np.zeros_like(state_space, dtype=state_space.dtype)
+            for y in range(state_space.shape[0]):
+                for x in range(state_space.shape[1]):
+                    if state_space[y, x] > 0:
+                        for card_idx in card_idx_to_select:
+                            if state_space[y, x] & (1 << (card_idx + 1)):
+                                continue  # command card already selected
+                            pos = 1 << card_idx_pos_mapper[card_idx]
+                            card_type = 1 << (self._dispatched_cards[card_idx].card_type.value - 1)
+                            if new_state_space[y | pos, x | card_type]:
+                                continue  # skips redundant solution
+                            new_state_space[y | pos, x | card_type] = state_space[y, x] | (1 << (card_idx + 1))
+            state_space = new_state_space
+        state_space >>= 1
+        logger.debug(f'State space:\n{str(state_space)}')
+        # row & col 0 is ignored (ever be 0)
+
+        def _select_card_from_state(state):
+            nonlocal cards_to_select
+            if state > 0:
+                for i in range(5):
+                    if state & (1 << i):
+                        self.attack(i)
+                        cards_to_select -= 1
+        if avoid_chain:
+            # avoid anything in col & row 1, 2, 4
+            # todo [PRIOR: nice-to-have]: priority selection
+            for y in [3, 5, 6, 7]:
+                for x in [3, 5, 6, 7]:
+                    _select_card_from_state(state_space[y, x])
+                    if cards_to_select == 0:
+                        return max_select_cnt
+            for y in [3, 5, 6, 7]:
+                for x in [1, 2, 4]:
+                    _select_card_from_state(state_space[y, x])
+                    if cards_to_select == 0:
+                        return max_select_cnt
+            for y in [1, 2, 4]:
+                for x in range(1, 8):
+                    _select_card_from_state(state_space[y, x])
+                    if cards_to_select == 0:
+                        return max_select_cnt
+        elif avoid_ex_attack:
+            for x in [3, 5, 6, 7, 1, 2, 4]:
+                for y in range(1, 8):
+                    _select_card_from_state(state_space[y, x])
+                    if cards_to_select == 0:
+                        return max_select_cnt
+        return max_select_cnt - cards_to_select
 
     def select_command_card(self, servant_id: int, command_card_type: Optional[CommandCardType] = None,
                             max_select_cnt: int = 3, enemy_location: int = ENEMY_LOCATION_EMPTY) -> int:

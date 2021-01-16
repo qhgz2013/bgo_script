@@ -4,6 +4,7 @@ import logging
 from util import LazyValue
 from .resize import resize
 from .imread import imread
+from .imcmp import split_rgb_alpha
 import os
 
 logger = logging.getLogger('bgo_script.image_process')
@@ -19,6 +20,7 @@ except ImportError:
     logger.info('Package "numba" not found, it is an optional package which can improve image processing speed')
 
 
+# image segmentation class (generated from split_image function)
 class ImageSegment:
     def __init__(self, original_image: np.ndarray, min_x: int, min_y: int, max_x: int, max_y: int,
                  associated_pixels: np.ndarray, boundary_pixels: np.ndarray):
@@ -113,6 +115,7 @@ def split_image(img: np.ndarray) -> List[ImageSegment]:
     return _dfs_visit(img)
 
 
+@jit_no_python
 def extend_alpha_1px(alpha: np.ndarray) -> np.ndarray:
     """
     Extend the edge of alpha mask by 1 pixel
@@ -176,7 +179,14 @@ def normalize_image(img: np.ndarray, target_size: Sequence[int]) -> np.ndarray:
     return extended_img
 
 
-def read_digit_label_dir(digit_dir: str):
+def read_digit_label_dir(digit_dir: str) -> Dict[int, np.ndarray]:
+    """
+    Read the directory containing digit label images (files whose names are <digit_number>.<file_extension>), and return
+     the corresponding dictionary (key: digit_number, value: image_data)
+
+    :param digit_dir: Path containing digit label images
+    :return: A dictionary whose keys are digit numbers (int type) and values are image data (np.ndarray type)
+    """
     files = os.listdir(digit_dir)
     digit_dict = {}
     for file in files:
@@ -186,3 +196,14 @@ def read_digit_label_dir(digit_dir: str):
             img = np.round(np.mean(img, -1)).astype(np.uint8)
         digit_dict[int(file_no_ext)] = img
     return digit_dict
+
+
+def rev_alpha_from_file(file: str) -> np.ndarray:
+    """
+    Reverse the alpha mask of an image file
+    :param file: Input image file path
+    :return: The reversed alpha mask for the input image file
+    """
+    img = imread(file)
+    _, alpha = split_rgb_alpha(img)
+    return 255 - alpha

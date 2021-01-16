@@ -5,6 +5,12 @@ import argparse
 import config
 
 
+def _log_exception(ex: BaseException):
+    ex_type = type(ex)
+    script_logger_root.critical(f'Exception while executing script: ({ex_type.__module__}.{ex_type.__qualname__}) '
+                                f'"{str(ex)}"', exc_info=ex, stack_info=True)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('attacher', help='Attacher type', choices=['adb', 'mumu'], default='mumu', type=str, nargs='?')
@@ -30,10 +36,12 @@ def main():
     script = schemas_class(attacher_class(), config.DEFAULT_CONFIG)
     try:
         script.run()
+    except KeyboardInterrupt as kb_int:
+        script_logger_root.info('Keyboard interrupted')
+        _log_exception(kb_int)
+        raise kb_int
     except Exception as ex:
-        ex_type = type(ex)
-        script_logger_root.critical(f'Exception while executing script: ({ex_type.__module__}.{ex_type.__qualname__}) '
-                                    f'"{str(ex)}"', exc_info=ex, stack_info=True)
+        _log_exception(ex)
 
 
 if __name__ == '__main__':

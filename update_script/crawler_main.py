@@ -34,6 +34,7 @@ def initialize_sql_table(sql_conn):
     create_table_not_exists('create table image_sift_descriptor(image_key varchar(50) primary key not null unique,'
                             'key_points blob not null, descriptors blob not null,'
                             'foreign key (image_key) references image(image_key))')
+    create_table_not_exists('create table servant_np(id int not null unique primary key, np_type int not null)')
     cursor.close()
     sql_conn.commit()
 
@@ -57,11 +58,14 @@ def retrieve_servant_icons(sql_conn):
     cursor = sql_conn.cursor()
     # noinspection SqlWithoutWhere
     cursor.execute("delete from servant_icon")
+    # noinspection SqlWithoutWhere
+    cursor.execute("delete from servant_np")
     sess = requests.session()
     icon_url = f'{prefix}/wiki/Servant_List_by_ID'
     html = BeautifulSoup(sess.get(icon_url).text, features='html.parser')
     tables = html.find_all('table', {'class': 'wikitable'})
     ids = set()
+    np_type = {'arts': 3, 'quick': 2, 'buster': 1}
     for i, table in enumerate(tables):
         rows = table.find_all('tr')[1:]
         for j, row in enumerate(rows):
@@ -75,6 +79,50 @@ def retrieve_servant_icons(sql_conn):
             servant_html = BeautifulSoup(sess.get(servant_url).text, features='html.parser')
             # Retrieving servant icons (used for support servant auto selection)
             icon_div = servant_html.find('div', {'class': 'tabbertab', 'title': 'Icons'})
+            try:
+                np_html = servant_html.find('span', {'id': 'Noble_Phantasm'})
+                np_html = np_html.find_next('div', {'class': 'tabber'})
+                np_html = np_html.find_all('div', {'class': 'tabbertab'})
+                np = []
+                np_default = []
+                for item in np_html:
+                    np_table = item.find_all('table', {'class': 'wikitable'}, recursive=False)
+                    is_default = 'default' in item.attrs.get('title', '').lower()
+                    if len(np_table) == 0:
+                        continue
+                    try:
+                        np_img = np_table[-1].tbody.tr.th.a.img
+                        np_img = np_img.attrs['alt'].split('.')[0].lower()
+                        if is_default:
+                            np_default.append(np_type[np_img])
+                        else:
+                            np.append(np_type[np_img])
+                    except AttributeError:
+                        continue
+                    except KeyError as e:
+                        print(f'Exception for parsing servant {servant_id} np: {e}')
+                        continue
+                if len(np) == 0 and len(np_default) == 0:
+                    print(f'Could not find NP for servant {servant_id}')
+                    np = None
+                else:
+                    if len(np_default) != 0:
+                        first_type = np_default[0]
+                        for ii in range(1, len(np_default)):
+                            if np_default[ii] != first_type:
+                                print(f'Mismatch NP type for servant {servant_id}')
+                        np = first_type
+                    else:
+                        first_type = np[0]
+                        for ii in range(1, len(np)):
+                            if np[ii] != first_type:
+                                print(f'Mismatch NP type for servant {servant_id}')
+                        np = first_type
+            except AttributeError:
+                print(f'Could not find NP for servant {servant_id}')
+                np = None
+            if np is not None:
+                cursor.execute("insert into servant_np(id, np_type) values (?, ?)", (servant_id, np))
             icon_items = icon_div.find_all('div', {'class': 'wikia-gallery-item'})
             for item in icon_items:
                 caption_obj = item.find('div', {'class': 'lightbox-caption'})
@@ -90,6 +138,9 @@ def retrieve_servant_icons(sql_conn):
                     if candidate in text_lower:
                         ignore = True
                         break
+                # skips "status" icons (same as portrait, but in another strange naming rule)
+                if not ignore and 'status' in img_key:
+                    ignore = True
                 if ignore:
                     continue
                 download_image_if_not_exists(sess, cursor, img_key, text, img_src)
@@ -127,13 +178,30 @@ def retrieve_craft_essence_icons(sql_conn):
     url = 'https://fgo.wiki/w/%E7%A4%BC%E8%A3%85%E5%9B%BE%E9%89%B4'
     csv_pattern = re.compile('function\\s+get_csv\\(\\)\\s*\n\\s*{\\s*\n\\s*var\\s+raw_str\\s*=\\s*"([^"]+)"')
     # craft_essence_url_pattern = re.compile('(/images/[0-9a-f]/[0-9a-f]{2}/[^ ]+)')
-    csv_str = re.search(csv_pattern, sess.get(url).text).group(1).replace('\\n', '\n')
+    html = sess.get(url).text
+    csv_str = re.search(csv_pattern, html).group(1).replace('\\n', '\n')
     with StringIO(csv_str) as f:
         data_frame = pd.read_csv(f)
     ids = data_frame.id
+    ids_rev_mapper = {j: i for i, j in enumerate(ids)}
     # changed from icon to full image
-    name_link = data_frame.name_link
-    name = data_frame.name
+    # don't know why it is changed to such an idiot mode
+    try:
+        name_link = data_frame.name_link
+    except AttributeError:
+        override_pattern = re.compile('override_data\\s*=\\s*"([^"]+)"')
+        override_match = re.search(override_pattern, html)
+        if override_match is None:
+            raise RuntimeError('could not find name_link')
+        override_data = override_match.group(1).replace('\\n', '\n').split('\n')
+        name_link = [None] * data_frame.shape[0]
+        cur_id = 0
+        for line in override_data:
+            if line.startswith('id='):
+                cur_id = int(line[3:])
+            elif line.startswith('name_link='):
+                name_link[ids_rev_mapper[cur_id]] = line[10:]
+    name = name_link
     for i in range(data_frame.shape[0]):
         img_key = name_link[i]
         html_url = f'https://fgo.wiki/w/{img_key}'
