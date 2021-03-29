@@ -1,10 +1,11 @@
 from . import HandleBasedAttacher
+from .adb import AdbAttacherRootEnhanced, EventType, EventID
 import win32gui
 import win32con
 import numpy as np
 from time import sleep
 from typing import *
-from util import LazyValue
+from util import LazyValue, spawn_process_raw
 from winapi import is_running_as_admin
 import logging
 
@@ -13,11 +14,16 @@ logger = logging.getLogger('bgo_script.attacher')
 
 class MumuAttacher(HandleBasedAttacher):
     __warned_minimize = False
+    __warned_deprecated_v1_attacher = False
 
     def __init__(self):
         super(MumuAttacher, self).__init__()
         self.simulator_handle = None
         self.is_admin = LazyValue(is_running_as_admin)
+        if not MumuAttacher.__warned_deprecated_v1_attacher:
+            MumuAttacher.__warned_deprecated_v1_attacher = True
+            logger.warning('Mumu Attacher (V1 version) is deprecated since some versions of mumu simulator does not '
+                           'work properly with PostMessage / SendMessage to simulate mouse move event')
 
     def locate_handle(self) -> int:
         # SPY++:
@@ -49,7 +55,7 @@ class MumuAttacher(HandleBasedAttacher):
         while True:
             while self.is_minimize():
                 sleep(0.2)
-            screenshot = super(MumuAttacher, self).get_screenshot(width, height)
+            screenshot = HandleBasedAttacher.get_screenshot(self, width, height)
             if not self.is_minimize():
                 return screenshot
 
@@ -57,12 +63,37 @@ class MumuAttacher(HandleBasedAttacher):
         if not self.is_admin():
             logger.warning('Could not send message to specified handle without admin privileges')
         else:
-            super(MumuAttacher, self).send_click(x, y, stay_time)
+            HandleBasedAttacher.send_click(self, x, y, stay_time)
 
     def send_slide(self, p_from: Tuple[float, float], p_to: Tuple[float, float], stay_time_before_move: float = 0.1,
                    stay_time_move: float = 0.8, stay_time_after_move: float = 0.1):
         if not self.is_admin():
             logger.warning('Could not send message to specified handle without admin privileges')
         else:
-            super(MumuAttacher, self).send_slide(p_from, p_to, stay_time_before_move, stay_time_move,
-                                                 stay_time_after_move)
+            HandleBasedAttacher.send_slide(self, p_from, p_to, stay_time_before_move, stay_time_move,
+                                           stay_time_after_move)
+
+
+class MumuAttacherV2(MumuAttacher, AdbAttacherRootEnhanced):
+    def __init__(self):
+        super(MumuAttacher, self).__init__()
+
+    def _hook_after_sever_started(self):
+        spawn_process_raw([self._adb, 'connect', 'localhost:7555'])
+
+    def get_screenshot(self, width: Optional[int] = None, height: Optional[int] = None) -> np.ndarray:
+        return MumuAttacher.get_screenshot(self, width, height)
+
+    def _hook_send_event_touch_down(self, device: str, args: List[str], px: int, py: int):
+        # Mumu simulator requires ABS_MT_TRACKING_ID
+        args.insert(0, f'sendevent {device} {EventType.EV_ABS.value} {EventID.ABS_MT_TRACKING_ID.value} 1')
+
+    def _hook_send_event_touch_up(self, device: str, args: List[str]):
+        args.insert(0, f'sendevent {device} {EventType.EV_ABS.value} {EventID.ABS_MT_TRACKING_ID.value} 0')
+
+    def send_click(self, x: float, y: float, stay_time: float = 0.1):
+        AdbAttacherRootEnhanced.send_click(self, x, y, stay_time)
+
+    def send_slide(self, p_from: Tuple[float, float], p_to: Tuple[float, float], stay_time_before_move: float = 0.1,
+                   stay_time_move: float = 0.8, stay_time_after_move: float = 0.1):
+        AdbAttacherRootEnhanced.send_slide(self, p_from, p_to, stay_time_before_move, stay_time_move, stay_time_after_move)

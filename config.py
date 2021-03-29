@@ -61,7 +61,7 @@ class ShellGrabberController(BattleController):
             self.use_skill(215, 0, 14).use_support_skill(0, 14).use_skill(215, 2, 14).use_skill(14, 2)
             self.noble_phantasm(14).attack(0).attack(1)
         elif battle == 3:
-            self.use_skill(215, 1).use_support_skill(1).use_support_skill(2, 14).use_clothes_skill(1, 14)
+            self.use_skill(215, 1).use_support_skill(1).use_support_skill(2, 14).use_clothes_skill(0, 14)
             self.use_skill(14, 0).noble_phantasm(14).attack(0).attack(1)
 
 
@@ -94,17 +94,17 @@ class FireworkGrabberController(BattleController):
     def __call__(self, battle: int, max_battle: int, turn: int, cards: Optional[Sequence[DispatchedCommandCard]]):
         if battle == 1:
             self.use_skill(16, 2).noble_phantasm(16)
-            self.select_remain_command_card()
+            self.attack(0).attack(1)
         if not self._stella:
             self.remove_servant(16)
             self._stella = True
         if battle == 2:
             self.use_support_skill(2).use_support_skill(1).use_skill(120, 0)
-            self.noble_phantasm(120).select_remain_command_card()
+            self.noble_phantasm(120).attack(0).attack(1)
         elif battle == 3:
-            self.use_skill(120, 1).use_skill(219, 1).use_skill(219, 2).use_clothes_skill(1, 219)
+            self.use_skill(120, 1).use_skill(219, 1).use_skill(219, 2)  # .use_clothes_skill(1, 219)
             self.use_support_skill(0, 219)
-            self.noble_phantasm(120).noble_phantasm(219).select_remain_command_card()
+            self.noble_phantasm(120).noble_phantasm(219).attack(0)
 
 
 class TmpController(BattleController):
@@ -134,7 +134,7 @@ class DustGrabberController(BattleController):
             self.use_support_skill(2).use_support_skill(1).use_skill(91, 0).use_skill(91, 1).use_support_skill(0, 91)
             self.noble_phantasm(91).attack(0).attack(1)
         elif battle == 3:
-            self.use_skill(76, 0).use_skill(76, 2).use_clothes_skill(1, 76)
+            self.use_skill(76, 0).use_skill(76, 2).use_clothes_skill(0, 76)
             self.noble_phantasm(76).attack(0).attack(1)
 
 
@@ -223,8 +223,8 @@ class ChristmasTeam2Controller(BattleController):
 
 DEFAULT_CONFIG = ScriptConfig(
     eat_apple_type=EatAppleType.DontEatMyApple,
-    battle_controller=DustGrabberController,
-    team_config=dust_grabber_team,
+    battle_controller=FireworkGrabberController,
+    team_config=firework_grabber_team,
     max_ap=142,
     enable_continuous_battle_feature=True
 )

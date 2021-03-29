@@ -1,6 +1,6 @@
 from _logging_config import script_logger_root
-from attacher import MumuAttacher, AdbAttacher
-from fsm import FgoFSMFacade, FgoFSMFacadeSelectSupport, FgoFSMFacadeBattleLoop
+from attacher import *
+from fsm import *
 import argparse
 import config
 
@@ -13,7 +13,8 @@ def _log_exception(ex: BaseException):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('attacher', help='Attacher type', choices=['adb', 'mumu'], default='mumu', type=str, nargs='?')
+    parser.add_argument('attacher', help='Attacher type', choices=['adb', 'mumu', 'mumu_v2', 'adb_v2'],
+                        default='mumu_v2', type=str, nargs='?')
     parser.add_argument('--schemas', help='Script execution schemas, one of "full" (from enter quest to exit quest),'
                                           '"support" (only perform support servant selection), or "battle" (only '
                                           'perform in-battle control)',
@@ -21,7 +22,7 @@ def main():
     parser.add_argument('--verbose', help='Print verbose log (debug level) to screen', action='store_true',
                         default=False)
     args = parser.parse_args()
-    attacher_dict = {'adb': AdbAttacher, 'mumu': MumuAttacher}
+    attacher_dict = {'adb': AdbAttacher, 'mumu': MumuAttacher, 'mumu_v2': MumuAttacherV2, 'adb_v2': AdbAttacherRootEnhanced}
     schemas_dict = {'full': FgoFSMFacade, 'support': FgoFSMFacadeSelectSupport, 'battle': FgoFSMFacadeBattleLoop}
     attacher_class = attacher_dict.get(args.attacher.lower(), None)
     schemas_class = schemas_dict.get(args.schemas.lower(), None)
@@ -33,8 +34,8 @@ def main():
         exit(1)
     script_logger_root.info('Using attacher class: %s' % str(attacher_class))
     script_logger_root.info('Using execution schemas: %s' % str(schemas_class))
-    script = schemas_class(attacher_class(), config.DEFAULT_CONFIG)
     try:
+        script = schemas_class(attacher_class(), config.DEFAULT_CONFIG)
         script.run()
     except KeyboardInterrupt as kb_int:
         script_logger_root.info('Keyboard interrupted')

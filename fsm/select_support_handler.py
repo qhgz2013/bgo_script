@@ -1,5 +1,5 @@
 from .state_handler import ConfigurableStateHandler, WaitFufuStateHandler
-from attacher import AbstractAttacher, MumuAttacher, AdbAttacher
+from attacher import *
 from matcher import SupportServantMatcher, SupportCraftEssenceMatcher
 import logging
 from typing import *
@@ -48,7 +48,8 @@ class SelectSupportHandler(ConfigurableStateHandler):
     _support_craft_essence_img2 = image_process.imread(CV_SUPPORT_CRAFT_ESSENCE_FILE2)
     _support_craft_essence_img_resized = None  # assigned in run-time, resized _support_max_break_img
     _support_max_break_img = image_process.imread(CV_SUPPORT_CRAFT_ESSENCE_MAX_BREAK_FILE)
-    _scroll_down_y_mapper = {MumuAttacher: SUPPORT_SCROLLDOWN_Y_MUMU, AdbAttacher: SUPPORT_SCROLLDOWN_Y_ADB}
+    _scroll_down_y_mapper = {MumuAttacher: SUPPORT_SCROLLDOWN_Y_MUMU, AdbAttacher: SUPPORT_SCROLLDOWN_Y_ADB,
+                             MumuAttacherV2: SUPPORT_SCROLLDOWN_Y_MUMU, AdbAttacherRootEnhanced: SUPPORT_SCROLLDOWN_Y_ADB}
 
     servant_matcher = SupportServantMatcher(CV_FGO_DATABASE_FILE)
     craft_essence_matcher = SupportCraftEssenceMatcher(CV_FGO_DATABASE_FILE)

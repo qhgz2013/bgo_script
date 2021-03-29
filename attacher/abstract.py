@@ -31,6 +31,7 @@ class HandleBasedAttacher(AbstractAttacher):
     HandleBasedAttacher implemented common handle (hWnd) based IPC interaction with specified handle through WINAPI
     """
     def __init__(self):
+        super(HandleBasedAttacher, self).__init__()
         self.handle = LazyValue(self.locate_handle)
 
     def locate_handle(self) -> int:

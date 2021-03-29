@@ -1,5 +1,9 @@
 __all__ = ['VERSION']
 
+import logging
+
+logger = logging.getLogger('bgo_script')
+
 
 def version_wrapper() -> str:
     from util import spawn_process
@@ -18,6 +22,5 @@ def version_wrapper() -> str:
 try:
     VERSION = version_wrapper()
 except Exception as ex:
-    from warnings import warn
-    warn(str(ex))
+    logger.warning(str(ex))
     VERSION = 'unknown'

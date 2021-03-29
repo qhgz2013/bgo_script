@@ -292,7 +292,7 @@ class BattleSequenceExecutor:
         if isinstance(to_servant_id, int):
             servant_pos = self._lookup_servant_position(to_servant_id)
             assert servant_pos < 3, 'Could not use skill to backup member'
-            self._submit_click_event(1, (TO_SERVANT_X[servant_pos], TO_SERVANT_Y))
+            self._submit_click_event(0.5, (TO_SERVANT_X[servant_pos], TO_SERVANT_Y))
         else:
             assert (isinstance(to_servant_id, tuple) or isinstance(to_servant_id, list)) and len(to_servant_id) == 2, \
                 'invalid type or length of input servant tuple (used for changing servants)'
@@ -303,7 +303,7 @@ class BattleSequenceExecutor:
             self._servants[servant_pos1] = self._servants[servant_pos2]
             self._servants[servant_pos2] = t
             # 选择第一个servant
-            self._submit_click_event(1, (CHANGE_SERVANT_XS[servant_pos1], CHANGE_SERVANT_Y))
+            self._submit_click_event(0.5, (CHANGE_SERVANT_XS[servant_pos1], CHANGE_SERVANT_Y))
             # 选择第二个servant
             self._submit_click_event(0.2, (CHANGE_SERVANT_XS[servant_pos2], CHANGE_SERVANT_Y))
             # 点确定
