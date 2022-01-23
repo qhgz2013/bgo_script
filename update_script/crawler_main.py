@@ -8,6 +8,7 @@ from io import StringIO, BytesIO
 from warnings import warn
 import os
 import sys
+from time import sleep
 
 
 def initialize_sql_table(sql_conn):
@@ -39,7 +40,8 @@ def initialize_sql_table(sql_conn):
     sql_conn.commit()
 
 
-def download_image_if_not_exists(sess, sql_cursor, image_key, image_text, url, *args, **kwargs):
+def download_image_if_not_exists(sess, sql_cursor, image_key, image_text, url, retry_count=5, retry_delay=3,
+                                 *args, **kwargs):
     assert image_key is not None and len(image_key) > 0, "image_key should not be empty"
     sql_cursor.execute("select count(*) from image where image_key = ?", (image_key,))
     if sql_cursor.fetchone()[0] == 0:
@@ -47,9 +49,15 @@ def download_image_if_not_exists(sess, sql_cursor, image_key, image_text, url, *
             print('image key', image_key, 'miss, downloading from', url)
         else:
             print('image key', image_key, '( name:', image_text, ') miss, downloading from', url)
-        request = sess.get(url, *args, **kwargs)
-        sql_cursor.execute("insert into image (image_key, name, image_data) values (?, ?, ?)",
-                           (image_key, image_text, request.content))
+        for _ in range(retry_count):  # retry: 5
+            try:
+                request = sess.get(url, *args, **kwargs)
+                sql_cursor.execute("insert into image (image_key, name, image_data) values (?, ?, ?)",
+                                   (image_key, image_text, request.content))
+                break
+            except Exception as e:
+                warn(f'Failed to download {url}: {e}')
+                sleep(retry_delay)
 
 
 def retrieve_servant_icons(sql_conn):
@@ -65,7 +73,7 @@ def retrieve_servant_icons(sql_conn):
     html = BeautifulSoup(sess.get(icon_url).text, features='html.parser')
     tables = html.find_all('table', {'class': 'wikitable'})
     ids = set()
-    np_type = {'arts': 3, 'quick': 2, 'buster': 1}
+    np_type = {'arts': 3, 'quick': 2, 'buster': 1, 'missing': None}
     for i, table in enumerate(tables):
         rows = table.find_all('tr')[1:]
         for j, row in enumerate(rows):
@@ -78,48 +86,59 @@ def retrieve_servant_icons(sql_conn):
             ids.add(servant_id)
             servant_html = BeautifulSoup(sess.get(servant_url).text, features='html.parser')
             # Retrieving servant icons (used for support servant auto selection)
-            icon_div = servant_html.find('div', {'class': 'tabbertab', 'title': 'Icons'})
+            icon_div = servant_html.find('div', {'id': 'gallery-2'})
             try:
                 np_html = servant_html.find('span', {'id': 'Noble_Phantasm'})
                 np_html = np_html.find_next('div', {'class': 'tabber'})
-                np_html = np_html.find_all('div', {'class': 'tabbertab'})
                 np = []
                 np_default = []
-                for item in np_html:
-                    np_table = item.find_all('table', {'class': 'wikitable'}, recursive=False)
-                    is_default = 'default' in item.attrs.get('title', '').lower()
-                    if len(np_table) == 0:
-                        continue
-                    try:
-                        np_img = np_table[-1].tbody.tr.th.a.img
-                        np_img = np_img.attrs['alt'].split('.')[0].lower()
-                        if is_default:
-                            np_default.append(np_type[np_img])
-                        else:
-                            np.append(np_type[np_img])
-                    except AttributeError:
-                        continue
-                    except KeyError as e:
-                        print(f'Exception for parsing servant {servant_id} np: {e}')
-                        continue
+
+                def _match_tabber_recursive(root_node, default=False):
+                    tab_content = root_node.find_all('div', {'class': 'wds-tab__content'}, recursive=False)
+                    tab_label = root_node.find('div', {'class': 'wds-tabs__wrapper'}, recursive=False).find_all('li')
+                    # tab_label = root_node.find_all('li', {'class': 'wds-tabs__tab'}, recursive=False)
+                    tab_label = [''.join(x.strings) for x in tab_label]
+                    for label, content in zip(tab_label, tab_content):
+                        tabber_inner = content.find('div', {'class': 'tabber'})
+                        if tabber_inner is not None:
+                            _match_tabber_recursive(tabber_inner, default)
+                            # return
+                        np_table = content.find_all('table', {'class': 'wikitable'}, recursive=False)
+                        is_default = 'default' in label.lower()
+                        if len(np_table) == 0:
+                            continue
+                        try:
+                            np_img = np_table[-1].tbody.tr.th.a.img
+                            np_img = np_img.attrs['alt'].split('.')[0].lower()
+                            if is_default:
+                                np_default.append(np_type[np_img])
+                            else:
+                                np.append(np_type[np_img])
+                        except AttributeError:
+                            continue
+                        except KeyError as e:
+                            warn(f'Exception for parsing servant {servant_id} np: {e}')
+                            continue
+
+                _match_tabber_recursive(np_html)
                 if len(np) == 0 and len(np_default) == 0:
-                    print(f'Could not find NP for servant {servant_id}')
+                    warn(f'Could not find NP for servant {servant_id}')
                     np = None
                 else:
                     if len(np_default) != 0:
                         first_type = np_default[0]
                         for ii in range(1, len(np_default)):
                             if np_default[ii] != first_type:
-                                print(f'Mismatch NP type for servant {servant_id}')
+                                warn(f'Mismatch NP type for servant {servant_id}')
                         np = first_type
                     else:
                         first_type = np[0]
                         for ii in range(1, len(np)):
                             if np[ii] != first_type:
-                                print(f'Mismatch NP type for servant {servant_id}')
+                                warn(f'Mismatch NP type for servant {servant_id}')
                         np = first_type
             except AttributeError:
-                print(f'Could not find NP for servant {servant_id}')
+                warn(f'Could not find NP for servant {servant_id}')
                 np = None
             if np is not None:
                 cursor.execute("insert into servant_np(id, np_type) values (?, ?)", (servant_id, np))
@@ -146,12 +165,14 @@ def retrieve_servant_icons(sql_conn):
                 download_image_if_not_exists(sess, cursor, img_key, text, img_src)
                 cursor.execute("insert into servant_icon(id, image_key) values (?, ?)", (servant_id, img_key))
             # Retrieving servant in-battle command card sprites (used for command card recognition)
-            icon_div = servant_html.find('div', {'class': 'tabbertab', 'title': 'Sprites'})
-            icon_div = icon_div or servant_html.find('div', {'class': 'tabbertab', 'title': 'Sprite'})
+            # icon_div = servant_html.find('div', {'class': 'tabbertab', 'title': 'Sprites'})
+            # icon_div = icon_div or servant_html.find('div', {'class': 'tabbertab', 'title': 'Sprite'})
+            icon_div = servant_html.find('div', {'id': 'gallery-3'})
             if icon_div is None:
                 warn('Could not retrieve sprites from HTML of servant #%d' % servant_id, RuntimeWarning)
                 continue
             icon_items = icon_div.find_all('div', {'class': 'wikia-gallery-item'})
+            has_command_card = False
             for item in icon_items:
                 text = str(item.find('div', {'class': 'lightbox-caption'}).string)
                 img = item.find('img')
@@ -163,9 +184,12 @@ def retrieve_servant_icons(sql_conn):
                 img_src = re.sub(scale_down_ptn, '', img_src)
                 # skips portrait and without-frame images
                 if 'command card' in text_lower:
+                    has_command_card = True
                     download_image_if_not_exists(sess, cursor, img_key, text, img_src)
                     cursor.execute("insert into servant_command_card_icon(id, image_key) values (?, ?)",
                                    (servant_id, img_key))
+            if not has_command_card:
+                warn('No command card found for servant #%d' % servant_id, RuntimeWarning)
     cursor.close()
     sql_conn.commit()
 
@@ -202,23 +226,26 @@ def retrieve_craft_essence_icons(sql_conn):
             elif line.startswith('name_link='):
                 name_link[ids_rev_mapper[cur_id]] = line[10:]
     name = name_link
+    retry_cnt = 5
     for i in range(data_frame.shape[0]):
         img_key = name_link[i]
         html_url = f'https://fgo.wiki/w/{img_key}'
-        try:
-            print(f'retrieving {i+1}/{data_frame.shape[0]} {html_url}')
-            resp = sess.get(html_url)
-            assert resp.ok, f'HTTP request failed with status code {resp.status_code}'
-            html = BeautifulSoup(resp.text, features='html.parser').find('td', attrs={'id': f'CEGraph-{ids[i]}'})
-            img_attrs = html.find('img').attrs
-            # original image is not used here, too big!
-            # candidate_src = img_attrs['data-srcset']
-            # img_url = 'https://fgo.wiki' + re.search(craft_essence_url_pattern, candidate_src).group(1)
-            img_url = 'https://fgo.wiki' + img_attrs['data-src']
-            download_image_if_not_exists(sess, cursor, img_key, name[i], img_url)
-            cursor.execute("insert into craft_essence_icon(id, image_key) values (?, ?)", (int(ids[i]), img_key))
-        except Exception as ex:
-            print(f'Failed to download {name[i]} (id: {ids[i]}): {ex}')
+        for j in range(retry_cnt):
+            try:
+                print(f'retrieving {i+1}/{data_frame.shape[0]} {html_url}')
+                resp = sess.get(html_url)
+                assert resp.ok, f'HTTP request failed with status code {resp.status_code}'
+                html = BeautifulSoup(resp.text, features='html.parser').find('td', attrs={'id': f'CEGraph-{ids[i]}'})
+                img_attrs = html.find('img').attrs
+                # original image is not used here, too big!
+                # candidate_src = img_attrs['data-srcset']
+                # img_url = 'https://fgo.wiki' + re.search(craft_essence_url_pattern, candidate_src).group(1)
+                img_url = 'https://fgo.wiki' + img_attrs['data-src']
+                download_image_if_not_exists(sess, cursor, img_key, name[i], img_url)
+                cursor.execute("insert into craft_essence_icon(id, image_key) values (?, ?)", (int(ids[i]), img_key))
+                break
+            except Exception as ex:
+                warn(f'Failed to download {name[i]} (id: {ids[i]}): {ex}, retrying {j+1}/{retry_cnt}')
     cursor.close()
     sql_conn.commit()
 
@@ -267,7 +294,7 @@ def main():
     args = parser.parse_args()
     conn = sqlite3.connect(args.output_db_path)
     initialize_sql_table(conn)
-    # retrieve_servant_icons(conn)
+    retrieve_servant_icons(conn)
     retrieve_craft_essence_icons(conn)
     pre_compute_sift_features(conn)
     conn.close()
