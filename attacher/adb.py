@@ -48,7 +48,7 @@ class AdbScreenCaptureSolution(AbstractAttacher, ABC):
 
 
 class AdbScreenCaptureNativeScreencap(AdbScreenCaptureSolution, ABC):
-    def __init__(self, adb_executable: str):
+    def __init__(self, adb_executable: str, **kwargs):
         self._adb = adb_executable
         self._resolution = get_device_resolution(AdbScreenCaptureNativeScreencap.get_screenshot, self)
 
@@ -145,9 +145,10 @@ class AdbScreenCaptureFFMpegStream(AdbScreenCaptureNativeScreencap, ABC):
 
 
 class AdbAdaptiveScreenCapture(AdbScreenCaptureSolution, ABC):
-    def __init__(self, adb_path: str):
+    def __init__(self, adb_path: str, **kwargs):
         ffmpeg_path = find_path('ffmpeg.exe')
-        if ffmpeg_path is None or not os.path.isfile(ffmpeg_path):
+        disable_ffmpeg = kwargs.pop('disable_ffmpeg', False)
+        if disable_ffmpeg or ffmpeg_path is None or not os.path.isfile(ffmpeg_path):
             self._forwarder = AdbScreenCaptureNativeScreencap(adb_path)
         else:
             self._forwarder = AdbScreenCaptureFFMpegStream(adb_path, ffmpeg_path)
@@ -167,7 +168,7 @@ class AdbAttacher(AbstractAttacher):
     __warn_func_disabled = False
     _screen_orientation_ptn = re.compile(r'\s*SurfaceOrientation:\s*(\d+)')
 
-    def __init__(self, adb_executable: Optional[str] = None):
+    def __init__(self, adb_executable: Optional[str] = None, disable_ffmpeg: bool = False):
         self._adb = None
         if adb_executable is not None:
             assert os.path.isfile(adb_executable), 'Adb (Android Debug Bridge) executable not exists'
@@ -180,7 +181,7 @@ class AdbAttacher(AbstractAttacher):
         spawn_process([self._adb, 'start-server'])
         self._hook_after_sever_started()
         self._adb_shell = AdbShellWrapper(self._adb)
-        self._screen_cap_adapter = AdbAdaptiveScreenCapture(self._adb)
+        self._screen_cap_adapter = AdbAdaptiveScreenCapture(self._adb, disable_ffmpeg=disable_ffmpeg)
         thd = threading.Thread(target=self._shutdown_adb_server, daemon=False, name='Adb server shutdown thread')
         thd.start()
         self._sample_screenshot = None
@@ -275,8 +276,8 @@ class EventID(IntEnum):
 class AdbAttacherRootEnhanced(AdbAttacher):
     _landscape_rotation_ptn = re.compile(r'\s*mLandscapeRotation=(?:(\d+)|(?:ROTATION_(\d+)))')
 
-    def __init__(self, adb_executable: Optional[str] = None):
-        super().__init__(adb_executable)
+    def __init__(self, adb_executable: Optional[str] = None, disable_ffmpeg: bool = False):
+        super().__init__(adb_executable, disable_ffmpeg)
         self._root_available = LazyValue(self._get_root)
         self._input_device = LazyValue(self._get_input_device)
         self._landscape_rotation = LazyValue(self._get_device_landscape_rotation)

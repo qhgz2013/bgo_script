@@ -21,6 +21,8 @@ def main():
                         choices=['full', 'support', 'battle'], default='full', required=False)
     parser.add_argument('--verbose', help='Print verbose log (debug level) to screen', action='store_true',
                         default=False)
+    parser.add_argument('--disable_ffmpeg', help='Disable FFMpeg to streaming screen (enable when process speed '
+                        'cannot keep up', action='store_true', default=False)
     args = parser.parse_args()
     attacher_dict = {'adb': AdbAttacher, 'mumu': MumuAttacher, 'mumu_v2': MumuAttacherV2, 'adb_v2': AdbAttacherRootEnhanced}
     schemas_dict = {'full': FgoFSMFacade, 'support': FgoFSMFacadeSelectSupport, 'battle': FgoFSMFacadeBattleLoop}
@@ -35,7 +37,10 @@ def main():
     script_logger_root.info('Using attacher class: %s' % str(attacher_class))
     script_logger_root.info('Using execution schemas: %s' % str(schemas_class))
     try:
-        script = schemas_class(attacher_class(), config.DEFAULT_CONFIG)
+        attacher_kwargs = {}
+        if args.disable_ffmpeg:
+            attacher_kwargs['disable_ffmpeg'] = True
+        script = schemas_class(attacher_class(**attacher_kwargs), config.DEFAULT_CONFIG)
         script.run()
     except KeyboardInterrupt as kb_int:
         script_logger_root.info('Keyboard interrupted')
