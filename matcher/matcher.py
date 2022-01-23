@@ -2,11 +2,13 @@ import sqlite3
 import os
 import numpy as np
 import cv2
-from util import pickle_loads
+from util import pickle_loads, pickle_load, pickle_dump, RWLock
 from cv_positioning import *
 import image_process
 import logging
 from typing import *
+import threading
+from time import time, sleep
 # import matplotlib.pyplot as plt
 
 SQL_PATH = CV_FGO_DATABASE_FILE
@@ -166,8 +168,42 @@ class SupportCraftEssenceMatcher(AbstractFgoMaterialMatcher):
         self.sift_detector = image_process.sift_class.create()
         self.matcher = cv2.DescriptorMatcher_create(cv2.DescriptorMatcher_FLANNBASED)
         # self.matcher = cv2.BFMatcher()
-        self.image_cacher = image_process.ImageHashCacher(image_process.perception_hash,
-                                                          image_process.mean_gray_diff_err)
+        if CV_ENABLE_SUPPORT_CRAFT_ESSENCE_CACHE and os.path.isfile(CV_SUPPORT_CRAFT_ESSENCE_CACHE_FILE_PATH):
+            with open(CV_SUPPORT_CRAFT_ESSENCE_CACHE_FILE_PATH, 'rb') as f:
+                self.image_cacher = pickle_load(f)
+                logger.info('Loaded previously saved support craft essence cache')
+        else:
+            self.image_cacher = image_process.ImageHashCacher(image_process.perception_hash,
+                                                              image_process.mean_gray_diff_err)
+        # for async dumping cache to file
+        self._image_cacher_dump_rwlock = RWLock()
+        self._image_cacher_dump_ts = None
+        self._image_cacher_dump_event = threading.Event()
+        if CV_ENABLE_SUPPORT_CRAFT_ESSENCE_CACHE:
+            self._image_cacher_dump_thd = threading.Thread(target=self._dump_image_cache, daemon=False)
+            self._image_cacher_dump_thd.start()
+
+    def _dump_image_cache(self):
+        loop_duration = 0.2
+        while threading.main_thread().is_alive():
+            # wait until _image_cacher_dump_event is set
+            if not self._image_cacher_dump_event.wait(loop_duration):
+                continue
+            # wait until current time satisfies _image_cacher_dump_ts (delayed writing)
+            if time() < self._image_cacher_dump_ts:
+                sleep(loop_duration)
+                continue
+            # write to cache
+            with self._image_cacher_dump_rwlock.w_locked():
+                with open(CV_SUPPORT_CRAFT_ESSENCE_CACHE_FILE_PATH, 'wb') as f:
+                    pickle_dump(self.image_cacher, f)
+                logger.info('Support craft essence cache dumped')
+                self._image_cacher_dump_event.clear()
+        # dump immediately after main thread exited
+        with self._image_cacher_dump_rwlock.w_locked():
+            if self._image_cacher_dump_event.is_set():
+                with open(CV_SUPPORT_CRAFT_ESSENCE_CACHE_FILE_PATH, 'wb') as f:
+                    pickle_dump(self.image_cacher, f)
 
     def match(self, img_arr: np.ndarray) -> int:
         cursor = self.sqlite_connection.cursor()
@@ -175,11 +211,12 @@ class SupportCraftEssenceMatcher(AbstractFgoMaterialMatcher):
         img_arr_resized = image_process.resize(img_arr, CV_SUPPORT_SERVANT_IMG_SIZE[1], CV_SUPPORT_SERVANT_IMG_SIZE[0])
         craft_essence_part = img_arr_resized[CV_SUPPORT_SERVANT_SPLIT_Y:-3, 2:-2, :]
         # CACHE ACCESS
-        cache_key = self.image_cacher.get(craft_essence_part, None)
-        if cache_key is not None:
-            return cache_key
-        if craft_essence_part in self.image_cacher:
-            return self.image_cacher[craft_essence_part]
+        with self._image_cacher_dump_rwlock.r_locked():
+            cache_key = self.image_cacher.get(craft_essence_part, None)
+            if cache_key is not None:
+                return cache_key
+            # if craft_essence_part in self.image_cacher:
+            #     return self.image_cacher[craft_essence_part]
         if self.cached_icon_meta is None:
             cursor.execute("select id from craft_essence_icon order by id desc limit 1")
             newest_craft_essence_id = cursor.fetchone()[0]
@@ -211,5 +248,8 @@ class SupportCraftEssenceMatcher(AbstractFgoMaterialMatcher):
                 max_craft_essence_id = craft_essence_id
                 logger.debug('craft_essence_id = %d, sift_matches = %d' % (craft_essence_id, len_good_matches))
         cursor.close()
-        self.image_cacher[craft_essence_part] = max_craft_essence_id
+        with self._image_cacher_dump_rwlock.w_locked():
+            self.image_cacher[craft_essence_part] = max_craft_essence_id
+            self._image_cacher_dump_ts = time() + 60  # save cache after 60 secs
+            self._image_cacher_dump_event.set()
         return max_craft_essence_id

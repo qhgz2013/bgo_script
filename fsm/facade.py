@@ -59,7 +59,7 @@ class FgoFSMFacade(FgoFSMFacadeBattleLoop):
         self.executor.add_state_handler(s.STATE_SELECT_TEAM, DirectStateForwarder(s.STATE_APPLY_TEAM_CONFIG))
         self.executor.add_state_handler(s.STATE_APPLY_TEAM_CONFIG,
                                         SingleClickHandler(attacher, ENTER_QUEST_BUTTON_X, ENTER_QUEST_BUTTON_Y,
-                                                           s.STATE_ENTER_QUEST))
+                                                           s.STATE_ENTER_QUEST, t_before_click=1))
         # In-battle control states are omitted here, post-battle actions are following:
         self.executor.add_state_handler(s.STATE_EXIT_QUEST, ExitQuestHandler(attacher, s.STATE_FRIEND_UI_CHECK))
         self.executor.add_state_handler(s.STATE_FRIEND_UI_CHECK,

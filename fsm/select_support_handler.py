@@ -294,6 +294,10 @@ class SelectSupportHandler(ConfigurableStateHandler):
                         if skill_lvl != 10:
                             logger.warning(f'Invalid 2 digits skill level: expected 10, but got {skill_lvl}, set to 10')
                             skill_lvl = 10
+                    elif len(digits) == 0:
+                        skill_lvl = None
+                        logger.warning(f'Failed to detect skill level: no digit found (this mainly because of the low'
+                                       f' resolution of screenshot)')
                     else:
                         skill_lvl = digits[0]
                         if skill_lvl == 0:
