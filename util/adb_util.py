@@ -61,7 +61,7 @@ class AdbShellWrapper:
                     continue
                 if self._session_started.is_set():
                     if data != self._boundary:
-                        logger.warning('Adb shell session error: unexpected output "%s", ignored.', data)
+                        # logger.warning('Adb shell session error: unexpected output "%s", ignored.', data)
                         continue
                     self._session_started.clear()
                     if not self._wait_session:
