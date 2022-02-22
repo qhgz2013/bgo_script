@@ -1,5 +1,5 @@
 from .state_handler import ConfigurableStateHandler, WaitFufuStateHandler
-from attacher import AbstractAttacher
+from attacher import CombinedAttacher
 from typing import *
 from cv_positioning import *
 from .fgo_state import FgoState
@@ -15,7 +15,7 @@ logger = logging.getLogger('bgo_script.fsm')
 
 
 class EnterQuestHandler(ConfigurableStateHandler):
-    def __init__(self, attacher: AbstractAttacher, forward_state: FgoState, cfg: ScriptConfig):
+    def __init__(self, attacher: CombinedAttacher, forward_state: FgoState, cfg: ScriptConfig):
         super().__init__(cfg)
         self.attacher = attacher
         self.forward_state = forward_state
@@ -29,7 +29,7 @@ class EnterQuestHandler(ConfigurableStateHandler):
 class WaitAttackOrExitQuestHandler(ConfigurableStateHandler):
     _attack_button_anchor = image_process.imread(CV_ATTACK_BUTTON_ANCHOR)
 
-    def __init__(self, attacher: AbstractAttacher, cfg: ScriptConfig):
+    def __init__(self, attacher: CombinedAttacher, cfg: ScriptConfig):
         super().__init__(cfg)
         self.attacher = attacher
 
@@ -74,7 +74,7 @@ class WaitAttackOrExitQuestHandler(ConfigurableStateHandler):
 class BattleLoopAttackHandler(ConfigurableStateHandler):
     # _battle_digits = image_process.read_digit_label_dir(CV_BATTLE_DIGIT_DIRECTORY)
 
-    def __init__(self, attacher: AbstractAttacher, cfg: ScriptConfig):
+    def __init__(self, attacher: CombinedAttacher, cfg: ScriptConfig):
         super().__init__(cfg)
         self.attacher = attacher
         self._digit_recognizer = DigitRecognizer(CV_BATTLE_DIGIT_DIRECTORY)

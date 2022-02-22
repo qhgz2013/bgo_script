@@ -1,5 +1,5 @@
 from .state_handler import StateHandler, WaitFufuStateHandler, ConfigurableStateHandler
-from attacher import AbstractAttacher
+from attacher import CombinedAttacher
 from click_positioning import *
 from time import sleep
 import image_process
@@ -17,7 +17,7 @@ def _imread_to_screen_size(path):
 
 
 class ExitQuestHandler(StateHandler):
-    def __init__(self, attacher: AbstractAttacher, forward_state: FgoState):
+    def __init__(self, attacher: CombinedAttacher, forward_state: FgoState):
         self.attacher = attacher
         self.forward_state = forward_state
 
@@ -31,7 +31,7 @@ class ExitQuestHandler(StateHandler):
 class FriendUIHandler(StateHandler):
     _support_anchor = _imread_to_screen_size(CV_REQUEST_SUPPORT_UI_FILE)
 
-    def __init__(self, attacher: AbstractAttacher, forward_state: FgoState):
+    def __init__(self, attacher: CombinedAttacher, forward_state: FgoState):
         self.attacher = attacher
         self.forward_state = forward_state
 
@@ -55,7 +55,7 @@ class FriendUIHandler(StateHandler):
 class ContinuousBattleHandler(ConfigurableStateHandler):
     _anchor = _imread_to_screen_size(CV_CONTINUOUS_BATTLE_UI_FILE)
 
-    def __init__(self, attacher: AbstractAttacher, forward_state_pos: FgoState, forward_state_neg: FgoState,
+    def __init__(self, attacher: CombinedAttacher, forward_state_pos: FgoState, forward_state_neg: FgoState,
                  cfg: ScriptConfig):
         super().__init__(cfg)
         self.attacher = attacher

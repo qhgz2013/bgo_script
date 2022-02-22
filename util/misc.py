@@ -1,9 +1,14 @@
 import subprocess
 import locale
+from types import TracebackType
 from typing import *
+from typing import IO
 import logging
 import os
 import sys
+from io import BytesIO
+
+__all__ = ['spawn_process_raw', 'spawn_process', 'find_path', 'SingletonMeta', 'FIFOBuffer']
 
 encodings = [locale.getpreferredencoding(), 'utf8', 'ansi', 'latin-1']
 logger = logging.getLogger('bgo_script.util')
@@ -60,3 +65,94 @@ def find_path(file: str) -> Optional[str]:
         candidate_file = os.path.abspath(os.path.join(path, file))
         if os.path.isfile(candidate_file):
             return candidate_file
+
+
+class SingletonMeta(type):
+    """A singleton meta class"""
+
+    _instances = {}
+
+    def __call__(cls, *args, **kwargs):
+        if cls not in cls._instances:
+            cls._instances[cls] = super(SingletonMeta, cls).__call__(*args, **kwargs)
+        return cls._instances[cls]
+
+    def __remove_instance__(cls):
+        del cls._instances[cls]
+
+
+class FIFOBuffer(IO[bytes]):
+    def close(self) -> None:
+        self._buf.close()
+
+    def fileno(self) -> int:
+        return self._buf.fileno()
+
+    def flush(self) -> None:
+        self._buf.flush()
+
+    def isatty(self) -> bool:
+        return self._buf.isatty()
+
+    def read(self, n: int = -1) -> bytes:
+        return self._buf.read(n)
+
+    def readable(self) -> bool:
+        return self._buf.readable()
+
+    def readline(self, limit: int = -1) -> bytes:
+        return self._buf.readline(limit)
+
+    def readlines(self, hint: int = -1) -> List[bytes]:
+        return self._buf.readlines(hint)
+
+    def seek(self, offset: int, whence: int = 0) -> int:
+        raise IOError
+
+    def seekable(self) -> bool:
+        return False
+
+    def tell(self) -> int:
+        return 0
+
+    def truncate(self, size: Optional[int] = None) -> int:
+        raise IOError
+
+    def writable(self) -> bool:
+        return self._buf.writable()
+
+    def writelines(self, lines: Iterable[bytes]) -> None:
+        for line in lines:
+            self.write(line)
+
+    def __next__(self) -> bytes:
+        return self.readline()
+
+    def __iter__(self) -> Iterator[bytes]:
+        return self
+
+    def __enter__(self) -> IO[bytes]:
+        return self
+
+    def __exit__(self, t: Optional[Type[BaseException]], value: Optional[BaseException],
+                 traceback: Optional[TracebackType]) -> Optional[bool]:
+        self.close()
+        return None
+
+    def __init__(self, gc_size: int = 0x1e00000):
+        self._buf = BytesIO()
+        self._gc_size = gc_size
+
+    def write(self, s: bytes) -> int:
+        read_pos = self._buf.tell()
+        if read_pos > self._gc_size:
+            new_buffer = BytesIO()
+            new_buffer.write(self._buf.read())
+            new_buffer.seek(0)
+            self._buf.close()
+            self._buf = new_buffer
+            read_pos = 0
+        self._buf.seek(0, 2)
+        bytes_wrote = self._buf.write(s)
+        self._buf.seek(read_pos)
+        return bytes_wrote

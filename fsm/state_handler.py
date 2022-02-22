@@ -3,7 +3,7 @@ __all__ = ['StateHandler', 'ConfigurableStateHandler', 'WaitFufuStateHandler', '
 from abc import ABC
 from bgo_game import ScriptConfig
 from .fgo_state import FgoState
-from attacher import AbstractAttacher
+from attacher import CombinedAttacher
 from time import sleep, time
 import logging
 from cv_positioning import *
@@ -31,7 +31,7 @@ class DirectStateForwarder(StateHandler):
 
 
 class WaitFufuStateHandler(StateHandler):
-    def __init__(self, attacher: AbstractAttacher, forward_state: FgoState):
+    def __init__(self, attacher: CombinedAttacher, forward_state: FgoState):
         self.attacher = attacher
         self.forward_state = forward_state
 
@@ -51,7 +51,7 @@ class WaitFufuStateHandler(StateHandler):
 
 
 class SingleClickHandler(StateHandler):
-    def __init__(self, attacher: AbstractAttacher, x: float, y: float, next_state: FgoState, t_before_click: float = 0,
+    def __init__(self, attacher: CombinedAttacher, x: float, y: float, next_state: FgoState, t_before_click: float = 0,
                  t_after_click: float = 1):
         self.attacher = attacher
         self.x = x
@@ -70,7 +70,7 @@ class SingleClickHandler(StateHandler):
 
 
 class SingleClickAndWaitFufuHandler(StateHandler):
-    def __init__(self, attacher: AbstractAttacher, x: float, y: float, next_state: FgoState, t_before_click: float = 0):
+    def __init__(self, attacher: CombinedAttacher, x: float, y: float, next_state: FgoState, t_before_click: float = 0):
         self.attacher = attacher
         self._click_handler = SingleClickHandler(attacher, x, y, next_state, t_before_click)
 

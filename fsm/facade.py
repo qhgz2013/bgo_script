@@ -2,7 +2,7 @@ from .executor import FSMExecutor
 from .fgo_state import FgoState
 from .state_handler import DirectStateForwarder, SingleClickHandler
 from .select_quest_handler import SelectQuestHandler
-from attacher import AbstractAttacher
+from attacher import CombinedAttacher
 from .select_support_handler import SelectSupportHandler
 from .eat_apple_handler import EatAppleHandler
 from click_positioning import *
@@ -16,8 +16,9 @@ logger = logging.getLogger('bgo_script.fsm')
 s = FgoState
 
 
+# todo: make facade as part of state handler
 class FgoFSMFacadeAbstract:
-    def __init__(self, attacher: AbstractAttacher, cfg: ScriptConfig):
+    def __init__(self, attacher: CombinedAttacher, cfg: ScriptConfig):
         logger.info('Fate / Grand Order Auto Battle Controller')
         logger.info('* Version: %s' % VERSION)
         logger.info('* This script is for academic research only, commercial usage is strictly prohibited!')
@@ -32,7 +33,7 @@ class FgoFSMFacadeAbstract:
 
 # Only handles in-battle control, terminated when exiting quest
 class FgoFSMFacadeBattleLoop(FgoFSMFacadeAbstract):
-    def __init__(self, attacher: AbstractAttacher, cfg: ScriptConfig):
+    def __init__(self, attacher: CombinedAttacher, cfg: ScriptConfig):
         super().__init__(attacher, cfg)
         self.executor.add_state_handler(s.STATE_BEGIN, DirectStateForwarder(s.STATE_ENTER_QUEST))
         self.executor.add_state_handler(s.STATE_ENTER_QUEST,
@@ -44,7 +45,7 @@ class FgoFSMFacadeBattleLoop(FgoFSMFacadeAbstract):
 
 
 class FgoFSMFacade(FgoFSMFacadeBattleLoop):
-    def __init__(self, attacher: AbstractAttacher, cfg: ScriptConfig):
+    def __init__(self, attacher: CombinedAttacher, cfg: ScriptConfig):
         super().__init__(attacher, cfg)
         # remove single in-battle control transition
         self.executor.remove_state_handler(s.STATE_BEGIN)
@@ -74,7 +75,7 @@ class FgoFSMFacade(FgoFSMFacadeBattleLoop):
 
 
 class FgoFSMFacadeSelectSupport(FgoFSMFacadeAbstract):
-    def __init__(self, attacher: AbstractAttacher, cfg: ScriptConfig):
+    def __init__(self, attacher: CombinedAttacher, cfg: ScriptConfig):
         super().__init__(attacher, cfg)
         self.executor.add_state_handler(s.STATE_BEGIN, DirectStateForwarder(s.STATE_SELECT_SUPPORT))
         self.executor.add_state_handler(s.STATE_SELECT_SUPPORT, SelectSupportHandler(attacher, s.STATE_FINISH, cfg))

@@ -13,34 +13,42 @@ def _log_exception(ex: BaseException):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('attacher', help='Attacher type', choices=['adb', 'mumu', 'mumu_v2', 'adb_v2'],
+    parser.add_argument('attacher', help='Attacher type', choices=['adb', 'mumu', 'mumu_root', 'adb_root'],
                         default='mumu_v2', type=str, nargs='?')
+    parser.add_argument('--capturer', help='Capturer type', choices=['adb', 'mumu', 'default'], default='default',
+                        type=str)
     parser.add_argument('--schemas', help='Script execution schemas, one of "full" (from enter quest to exit quest),'
                                           '"support" (only perform support servant selection), or "battle" (only '
                                           'perform in-battle control)',
                         choices=['full', 'support', 'battle'], default='full', required=False)
     parser.add_argument('--verbose', help='Print verbose log (debug level) to screen', action='store_true',
                         default=False)
-    parser.add_argument('--disable_ffmpeg', help='Disable FFMpeg to streaming screen (enable when process speed '
-                        'cannot keep up', action='store_true', default=False)
     args = parser.parse_args()
-    attacher_dict = {'adb': AdbAttacher, 'mumu': MumuAttacher, 'mumu_v2': MumuAttacherV2, 'adb_v2': AdbAttacherRootEnhanced}
+    attacher_dict = {'adb': ADBAttacher, 'mumu': MumuAttacher, 'mumu_root': MumuRootAttacher,
+                     'adb_root': ADBRootAttacher}
+    default_capturer_dict = {'adb': ADBScreenrecordCapturer, 'adb_root': ADBScreenrecordCapturer,
+                             'mumu': MumuScreenCapturer, 'mumu_root': MumuScreenCapturer}
+    capturer_dict = {'adb': ADBScreenrecordCapturer, 'mumu': MumuScreenCapturer}
     schemas_dict = {'full': FgoFSMFacade, 'support': FgoFSMFacadeSelectSupport, 'battle': FgoFSMFacadeBattleLoop}
     attacher_class = attacher_dict.get(args.attacher.lower(), None)
     schemas_class = schemas_dict.get(args.schemas.lower(), None)
+    capturer = args.capturer.lower()
+    capturer_class = default_capturer_dict.get(args.attacher, None) if capturer == 'default' \
+        else capturer_dict.get(capturer, None)
     if attacher_class is None:
-        script_logger_root.critical('Unable to find attacher "%s"' % args.attacher)
+        script_logger_root.critical(f'Unable to find attacher "{args.attacher}"')
         exit(1)
     if schemas_class is None:
-        script_logger_root.critical('Unable to find execution schemas "%s"' % args.schemas)
+        script_logger_root.critical(f'Unable to find execution schemas "{args.schemas}"')
         exit(1)
-    script_logger_root.info('Using attacher class: %s' % str(attacher_class))
-    script_logger_root.info('Using execution schemas: %s' % str(schemas_class))
+    if capturer_class is None:
+        script_logger_root.critical(f'Unable to find capturer "{capturer}"')
+        exit(1)
+    script_logger_root.info(f'Using attacher class: {attacher_class!r}')
+    script_logger_root.info(f'Using execution schemas: {schemas_class!r}')
+    script_logger_root.info(f'Using capturer: {capturer_class!r}')
     try:
-        attacher_kwargs = {}
-        if args.disable_ffmpeg:
-            attacher_kwargs['disable_ffmpeg'] = True
-        script = schemas_class(attacher_class(**attacher_kwargs), config.DEFAULT_CONFIG)
+        script = schemas_class(CombinedAttacher(capturer_class(), attacher_class()), config.DEFAULT_CONFIG)
         script.run()
     except KeyboardInterrupt as kb_int:
         script_logger_root.info('Keyboard interrupted')

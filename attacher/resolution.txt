@@ -1,0 +1,3 @@
+        Height  Width   SurfaceOrientation  LandscapeOrientation
+Mumu    1080    1920    0                   0
+Mi      2340    1080    0                   1

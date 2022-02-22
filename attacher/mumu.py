@@ -1,99 +1,145 @@
-from . import HandleBasedAttacher
-from .adb import AdbAttacherRootEnhanced, EventType, EventID
+# attacher.mumu
+# Mumu simulator (blue one) related implementation.
+# Ver 1.0
+# Changelog:
+# 1.0: Remove outdated WinAPI based attacher and simplify implementation.
+from typing import *
 import win32gui
+import win32ui
 import win32con
 import numpy as np
+from logging import getLogger
+from .base import ScreenCapturer
 from time import sleep
-from typing import *
-from util import LazyValue, spawn_process_raw
-from winapi import is_running_as_admin
-import logging
+from util import LazyValue
+from .adb_util import ADBServer, spawn
+from .adb import EventID, EventType, ADBRootAttacher, ADBAttacher
 
-logger = logging.getLogger('bgo_script.attacher')
+__all__ = ['WinAPIScreenCapturer', 'MumuScreenCapturer', 'MumuADBServer', 'MumuAttacher', 'MumuRootAttacher']
+
+logger = getLogger('bgo_script.attacher')
 
 
-class MumuAttacher(HandleBasedAttacher):
-    __warned_minimize = False
-    __warned_deprecated_v1_attacher = False
+def locate_mumu_simulator_handle() -> Tuple[int, int]:
+    """Locate Mumu simulator window, returns a tuple of (host_handle, player_handle)."""
+    # SPY++:
+    # Qt5QWindowIcon, MuMu模拟器 or Game name
+    # |- Qt5QWindowIcon, NemuPlayer
+    #    |- canvasWin, canvas
+    host_handle = win32gui.FindWindow('Qt5QWindowIcon', None)
+    player_handle = 0
+    while host_handle > 0:
+        player_handle = win32gui.FindWindowEx(host_handle, 0, 'Qt5QWindowIcon', 'NemuPlayer')
+        if player_handle > 0:
+            break
+        else:
+            host_handle = win32gui.FindWindowEx(0, host_handle, 'Qt5QWindowIcon', None)
+    if player_handle <= 0:
+        raise RuntimeError('Could not find child handle of Mumu simulator: NemuPlayer')
+    logger.info(f'Located Mumu simulator handle: host: {host_handle:#x}, player: {player_handle:#x}')
+    return host_handle, player_handle
 
+
+def get_screenshot_winapi_impl(handle: int) -> np.ndarray:
+    left, top, right, bottom = win32gui.GetWindowRect(handle)
+    window_height = bottom - top
+    window_width = right - left
+    handle_dc = win32gui.GetWindowDC(handle)
+    new_dc = win32ui.CreateDCFromHandle(handle_dc)
+    compat_dc = new_dc.CreateCompatibleDC()
+    new_bitmap = win32ui.CreateBitmap()
+    new_bitmap.CreateCompatibleBitmap(new_dc, window_width, window_height)
+    compat_dc.SelectObject(new_bitmap)
+    compat_dc.BitBlt((0, 0), (window_width, window_height), new_dc, (0, 0), win32con.SRCCOPY)
+    arr = new_bitmap.GetBitmapBits(True)
+    arr = np.fromstring(arr, dtype='uint8').reshape([window_height, window_width, -1])
+    new_dc.DeleteDC()
+    compat_dc.DeleteDC()
+    win32gui.ReleaseDC(handle, handle_dc)
+    win32gui.DeleteObject(new_bitmap.GetHandle())
+    screenshot = np.flip(arr[..., :3], -1)
+    return screenshot
+
+
+def check_window_minimized(handle: int) -> bool:
+    style = win32gui.GetWindowLong(handle, win32con.GWL_STYLE)
+    return (style & win32con.WS_MINIMIZE) != 0
+
+
+class WinAPIScreenCapturer(ScreenCapturer):
+    """Capturing screenshot using WinAPI.
+
+    Note: It is the native solution with the best performance, but will not work under the conditions like:
+    (1) The window of located handle is minimized (a blank screenshot will be obtained);
+    (2) Part of window is out of display size (the exceeded area will not be re-draw thanks to the Windows mechanism);
+    (3) Logged in as remote desktop users but the client-side window is minimized or disconnected.
+    """
     def __init__(self):
-        super(MumuAttacher, self).__init__()
-        self.simulator_handle = None
-        self.is_admin = LazyValue(is_running_as_admin)
-        if not MumuAttacher.__warned_deprecated_v1_attacher:
-            MumuAttacher.__warned_deprecated_v1_attacher = True
-            logger.warning('Mumu Attacher (V1 version) is deprecated since some versions of mumu simulator does not '
-                           'work properly with PostMessage / SendMessage to simulate mouse move event')
+        super(WinAPIScreenCapturer, self).__init__()
+        self.screen_cap_handle = LazyValue(self.locate_handle)
+
+    def get_solution(self) -> Tuple[int, int]:
+        left, top, right, bottom = win32gui.GetWindowRect(self.screen_cap_handle())
+        return bottom - top, right - left
+
+    def get_screenshot(self) -> np.ndarray:
+        return get_screenshot_winapi_impl(self.screen_cap_handle())
 
     def locate_handle(self) -> int:
-        # SPY++:
-        # Qt5QWindowIcon, MuMu模拟器 or Game name
-        # |- Qt5QWindowIcon, NemuPlayer
-        #    |- canvasWin, canvas
-        simulator_handle = win32gui.FindWindow('Qt5QWindowIcon', None)
-        window_handle = 0
-        while simulator_handle > 0:
-            window_handle = win32gui.FindWindowEx(simulator_handle, 0, 'Qt5QWindowIcon', 'NemuPlayer')
-            if window_handle > 0:
-                break
-            else:
-                simulator_handle = win32gui.FindWindowEx(0, simulator_handle, 'Qt5QWindowIcon', None)
-        assert window_handle > 0, 'Could not find child handle of Mumu simulator: NemuPlayer'
-        self.simulator_handle = simulator_handle
-        logger.info('Located Mumu simulator handle: %d' % self.simulator_handle)
-        return window_handle
+        """Implement the handle lookup process here. WinAPI calls will be applied to the located handle."""
+        raise NotImplementedError
 
-    def is_minimize(self) -> bool:
-        self.handle()  # make sure it's initialized
-        style = win32gui.GetWindowLong(self.simulator_handle, win32con.GWL_STYLE)
-        return (style & win32con.WS_MINIMIZE) != 0
 
-    def get_screenshot(self, width: Optional[int] = None, height: Optional[int] = None) -> np.ndarray:
-        if self.is_minimize() and not self.__warned_minimize:
+class MumuScreenCapturer(WinAPIScreenCapturer):
+    """Screen capture implementation for mumu simulator."""
+    __warned_minimize = False
+
+    def __init__(self):
+        super(MumuScreenCapturer, self).__init__()
+        self.simulator_host_handle = 0
+
+    def locate_handle(self) -> int:
+        host_handle, player_handle = locate_mumu_simulator_handle()
+        self.simulator_host_handle = host_handle
+        return player_handle
+
+    def get_screenshot(self) -> np.ndarray:
+        if check_window_minimized(self.simulator_host_handle) and not self.__warned_minimize:
             logger.warning('Screenshot capture is not supported for minimized window')
             self.__warned_minimize = True
         while True:
-            while self.is_minimize():
+            while check_window_minimized(self.simulator_host_handle):
                 sleep(0.2)
-            screenshot = HandleBasedAttacher.get_screenshot(self, width, height)
-            if not self.is_minimize():
+            screenshot = super(MumuScreenCapturer, self).get_screenshot()
+            if not check_window_minimized(self.simulator_host_handle):
                 return screenshot
 
-    def send_click(self, x: float, y: float, stay_time: float = 0.1):
-        if not self.is_admin():
-            logger.warning('Could not send message to specified handle without admin privileges')
-        else:
-            HandleBasedAttacher.send_click(self, x, y, stay_time)
 
-    def send_slide(self, p_from: Tuple[float, float], p_to: Tuple[float, float], stay_time_before_move: float = 0.1,
-                   stay_time_move: float = 0.8, stay_time_after_move: float = 0.1):
-        if not self.is_admin():
-            logger.warning('Could not send message to specified handle without admin privileges')
-        else:
-            HandleBasedAttacher.send_slide(self, p_from, p_to, stay_time_before_move, stay_time_move,
-                                           stay_time_after_move)
+class MumuADBServer(ADBServer):
+    def __init__(self, adb_executable_path: Optional[str] = None):
+        super(MumuADBServer, self).__init__(adb_executable_path)
+
+    def _start_internal(self):
+        super(MumuADBServer, self)._start_internal()
+        # hooks here
+        spawn(self.adb_executable, 'connect', 'localhost:7555', raise_exc=True)
 
 
-class MumuAttacherV2(MumuAttacher, AdbAttacherRootEnhanced):
-    def __init__(self):
-        super(MumuAttacher, self).__init__()
+# the original one uses WinAPI to simulate clicks and slides, but it does not work now
+class MumuAttacher(ADBAttacher):
+    def __init__(self, adb_server: Optional[ADBServer] = None):
+        adb_server = adb_server or MumuADBServer()
+        super(MumuAttacher, self).__init__(adb_server, device='localhost:7555')
 
-    def _hook_after_sever_started(self):
-        spawn_process_raw([self._adb, 'connect', 'localhost:7555'])
 
-    def get_screenshot(self, width: Optional[int] = None, height: Optional[int] = None) -> np.ndarray:
-        return MumuAttacher.get_screenshot(self, width, height)
+class MumuRootAttacher(ADBRootAttacher):
+    def __init__(self, adb_server: Optional[ADBServer] = None):
+        adb_server = adb_server or MumuADBServer()
+        super(MumuRootAttacher, self).__init__(adb_server, device='localhost:7555')
 
     def _hook_send_event_touch_down(self, device: str, args: List[str], px: int, py: int):
         # Mumu simulator requires ABS_MT_TRACKING_ID
-        args.insert(0, f'sendevent {device} {EventType.EV_ABS.value} {EventID.ABS_MT_TRACKING_ID.value} 1')
+        args.insert(0, f'sendevent {device} {EventType.EV_ABS} {EventID.ABS_MT_TRACKING_ID} 1')
 
     def _hook_send_event_touch_up(self, device: str, args: List[str]):
-        args.insert(0, f'sendevent {device} {EventType.EV_ABS.value} {EventID.ABS_MT_TRACKING_ID.value} 0')
-
-    def send_click(self, x: float, y: float, stay_time: float = 0.1):
-        AdbAttacherRootEnhanced.send_click(self, x, y, stay_time)
-
-    def send_slide(self, p_from: Tuple[float, float], p_to: Tuple[float, float], stay_time_before_move: float = 0.1,
-                   stay_time_move: float = 0.8, stay_time_after_move: float = 0.1):
-        AdbAttacherRootEnhanced.send_slide(self, p_from, p_to, stay_time_before_move, stay_time_move, stay_time_after_move)
+        args.insert(0, f'sendevent {device} {EventType.EV_ABS} {EventID.ABS_MT_TRACKING_ID} 0')

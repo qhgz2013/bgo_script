@@ -1,5 +1,5 @@
 from .state_handler import ConfigurableStateHandler, WaitFufuStateHandler
-from attacher import AbstractAttacher
+from attacher import CombinedAttacher
 from cv_positioning import *
 import numpy as np
 import logging
@@ -22,7 +22,7 @@ class EatAppleHandler(ConfigurableStateHandler):
                  EatAppleType.BronzeApple: EAT_BRONZE_APPLE_CLICK_Y, EatAppleType.SaintQuartz: EAT_SAINT_QUARTZ_CLICK_Y}
     __warned_eat_saint_quartz = False
 
-    def __init__(self, attacher: AbstractAttacher, forward_state: FgoState, cfg: ScriptConfig):
+    def __init__(self, attacher: CombinedAttacher, forward_state: FgoState, cfg: ScriptConfig):
         super().__init__(cfg)
         self.attacher = attacher
         self.forward_state = forward_state

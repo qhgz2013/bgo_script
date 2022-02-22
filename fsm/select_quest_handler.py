@@ -1,5 +1,5 @@
 from .state_handler import ConfigurableStateHandler, SingleClickAndWaitFufuHandler
-from attacher import AbstractAttacher
+from attacher import CombinedAttacher
 from click_positioning import *
 import logging
 from time import time
@@ -15,7 +15,7 @@ logger = logging.getLogger('bgo_script.fsm')
 class SelectQuestHandler(ConfigurableStateHandler):
     _eat_apple_ui_anchor = imread(CV_EAT_APPLE_UI_FILE)
 
-    def __init__(self, attacher: AbstractAttacher, forward_state: FgoState, cfg: ScriptConfig):
+    def __init__(self, attacher: CombinedAttacher, forward_state: FgoState, cfg: ScriptConfig):
         super().__init__(cfg)
         self.attacher = attacher
         self.forward_state = forward_state

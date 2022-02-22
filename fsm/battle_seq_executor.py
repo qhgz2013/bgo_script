@@ -1,5 +1,5 @@
 from typing import *
-from attacher import AbstractAttacher
+from attacher import CombinedAttacher
 from bgo_game import ScriptConfig, CommandCardDetector, CommandCardType, DispatchedCommandCard
 from cv_positioning import *
 from click_positioning import *
@@ -58,7 +58,7 @@ def _get_svt_id_from_cmd_card(card: DispatchedCommandCard):
 
 # TODO [PRIOR: middle]: 重构这个类，增加宇宙凛的指令卡变色
 class BattleSequenceExecutor:
-    def __init__(self, attacher: AbstractAttacher, cfg: ScriptConfig, enable_card_reselection_feat: bool = True,
+    def __init__(self, attacher: CombinedAttacher, cfg: ScriptConfig, enable_card_reselection_feat: bool = True,
                  enable_fast_cmd_card_detect: bool = True):
         # enable_card_reselection_feat: when it is set, command cards (including NPs) will be auto-reselected when
         #     re-entering the command card selection UI (the re-enter happens when command card selection is interrupted
@@ -308,6 +308,7 @@ class BattleSequenceExecutor:
             self._submit_click_event(0.2, (CHANGE_SERVANT_XS[servant_pos2], CHANGE_SERVANT_Y))
             # 点确定
             self._submit_click_event(0.2, (APPLY_CHANGE_SERVANT_BUTTON_X, APPLY_CHANGE_SERVANT_BUTTON_Y))
+            # TODO [prior: normal]: automatically re-detect command card after people changed
         self._submit_click_event(1, None)
         self._submit_click_event(TIME_WAIT_ATTACK_BUTTON, None)
         return self
