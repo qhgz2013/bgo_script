@@ -43,10 +43,12 @@ class AbstractAttacher(metaclass=ABCMeta):
 
 
 _POINT_COMPATIBLE = Union[Point, Tuple[float, float]]
+_STAY_TIME_COMPATIBLE = Optional[float]
 
 
+# backward compatible class, will be removed in future version
 class CombinedAttacher(ScreenCapturer, AbstractAttacher):
-    """Same as the full version of Attacher before. For compatible usage"""
+    """Same as the full version of Attacher before. For compatible usage."""
     def __init__(self, capturer: ScreenCapturer, attacher: AbstractAttacher):
         self.capturer = capturer
         self.attacher = attacher
@@ -64,10 +66,19 @@ class CombinedAttacher(ScreenCapturer, AbstractAttacher):
     def send_click(self, x: float, y: float, stay_time: float = 0.1):
         self.attacher.send_click(x, y, stay_time)
 
-    def send_slide(self, p_from: _POINT_COMPATIBLE, p_to: _POINT_COMPATIBLE, stay_time_before_move: float = 0.1,
-                   stay_time_move: float = 0.8, stay_time_after_move: float = 0.1):
+    def send_slide(self, p_from: _POINT_COMPATIBLE, p_to: _POINT_COMPATIBLE,
+                   stay_time_before_move: _STAY_TIME_COMPATIBLE = None,
+                   stay_time_move: _STAY_TIME_COMPATIBLE = None, stay_time_after_move: _STAY_TIME_COMPATIBLE = None):
         if not isinstance(p_from, Point):
             p_from = Point(*p_from)
         if not isinstance(p_to, Point):
             p_to = Point(*p_to)
-        self.attacher.send_slide(p_from, p_to, stay_time_before_move, stay_time_move, stay_time_after_move)
+        extra_args = {}
+        # use the default value provided by implementation method if stay_time_* set to None
+        if stay_time_before_move is not None:
+            extra_args['stay_time_before_move'] = stay_time_before_move
+        if stay_time_move is not None:
+            extra_args['stay_time_move'] = stay_time_move
+        if stay_time_after_move is not None:
+            extra_args['stay_time_after_move'] = stay_time_after_move
+        self.attacher.send_slide(p_from, p_to, **extra_args)

@@ -164,8 +164,8 @@ class ADBScreenrecordFFMpegDecoder(IO[bytes]):
         # ignore stderr
         while self._ffmpeg_process.poll() is None:
             data = self._ffmpeg_process.stderr.read(4096)
-            if len(data) > 0:
-                print(str(data, 'utf8'))
+            # if len(data) > 0:
+            #     print(str(data, 'utf8'))
         self.close()
 
     def _shut_down_ffmpeg_callback(self):

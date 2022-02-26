@@ -1,8 +1,11 @@
-from _logging_config import script_logger_root
+import _logging_config
 from attacher import *
 from fsm import *
 import argparse
 import config
+import logging
+
+script_logger_root = logging.getLogger('bgo_script')
 
 
 def _log_exception(ex: BaseException):
@@ -15,8 +18,8 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('attacher', help='Attacher type', choices=['adb', 'mumu', 'mumu_root', 'adb_root'],
                         default='mumu_v2', type=str, nargs='?')
-    parser.add_argument('--capturer', help='Capturer type', choices=['adb', 'mumu', 'default'], default='default',
-                        type=str)
+    parser.add_argument('--capturer', help='Capturer type', choices=['adb', 'adb_native', 'mumu', 'default'],
+                        default='default', type=str)
     parser.add_argument('--schemas', help='Script execution schemas, one of "full" (from enter quest to exit quest),'
                                           '"support" (only perform support servant selection), or "battle" (only '
                                           'perform in-battle control)',
@@ -24,11 +27,12 @@ def main():
     parser.add_argument('--verbose', help='Print verbose log (debug level) to screen', action='store_true',
                         default=False)
     args = parser.parse_args()
+    _logging_config.bootstrap(args.verbose, write_to_file_logger_name='bgo_script')
     attacher_dict = {'adb': ADBAttacher, 'mumu': MumuAttacher, 'mumu_root': MumuRootAttacher,
                      'adb_root': ADBRootAttacher}
     default_capturer_dict = {'adb': ADBScreenrecordCapturer, 'adb_root': ADBScreenrecordCapturer,
                              'mumu': MumuScreenCapturer, 'mumu_root': MumuScreenCapturer}
-    capturer_dict = {'adb': ADBScreenrecordCapturer, 'mumu': MumuScreenCapturer}
+    capturer_dict = {'adb': ADBScreenrecordCapturer, 'mumu': MumuScreenCapturer, 'adb_native': ADBScreenCapturer}
     schemas_dict = {'full': FgoFSMFacade, 'support': FgoFSMFacadeSelectSupport, 'battle': FgoFSMFacadeBattleLoop}
     attacher_class = attacher_dict.get(args.attacher.lower(), None)
     schemas_class = schemas_dict.get(args.schemas.lower(), None)

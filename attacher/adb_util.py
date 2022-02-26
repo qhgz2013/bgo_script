@@ -125,7 +125,7 @@ class ADBShell:
                 # so here stderr needs to wait until stdout handling started
                 self._sync_event.wait()
             with self._mutex:
-                logger.debug(f'{msg_type}: {data}')
+                logger.debug(f'[PID {self._adb_proc.pid}] {msg_type}: {data}')
                 if self._session_id is None:
                     # the output does not belong to any session since the session is not started yet, drop it
                     continue
@@ -194,7 +194,7 @@ class ADBShell:
             return 0, '', ''  # ignore empty command
         with self._mutex:
             self._session_id = boundary
-            logger.debug(f'stdin: {cmd}')
+            logger.debug(f'[PID {self._adb_proc.pid}] stdin: {cmd}')
             cmd = cmd.encode('utf8') + b'\n'
             self._session_exit_code = None
             self._wait_session = wait

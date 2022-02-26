@@ -122,7 +122,9 @@ class MumuADBServer(ADBServer):
     def _start_internal(self):
         super(MumuADBServer, self)._start_internal()
         # hooks here
-        spawn(self.adb_executable, 'connect', 'localhost:7555', raise_exc=True)
+        result = spawn(self.adb_executable, 'connect', 'localhost:7555', raise_exc=True).strip()
+        if len(result) > 0 and not result.startswith('connected to'):
+            raise RuntimeError(f'Failed to connect Mumu simulator via ADB: {result}')
 
 
 # the original one uses WinAPI to simulate clicks and slides, but it does not work now
