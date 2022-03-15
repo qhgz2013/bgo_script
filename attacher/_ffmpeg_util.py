@@ -144,6 +144,10 @@ class ADBScreenrecordFFMpegDecoder(IO[bytes]):
         self._ffmpeg_shutdown_thread = threading.Thread(target=self._shut_down_ffmpeg_callback)
         self._ffmpeg_shutdown_thread.start()
 
+    @property
+    def ffmpeg_process(self) -> Optional[subprocess.Popen]:
+        return self._ffmpeg_process
+
     def _handle_stdout(self):
         # redirect stdout to _buffer
         while self._ffmpeg_process.poll() is None:

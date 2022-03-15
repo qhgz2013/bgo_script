@@ -123,7 +123,7 @@ class MumuADBServer(ADBServer):
         super(MumuADBServer, self)._start_internal()
         # hooks here
         result = spawn(self.adb_executable, 'connect', 'localhost:7555', raise_exc=True).strip()
-        if len(result) > 0 and not result.startswith('connected to'):
+        if len(result) > 0 and not result.startswith('connected to') and not result.startswith('already connected to'):
             raise RuntimeError(f'Failed to connect Mumu simulator via ADB: {result}')
 
 

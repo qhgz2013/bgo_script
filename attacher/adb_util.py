@@ -1,7 +1,8 @@
 # attacher.adb_util
 # Provides some util classes and IPC helpers for interacting with ADB server and ADB shell.
-# Ver 1.0
+# Ver 1.1
 # Changelog:
+# 1.1: Added pickling support for ADBServer
 # 1.0: Moved from util package.
 from typing import *
 from util import spawn_process, find_path, SingletonMeta
@@ -31,7 +32,11 @@ def spawn(*cmds: str, spawn_fn: SPAWN_FUNC_PROTOTYPE = spawn_process,
           raise_exc: bool = False, log: bool = True, ignore_stderr: bool = False) -> _T:
     ret_code, stdout, stderr = spawn_fn(cmds)
     if ret_code != 0:
-        msg = f'ADB call exited with non-zero returned value: {ret_code} ({ret_code:#x})'
+        try:
+            msg = f'ADB call exited with non-zero returned value: {ret_code} ({ret_code:#x})'
+        except TypeError:
+            # got a non-reproducible error here, it's freak
+            msg = f'ADB call exited with non-zero returned value: {ret_code} ({ret_code!r})'
         if log:
             logger.warning(msg)
         if raise_exc:
@@ -328,3 +333,12 @@ class ADBServer(metaclass=SingletonMeta):
             return f'<{self.__class__.__name__}{" (started)" if ADBServer._started else ""}>'
         except AttributeError:
             return f'<{self.__class__.__name__} (uninitialized)>'
+
+    # hooks for multiprocessing
+    # todo: check state from socket
+    def __getstate__(self):
+        return self.adb_executable, ADBServer._started
+
+    def __setstate__(self, state):
+        self.adb_executable, ADBServer._started = state
+        ADBServer._mutex = threading.RLock()

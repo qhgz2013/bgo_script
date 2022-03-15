@@ -17,7 +17,7 @@ def _log_exception(ex: BaseException):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('attacher', help='Attacher type', choices=['adb', 'mumu', 'mumu_root', 'adb_root'],
-                        default='mumu_v2', type=str, nargs='?')
+                        default='mumu_root', type=str, nargs='?')
     parser.add_argument('--capturer', help='Capturer type', choices=['adb', 'adb_native', 'mumu', 'default'],
                         default='default', type=str)
     parser.add_argument('--schemas', help='Script execution schemas, one of "full" (from enter quest to exit quest),'
@@ -27,7 +27,10 @@ def main():
     parser.add_argument('--verbose', help='Print verbose log (debug level) to screen', action='store_true',
                         default=False)
     args = parser.parse_args()
-    _logging_config.bootstrap(args.verbose, write_to_file_logger_name='bgo_script')
+    _logging_config.bootstrap(log_to_screen_loggers={None: logging.WARNING, 'bgo_script': None},
+                              write_to_file_loggers={None: logging.INFO, 'bgo_script': logging.DEBUG},
+                              default_log_to_screen_level=logging.DEBUG if args.verbose else logging.INFO,
+                              file_name_prefix='bgo_script')
     attacher_dict = {'adb': ADBAttacher, 'mumu': MumuAttacher, 'mumu_root': MumuRootAttacher,
                      'adb_root': ADBRootAttacher}
     default_capturer_dict = {'adb': ADBScreenrecordCapturer, 'adb_root': ADBScreenrecordCapturer,

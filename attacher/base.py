@@ -1,21 +1,31 @@
 # attacher.base
 # Basic definitions for interacting with external systems.
-# Ver 1.0
+# Ver 1.1
 # Changelog:
+# 1.1: Changed definition of class Point for further multi-solution support, renamed AbstractAttacher to AttacherBase.
 # 1.0: Split capturer and attacher into independent class, provide CombinedAttacher as backward-compatible class.
 from abc import ABCMeta
 import numpy as np
 from typing import *
 
-__all__ = ['ScreenCapturer', 'AbstractAttacher', 'Point', 'Solution', 'CombinedAttacher']
+__all__ = ['ScreenCapturer', 'AttacherBase', 'Point', 'Solution', 'CombinedAttacher']
 
 
-class Point(NamedTuple):
+class Point:
+    """Normalized point."""
     x: float
     y: float
 
+    def __init__(self, x: float, y: float):
+        self.x = x
+        self.y = y
+
+    def __repr__(self):
+        return f'<{self.__class__.__name__} ({self.x}, {self.y})>'
+
 
 class Solution(NamedTuple):
+    """Device solution."""
     height: int
     width: int
 
@@ -32,8 +42,8 @@ class ScreenCapturer(metaclass=ABCMeta):
         raise NotImplementedError
 
 
-class AbstractAttacher(metaclass=ABCMeta):
-    """AbstractAttacher defines the basic interface to interact with the game application."""
+class AttacherBase(metaclass=ABCMeta):
+    """AttacherBase defines the basic interface to interact with the game application."""
     def send_click(self, x: float, y: float, stay_time: float = 0.1):
         raise NotImplementedError
 
@@ -47,9 +57,9 @@ _STAY_TIME_COMPATIBLE = Optional[float]
 
 
 # backward compatible class, will be removed in future version
-class CombinedAttacher(ScreenCapturer, AbstractAttacher):
+class CombinedAttacher(ScreenCapturer, AttacherBase):
     """Same as the full version of Attacher before. For compatible usage."""
-    def __init__(self, capturer: ScreenCapturer, attacher: AbstractAttacher):
+    def __init__(self, capturer: ScreenCapturer, attacher: AttacherBase):
         self.capturer = capturer
         self.attacher = attacher
 

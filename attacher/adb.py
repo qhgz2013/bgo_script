@@ -1,15 +1,15 @@
 # attacher.adb
 # Provides interactions (e.g., capturing screenshot, sending clicks and slides) between script and ADB-capable devices.
-# Ver 1.0
+# Ver 1.1
 # Changelog:
+# 1.1: Added multiprocessing based ADBScreenrecorderCapturer
 # 1.0: Re-implement ADB attacher module (screenshot capture and interactions are split now).
 import re
 import math
-from . import Point
 from .adb_util import spawn, ADBServer, ADBShell
 from typing import *
 from typing import IO
-from .base import ScreenCapturer, Solution, AbstractAttacher
+from .base import ScreenCapturer, Solution, AttacherBase, Point
 import numpy as np
 from enum import IntEnum
 from collections import Counter
@@ -21,8 +21,10 @@ from util import spawn_process_raw, LazyValue
 import threading
 import subprocess
 from ._ffmpeg_util import ADBScreenrecordFFMpegDecoder
+import multiprocessing as mp
 
-__all__ = ['ADBScreenCapturer', 'ADBScreenrecordCapturer', 'ADBAttacher', 'ADBRootAttacher', 'EventID', 'EventType']
+__all__ = ['ADBScreenCapturer', 'ADBScreenrecordCapturer', 'ADBAttacher', 'ADBRootAttacher', 'EventID', 'EventType',
+           'ADBScreenrecordCapturerThreaded', "ADBScreenrecordCapturerMP"]
 
 # constants
 _WM_SOLUTION_PATTERN = re.compile(r'(?P<width>\d+)x(?P<height>\d+)$')
@@ -191,7 +193,7 @@ class ADBScreenCapturer(ScreenCapturer):
 
 
 # adb exec-out screenrecord --size wxh --bit-rate bitrate --time-limit secs --output-format=h264 -
-class ADBScreenrecordCapturer(ADBScreenCapturer):
+class ADBScreenrecordCapturerThreaded(ADBScreenCapturer):
 
     def __init__(self, adb_server: Optional[ADBServer] = None, bitrate: Optional[int] = None,
                  time_limit: Optional[int] = None, solution: Optional[Solution] = None,
@@ -209,7 +211,7 @@ class ADBScreenrecordCapturer(ADBScreenCapturer):
         :param device: Specify which device should be connected.
         :param ffmpeg_executable_path: Path of FFMpeg executable file, leave None to search in PATH variable.
         """
-        super(ADBScreenrecordCapturer, self).__init__(adb_server, device)
+        super(ADBScreenrecordCapturerThreaded, self).__init__(adb_server, device)
 
         cmds = [self._adb_server.adb_executable]
         if device is not None:
@@ -272,10 +274,14 @@ class ADBScreenrecordCapturer(ADBScreenCapturer):
                 self._frame_response.set()
 
     def _restart_screenrecord(self):
+        logger.debug('Starting ADB screenrecord process')
         self._screenrecord_proc = subprocess.Popen(self._screenrecord_spawn_args, stdout=_PIPE, stderr=_PIPE, bufsize=0)
+        logger.debug(f'Started as PID {self._screenrecord_proc.pid}')
         # ffmpeg also needs to be restarted, otherwise a decode error will be logged and cause lagging
+        logger.debug('Starting FFMpeg decoder')
         decoder = ADBScreenrecordFFMpegDecoder(self._screenrecord_proc.stdout, self._ffmpeg_executable_path,
                                                fps=_FFMPEG_PROCESS_FPS)
+        logger.debug(f'Started as PID {decoder.ffmpeg_process.pid}')
         handler = threading.Thread(target=self._handle_decoder_output, daemon=True, name='FFMpegOutputHandler',
                                    args=(decoder,))
         handler.start()
@@ -309,7 +315,85 @@ class ADBScreenrecordCapturer(ADBScreenCapturer):
         return frame
 
 
-class ADBAttacher(AbstractAttacher):
+# multiprocessing solution
+class ADBScreenrecordCapturerMP(ADBScreenCapturer):
+    def __init__(self, adb_server: Optional[ADBServer] = None, bitrate: Optional[int] = None,
+                 time_limit: Optional[int] = None, solution: Optional[Solution] = None,
+                 device: Optional[str] = None, ffmpeg_executable_path: Optional[str] = None):
+        """Instantiating a screen capturer via ADB screenrecord. Compared with screencap, this solution has low latency
+        with more resource usage. If the video decoding speed or process speed cannot keep up, use the screencap
+        implementation.
+
+        :param adb_server: Instance of ADB server.
+        :param bitrate: The bitrate of video stream, in bit-per-second (bps) format, default value: 4000000 (4Mbps).
+        :param time_limit: The time limitation of screen record, in seconds, default and maximum value: 180 (3 minutes).
+            It is impossible to set it to infinite since it is hard-coded in Android framework. The workaround is to
+            restart recording after time limit exceeded to make it "pseudo infinite".
+        :param solution: The solution of video output, leave None to use native device solution.
+        :param device: Specify which device should be connected.
+        :param ffmpeg_executable_path: Path of FFMpeg executable file, leave None to search in PATH variable.
+        """
+        ScreenCapturer.__init__(self)
+        self._args = (adb_server, bitrate, time_limit, solution, device, ffmpeg_executable_path)
+        self._event_queue = mp.SimpleQueue()
+        self._sig_req = mp.Event()
+        self._sig_resp = mp.Event()
+        self._proc = mp.Process(target=self._run, args=(self._args, self._event_queue, self._sig_req, self._sig_resp))
+        self._proc.start()
+        self._mutex = threading.RLock()
+
+    # only pickle required variables
+    @staticmethod
+    def _run(args, event_queue, sig_req, sig_resp):
+        # hook logging for child process
+        try:
+            import _logging_config
+            _logging_config.bootstrap()
+        except ImportError:
+            _logging_config = None
+
+        instance = ADBScreenrecordCapturerThreaded(*args)
+        while True:
+            sig_req.wait()
+            sig_req.clear()
+            req = event_queue.get()
+            if req == 'terminate':
+                instance.kill()
+                sig_resp.set()
+                break
+            elif req == 'solution':
+                sig_resp.set()
+                event_queue.put(instance.get_solution())
+            elif req == 'screenshot':
+                sig_resp.set()
+                event_queue.put(instance.get_screenshot())
+            else:
+                logger.warning(f'Unknown command: {req}')
+
+    def _send_request(self, name: str, retrieve_value: bool = True):
+        with self._mutex:
+            self._event_queue.put(name)
+            self._sig_req.set()
+            self._sig_resp.wait()
+            self._sig_resp.clear()
+            if retrieve_value:
+                return self._event_queue.get()
+
+    def get_solution(self) -> Solution:
+        return self._send_request('solution')
+
+    def get_screenshot(self) -> np.ndarray:
+        return self._send_request('screenshot')
+
+    def kill(self):
+        self._send_request('terminate', retrieve_value=False)
+
+
+# backward naming compatibility, use multiprocessing solution here
+ADBScreenrecordCapturer = ADBScreenrecordCapturerMP
+
+
+class ADBAttacher(AttacherBase):
     def __init__(self, adb_server: Optional[ADBServer] = None, device: Optional[str] = None):
         """An ADB-based attacher. To enable automation, please check the USB debugging in developer setting is turned
         on.

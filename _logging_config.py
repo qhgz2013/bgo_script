@@ -1,13 +1,28 @@
-__all__ = ['bootstrap']
-
+# _logging_config.py
+# Provides my flavored solution to log messages on screen and to files
+# Ver 1.2
+# Changelog:
+# Ver 1.2: Minor bug fixed (child logger would propagate same logs to parent logger) and added typing supports for
+#          bootstrap().
+# Ver 1.1: Added multiprocessing support (via local TCP socket), the configuration of child process is exactly same as
+#          the parent process, i.e., calling bootstrap(), but no need for passing arguments since all log messages will
+#          be redirected to parent process.
+# Ver 1.0: All initial operations are now moved to bootstrap() function. Call it in main() and enjoys everything.
 import logging
 import re
 import sys
 import os
+import threading
 import time
 from enum import Enum
 from typing import *
 import logging.handlers
+import multiprocessing as mp
+import socketserver
+import struct
+import pickle
+
+__all__ = ['bootstrap', 'default_formatter_str', 'bootstrap_parent', 'bootstrap_child']
 
 
 class StrEnum(str, Enum):
@@ -167,118 +182,188 @@ class ParallelTimedRotatingFileHandler(logging.handlers.TimedRotatingFileHandler
         self.rolloverAt = newRolloverAt
 
 
-default_formatter_str = '[%(asctime)s] [%(levelname)s] [%(name)s] (%(filename)s:%(lineno)d) %(message)s'
+class ForwardHandler(logging.Handler):
+    def __init__(self, forward_handler: logging.Handler):
+        super(ForwardHandler, self).__init__()
+        self.forward_handler = forward_handler
+
+    def emit(self, record: logging.LogRecord) -> None:
+        if self.forward_handler is not None:
+            self.forward_handler.handle(record)
 
 
-def _patched_get_files_to_delete(self):
-    dir_name, base_name = os.path.split(self.baseFilename)
-    base_name_no_ext, ext = os.path.splitext(base_name)
-    file_names = os.listdir(dir_name)
-    result = []
-    prefix = base_name_no_ext + '.'
-    suffix = ext
-    plen = len(prefix)
-    slen = len(suffix)
-    for file_name in file_names:
-        if file_name[:plen] == prefix and file_name[-slen:] == suffix:
-            middle = file_name[plen:-slen]
-            if self.extMatch.match(middle):
-                result.append(os.path.join(dir_name, file_name))
-    if len(result) < self.backupCount:
-        result = []
-    else:
-        result.sort()
-        result = result[:len(result) - self.backupCount]
-    return result
+default_formatter_str = '[%(asctime)s] [%(process)-5d] [%(levelname)s] [%(name)s] (%(filename)s:%(lineno)d) %(message)s'
+MULTIPROCESSING_LOGGER_BIND_PORT = 17500
+LOGGER_CONFIG_DICT = Optional[Dict[Optional[str], Optional[int]]]
 
 
-def bootstrap(verbose: Optional[bool] = None, formatter_str: str = default_formatter_str, log_dir: str = 'logs',
-              color: bool = True, log_to_screen: bool = True, log_to_screen_logger_name: Optional[str] = None,
-              write_to_file: bool = True, write_to_file_logger_name: Optional[str] = None, max_file_cnt: int = 30):
-    # todo: add docstring
-    if verbose is None:
-        # if verbose unset, detect it from argv
-        verbose = '--verbose' in sys.argv
+def bootstrap_parent(formatter_str: str = default_formatter_str, log_dir: str = 'logs', color: bool = True,
+                     log_to_screen: bool = True, log_to_screen_loggers: LOGGER_CONFIG_DICT = None,
+                     default_log_to_screen_level: Optional[int] = None,
+                     write_to_file: bool = True, write_to_file_loggers: LOGGER_CONFIG_DICT = None,
+                     default_write_to_file_level: Optional[int] = None, file_name_prefix: str = '(root)',
+                     max_file_cnt: int = 30) -> None:
+    """Configurate logging module.
+
+    Known side effect: attribute "propagate" will be set to False
+
+    :param formatter_str: The format string deciding what the log messages look like.
+    :param log_dir: The subdirectory name where the log files should be put in.
+    :param color: Display the colorized logs to screen if stdout or stderr is console.
+    :param log_to_screen: Whether the log records should be displayed on screen (via stdout and stderr). INFO
+     (and DEBUG depending on verbose argument) records will be logged to stdout while WARNING, ERROR and CRITICAL
+     records will be logged to stderr.
+    :param log_to_screen_loggers: A Dictionary specifying {logger_name, log_level}. Set logger_name to None to specify
+     root logger, and set log_level to None to use default_log_to_screen_level (the next argument).
+    :param default_log_to_screen_level: Specify the log level to display records on screen, leave None to detect from
+     argv (DEBUG if "--verbose" is set, INFO otherwise).
+    :param write_to_file: Whether the log records should be written to log files.
+    :param write_to_file_loggers: A Dictionary specifying {logger_name, log_level}. Same as log_to_screen_loggers.
+    :param default_write_to_file_level: Specify the log level to write to file, leave None will be treated as DEBUG.
+    :param file_name_prefix: The prefix of log file. The log files are generated as "file_name_prefix.yyyy-mm-dd.log".
+    :param max_file_cnt: Max log files in the log_dir.
+    """
+    verbose = '--verbose' in sys.argv
+    if default_log_to_screen_level is None:
+        default_log_to_screen_level = logging.DEBUG if verbose else logging.INFO
+    if default_write_to_file_level is None:
+        default_write_to_file_level = logging.DEBUG
+    if log_to_screen_loggers is None:
+        log_to_screen_loggers = {None: None}
+    if write_to_file_loggers is None:
+        write_to_file_loggers = {None: None}
     logging.root.setLevel(logging.DEBUG)
-    screen_logger = logging.getLogger(log_to_screen_logger_name)
     if log_to_screen:
         # log to screen:
         # DEBUG, INFO -> stdout
         # WARNING, ERROR, CRITICAL -> stderr
-        stdout_handler = logging.StreamHandler(sys.stdout)
-        stderr_handler = logging.StreamHandler(sys.stderr)
-        if color and sys.stdout.isatty():
-            # enable colorized output when color=True and stdout is console
-            # stdout: default color
-            stdout_formatter = ColorizedFormatter(formatter_str)
-        else:
-            # no color
-            stdout_formatter = logging.Formatter(formatter_str)
-        if color and sys.stderr.isatty():
-            stderr_formatter = ColorizedFormatter(formatter_str)
-        else:
-            stderr_formatter = logging.Formatter(formatter_str)
-        stdout_handler.setFormatter(stdout_formatter)
-        stderr_handler.setFormatter(stderr_formatter)
-        # if verbose: DEBUG, INFO -> stdout, otherwise: DEBUG -> filtered, INFO -> stdout
-        if verbose:
-            stdout_handler.setLevel(logging.DEBUG)
-        else:
-            stdout_handler.setLevel(logging.INFO)
-        stderr_handler.setLevel(logging.WARNING)
-        # stdout handler needs a filter to ignore WARNING, ERROR and CRITICAL log entries
-        stdout_handler.addFilter(ScreenOutputFilter())
-        # all done, add handlers to screen logger
-        screen_logger.addHandler(stdout_handler)
-        screen_logger.addHandler(stderr_handler)
+        for log_to_screen_logger_name, log_to_screen_effective_level in log_to_screen_loggers.items():
+            if log_to_screen_effective_level is None:
+                log_to_screen_effective_level = default_log_to_screen_level
+            screen_logger = logging.getLogger(log_to_screen_logger_name)
+            # after configured, the child logger does not propagate log records to parent logger.
+            # otherwise, a single log record will be logger twice or more
+            screen_logger.propagate = False
+            stdout_handler = logging.StreamHandler(sys.stdout)
+            stderr_handler = logging.StreamHandler(sys.stderr)
+            if color and sys.stdout.isatty():
+                # enable colorized output when color=True and stdout is console
+                # stdout: default color
+                stdout_formatter = ColorizedFormatter(formatter_str)
+            else:
+                # no color
+                stdout_formatter = logging.Formatter(formatter_str)
+            if color and sys.stderr.isatty():
+                stderr_formatter = ColorizedFormatter(formatter_str)
+            else:
+                stderr_formatter = logging.Formatter(formatter_str)
+            stdout_handler.setFormatter(stdout_formatter)
+            stderr_handler.setFormatter(stderr_formatter)
+            # if verbose: DEBUG, INFO -> stdout, otherwise: DEBUG -> filtered, INFO -> stdout
+            if 0 < log_to_screen_effective_level <= logging.INFO:
+                stdout_handler.setLevel(log_to_screen_effective_level)
+                # stdout handler needs a filter to ignore WARNING, ERROR and CRITICAL log entries
+                stdout_handler.addFilter(ScreenOutputFilter())
+                screen_logger.addHandler(stdout_handler)
+            stderr_handler.setLevel(max(logging.WARNING, log_to_screen_effective_level))
+            screen_logger.addHandler(stderr_handler)
+            # screen_logger.setLevel(log_to_screen_effective_level)
     if write_to_file:
         # creating directory if not exist
         log_dir = os.path.abspath(log_dir)
         os.makedirs(log_dir, exist_ok=True)
-        file_logger = logging.getLogger(write_to_file_logger_name)
-        file_name = 'root' if write_to_file_logger_name is None else write_to_file_logger_name
-        file_handler = ParallelTimedRotatingFileHandler(os.path.join(log_dir, file_name), 'midnight',
+        file_handler = ParallelTimedRotatingFileHandler(os.path.join(log_dir, file_name_prefix), 'midnight',
                                                         backupCount=max_file_cnt, encoding='utf8')
         file_handler.setFormatter(logging.Formatter(formatter_str))
-        # set to DEBUG level
         file_handler.setLevel(logging.DEBUG)
-        # todo: check impl
-        # original implement:
-        # file_logger.setLevel(logging.DEBUG) (not file_handler)
-        file_logger.addHandler(file_handler)
-        # write an initial debug log
-        file_logger.debug('Logger initialized')
+        for write_to_file_logger_name, write_to_file_effective_level in write_to_file_loggers.items():
+            file_logger = logging.getLogger(write_to_file_logger_name)
+            file_logger.propagate = False
+            if write_to_file_effective_level is None:
+                write_to_file_effective_level = default_write_to_file_level
+            forwarder = ForwardHandler(file_handler)
+            forwarder.setLevel(write_to_file_effective_level)
+            file_logger.addHandler(forwarder)
+    # multiprocessing supports, socket-based implementation
+    mp_log_server = LogRecordSocketReceiver('localhost', MULTIPROCESSING_LOGGER_BIND_PORT)
+    mp_log_server.server_forever_non_blocking()
 
-# fmt = logging.Formatter(fmt_str)
-#
-# # ROOT logging config
-# root = logging.root
-# stdout_handler = logging.StreamHandler(sys.stdout)
-# if '--verbose' in sys.argv:
-#     stdout_handler.setLevel(logging.DEBUG)
-# else:
-#     stdout_handler.setLevel(logging.INFO)
-# if sys.stdout.isatty():
-#     stdout_handler.setFormatter(logging.Formatter(f'\033[0m{fmt}'))
-# else:
-#     stdout_handler.setFormatter(fmt)
-# stdout_handler.addFilter(ScreenOutputFilter())
-# stderr_handler = logging.StreamHandler(sys.stderr)
-# stderr_handler.setLevel(logging.WARNING)
-# if sys.stderr.isatty():
-#     stderr_handler.setFormatter()
-# else:
-#     stderr_handler.setFormatter(fmt)
-# root.addHandler(stdout_handler)
-# root.addHandler(stderr_handler)
-# # root.setLevel(logging.INFO)
-#
-# # Script logging config
-# script_logger_root = logging.getLogger('bgo_script')
-# os.makedirs('logs', exist_ok=True)
-# script_logging_handler = logging.FileHandler(datetime.now().strftime('logs/%Y-%m-%d.log'), 'a', encoding='utf8')
-# fmt = logging.Formatter(fmt_str)
-# script_logging_handler.setFormatter(fmt)
-# script_logger_root.setLevel(logging.DEBUG)
-# script_logger_root.addHandler(script_logging_handler)
-# script_logger_root.debug('Root logger initialized')
+
+# a small modification from
+# https://docs.python.org/3/howto/logging-cookbook.html#sending-and-receiving-logging-events-across-a-network
+class LogRecordStreamHandler(socketserver.StreamRequestHandler):
+    """Handler for a streaming logging request.
+
+    This basically logs the record using whatever logging policy is
+    configured locally.
+    """
+
+    def handle(self):
+        """
+        Handle multiple requests - each expected to be a 4-byte length,
+        followed by the LogRecord in pickle format. Logs the record
+        according to whatever policy is configured locally.
+        """
+        while True:
+            chunk = self.connection.recv(4)
+            if len(chunk) < 4:
+                break
+            slen = struct.unpack('>L', chunk)[0]
+            chunk = self.connection.recv(slen)
+            while len(chunk) < slen:
+                chunk = chunk + self.connection.recv(slen - len(chunk))
+            obj = pickle.loads(chunk)
+            record = logging.makeLogRecord(obj)
+            logger = logging.getLogger(record.name)
+            logger.handle(record)
+
+
+class LogRecordSocketReceiver(socketserver.ThreadingTCPServer):
+    """Simple TCP socket-based logging receiver suitable for testing."""
+
+    allow_reuse_address = True
+
+    def __init__(self, host: str = 'localhost', port: int = MULTIPROCESSING_LOGGER_BIND_PORT,
+                 handler: Type[socketserver.BaseRequestHandler] = LogRecordStreamHandler,
+                 timeout: Optional[float] = None):
+        socketserver.ThreadingTCPServer.__init__(self, (host, port), handler)
+        self.timeout = timeout
+
+    def server_forever_non_blocking(self):
+        thd = threading.Thread(target=self.serve_forever, args=(self.timeout,), daemon=True)
+        thd.start()
+
+
+def bootstrap_child() -> None:
+    """Called from child process, all logging events should be transferred to parent process via socket."""
+    logging.root.setLevel(logging.DEBUG)
+    logging.root.addHandler(logging.handlers.SocketHandler('localhost', MULTIPROCESSING_LOGGER_BIND_PORT))
+
+
+# typing supports
+# for parent process
+@overload
+def bootstrap(formatter_str: str = default_formatter_str, log_dir: str = 'logs', color: bool = True,
+              log_to_screen: bool = True, log_to_screen_loggers: LOGGER_CONFIG_DICT = None,
+              default_log_to_screen_level: Optional[int] = None,
+              write_to_file: bool = True, write_to_file_loggers: LOGGER_CONFIG_DICT = None,
+              default_write_to_file_level: Optional[int] = None, file_name_prefix: str = '(root)',
+              max_file_cnt: int = 30):
+    ...
+
+
+# for child class
+@overload
+def bootstrap():
+    ...
+
+
+def bootstrap(*args, **kwargs):
+    if mp.parent_process() is None:
+        bootstrap_parent(*args, **kwargs)
+    else:
+        bootstrap_child()
+
+
+# bootstrap.__annotations__ = bootstrap_parent.__annotations__
+# bootstrap.__doc__ = bootstrap_parent.__doc__
