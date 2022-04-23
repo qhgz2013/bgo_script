@@ -483,6 +483,8 @@ class ADBRootAttacher(ADBAttacher):
         self._input_device = LazyValue(self._get_input_device)
 
     def _check_root(self) -> bool:
+        if spawn('whoami', spawn_fn=self._adb_shell.interact, raise_exc=True).strip() == 'root':
+            return True
         self._adb_shell.interact('su', wait=False)
         sleep(0.3)
         result = spawn('whoami', spawn_fn=self._adb_shell.interact, raise_exc=True).strip()

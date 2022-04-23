@@ -1,5 +1,3 @@
-__all__ = ['StateHandler', 'ConfigurableStateHandler', 'WaitFufuStateHandler', 'DirectStateForwarder',
-           'SingleClickHandler', 'SingleClickAndWaitFufuHandler']
 from abc import ABC
 from bgo_game import ScriptConfig
 from .fgo_state import FgoState
@@ -9,10 +7,13 @@ import logging
 from cv_positioning import *
 import numpy as np
 
+__all__ = ['StateHandler', 'ConfigurableStateHandler', 'WaitFufuStateHandler', 'DirectStateForwarder',
+           'SingleClickHandler', 'SingleClickAndWaitFufuHandler']
+
 logger = logging.getLogger('bgo_script.fsm')
 
 
-class StateHandler:
+class StateHandler(ABC):
     def run_and_transit_state(self) -> FgoState:
         raise NotImplementedError()
 

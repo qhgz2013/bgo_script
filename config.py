@@ -42,7 +42,7 @@ christmas_21_90plus_team = TeamConfig([
 
 
 # Sieg + WCAB for nail harvesting in 1.5.4
-class NailWCABController(BattleController):
+class SiegWCABController(BattleController):
     def __call__(self, battle: int, max_battle: int, turn: int, cards: Optional[Sequence[DispatchedCommandCard]]):
         if battle == 1:
             self.use_skill(284, 0).use_support_skill(0).use_skill(284, 1, 208)
@@ -56,10 +56,41 @@ class NailWCABController(BattleController):
             self.noble_phantasm(208).attack(0).attack(1)
 
 
+# Jeanne Archer + WCAB
+class JeanneArcherWCABController(BattleController):
+    def __call__(self, battle: int, max_battle: int, turn: int, cards: Optional[Sequence[DispatchedCommandCard]]):
+        if battle == 1:
+            self.use_skill(284, 0).use_support_skill(0).use_skill(284, 1, 216)
+            self.use_skill(216, 0).use_skill(216, 1).use_skill(216, 2).use_support_skill(1, 216)
+            self.use_skill(284, 2, 216).use_support_skill(2, 216)
+            self.noble_phantasm(216).attack(0).attack(1)
+        elif battle == 2:
+            self.noble_phantasm(216).attack(0).attack(1)
+        elif battle == 3:
+            self.use_clothes_skill(1, 216)
+            self.noble_phantasm(216).attack(0).attack(1)
+
+
+# Jeanne Archer + Nitocris + CAB, clothes: summary (arts + 10 np)
+# fool lock
+class JeanneArcherNitocrisCABController(BattleController):
+    def __call__(self, battle: int, max_battle: int, turn: int, cards: Optional[Sequence[DispatchedCommandCard]]):
+        if battle == 1:
+            self.use_support_skill(0).use_skill(120, 0).use_skill(216, 2)
+            self.noble_phantasm(120).attack(0).attack(1)
+        elif battle == 2:
+            self.use_skill(120, 1)
+            self.noble_phantasm(120).attack(0).attack(1)
+        elif battle == 3:
+            self.use_skill(216, 0).use_skill(216, 1).use_support_skill(1, 216).use_support_skill(2, 216)
+            self.use_clothes_skill(0, 216).use_clothes_skill(2, 216)
+            self.noble_phantasm(216).attack(0).attack(1)
+
+
 # WCAB + Sieg
-nail_grabber_team = TeamConfig([
+sieg_wcab_team = TeamConfig([
     ServantConfig(svt_id=284),
-    ServantConfig(svt_id=208),
+    ServantConfig(svt_id=208),  # Sieg
     SupportServantConfig(svt_id=284, craft_essence_cfg=SupportCraftEssenceConfig(910, max_break=True),
                          skill_requirement=[10, 10, 10]),
     ServantConfig(svt_id=16),
@@ -67,9 +98,30 @@ nail_grabber_team = TeamConfig([
     ServantConfig(svt_id=106)
 ])
 
+jeanne_archer_wcab_team = TeamConfig([
+    ServantConfig(svt_id=284),  # CAB
+    ServantConfig(svt_id=216),  # Jeanne Archer
+    SupportServantConfig(svt_id=284, craft_essence_cfg=SupportCraftEssenceConfig(910, max_break=True),
+                         skill_requirement=[10, 10, 10]),
+    ServantConfig(svt_id=16),
+    ServantConfig(svt_id=163),
+    ServantConfig(svt_id=106)
+])
+
+jeanne_archer_notocris_cab_team = TeamConfig([
+    ServantConfig(svt_id=216),  # Jeanne Archer
+    ServantConfig(svt_id=120),  # Nitocris
+    SupportServantConfig(svt_id=284, craft_essence_cfg=SupportCraftEssenceConfig(910, max_break=True),
+                         skill_requirement=[10, 10, 10]),
+    ServantConfig(svt_id=16),
+    ServantConfig(svt_id=163),
+    ServantConfig(svt_id=106)
+])
+
+
 DEFAULT_CONFIG = ScriptConfig(
     eat_apple_type=EatAppleType.DontEatMyApple,
-    battle_controller=NailWCABController,
-    team_config=nail_grabber_team,
+    battle_controller=SiegWCABController,
+    team_config=sieg_wcab_team,
     max_ap=142
 )

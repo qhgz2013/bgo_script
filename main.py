@@ -56,7 +56,7 @@ def main():
     script_logger_root.info(f'Using capturer: {capturer_class!r}')
     try:
         script = schemas_class(CombinedAttacher(capturer_class(), attacher_class()), config.DEFAULT_CONFIG)
-        script.run()
+        script.run_and_transit_state()
     except KeyboardInterrupt as kb_int:
         script_logger_root.info('Keyboard interrupted')
         _log_exception(kb_int)

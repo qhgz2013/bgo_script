@@ -1,7 +1,10 @@
 # _logging_config.py
 # Provides my flavored solution to log messages on screen and to files
-# Ver 1.2
+# Ver 1.3
 # Changelog:
+# Ver 1.3: Server port is now randomly selected one of the unused ports, and passes the port to child processes via
+#          environment variable. bootstrap() is now implicitly called for child processes during import. Parameter
+#          "backupCount" for ParallelTimedRotatingFileHandler is now worked even without rollover.
 # Ver 1.2: Minor bug fixed (child logger would propagate same logs to parent logger) and added typing supports for
 #          bootstrap().
 # Ver 1.1: Added multiprocessing support (via local TCP socket), the configuration of child process is exactly same as
@@ -17,7 +20,6 @@ import time
 from enum import Enum
 from typing import *
 import logging.handlers
-import multiprocessing as mp
 import socketserver
 import struct
 import pickle
@@ -41,7 +43,7 @@ class ColorizedFormatter(logging.Formatter):
                  warning_color: str = ConsoleColor.YELLOW, info_color: str = ConsoleColor.RESET,
                  debug_color: str = ConsoleColor.RESET):
         super(ColorizedFormatter, self).__init__()
-        self._formatter = {
+        self._formatter: Dict[int, logging.Formatter] = {
             logging.CRITICAL: logging.Formatter(f'{critical_color}{fmt}{ConsoleColor.RESET}'),
             logging.ERROR: logging.Formatter(f'{error_color}{fmt}{ConsoleColor.RESET}'),
             logging.WARNING: logging.Formatter(f'{warning_color}{fmt}{ConsoleColor.RESET}'),
@@ -121,6 +123,10 @@ class ParallelTimedRotatingFileHandler(logging.handlers.TimedRotatingFileHandler
         # <<< super class __init__ moved here (and skips the parent TimedRotatingFileHandler)
         logging.handlers.BaseRotatingHandler.__init__(self, self.calculateFileName(t), 'a', encoding, delay)
         self.rolloverAt = self.computeRollover(t)
+        # since backupCount only works during rollover, we have to call it after init
+        if self.backupCount > 0:
+            for s in self.getFilesToDelete():
+                os.remove(s)
 
     def calculateFileName(self, currenttime):
         if self.utc:
@@ -183,6 +189,7 @@ class ParallelTimedRotatingFileHandler(logging.handlers.TimedRotatingFileHandler
 
 
 class ForwardHandler(logging.Handler):
+    """Do nothing, just forward the message to the next handler."""
     def __init__(self, forward_handler: logging.Handler):
         super(ForwardHandler, self).__init__()
         self.forward_handler = forward_handler
@@ -192,9 +199,9 @@ class ForwardHandler(logging.Handler):
             self.forward_handler.handle(record)
 
 
-default_formatter_str = '[%(asctime)s] [%(process)-5d] [%(levelname)s] [%(name)s] (%(filename)s:%(lineno)d) %(message)s'
-MULTIPROCESSING_LOGGER_BIND_PORT = 17500
+default_formatter_str = '[%(asctime)s] [%(process)d] [%(levelname)s] [%(name)s] (%(filename)s:%(lineno)d) %(message)s'
 LOGGER_CONFIG_DICT = Optional[Dict[Optional[str], Optional[int]]]
+LOGGING_SERVER_PORT_KEY = '_LOGGING_SERVER_PORT'
 
 
 def bootstrap_parent(formatter_str: str = default_formatter_str, log_dir: str = 'logs', color: bool = True,
@@ -202,7 +209,7 @@ def bootstrap_parent(formatter_str: str = default_formatter_str, log_dir: str = 
                      default_log_to_screen_level: Optional[int] = None,
                      write_to_file: bool = True, write_to_file_loggers: LOGGER_CONFIG_DICT = None,
                      default_write_to_file_level: Optional[int] = None, file_name_prefix: str = '(root)',
-                     max_file_cnt: int = 30) -> None:
+                     max_file_cnt: int = 10) -> None:
     """Configurate logging module.
 
     Known side effect: attribute "propagate" will be set to False
@@ -265,6 +272,7 @@ def bootstrap_parent(formatter_str: str = default_formatter_str, log_dir: str = 
                 # stdout handler needs a filter to ignore WARNING, ERROR and CRITICAL log entries
                 stdout_handler.addFilter(ScreenOutputFilter())
                 screen_logger.addHandler(stdout_handler)
+            # noinspection PyTypeChecker
             stderr_handler.setLevel(max(logging.WARNING, log_to_screen_effective_level))
             screen_logger.addHandler(stderr_handler)
             # screen_logger.setLevel(log_to_screen_effective_level)
@@ -285,8 +293,9 @@ def bootstrap_parent(formatter_str: str = default_formatter_str, log_dir: str = 
             forwarder.setLevel(write_to_file_effective_level)
             file_logger.addHandler(forwarder)
     # multiprocessing supports, socket-based implementation
-    mp_log_server = LogRecordSocketReceiver('localhost', MULTIPROCESSING_LOGGER_BIND_PORT)
+    mp_log_server = LogRecordSocketReceiver('localhost', 0)
     mp_log_server.server_forever_non_blocking()
+    os.putenv(LOGGING_SERVER_PORT_KEY, str(mp_log_server.server_address[1]))
 
 
 # a small modification from
@@ -323,7 +332,7 @@ class LogRecordSocketReceiver(socketserver.ThreadingTCPServer):
 
     allow_reuse_address = True
 
-    def __init__(self, host: str = 'localhost', port: int = MULTIPROCESSING_LOGGER_BIND_PORT,
+    def __init__(self, host: str = 'localhost', port: int = 0,
                  handler: Type[socketserver.BaseRequestHandler] = LogRecordStreamHandler,
                  timeout: Optional[float] = None):
         socketserver.ThreadingTCPServer.__init__(self, (host, port), handler)
@@ -336,8 +345,11 @@ class LogRecordSocketReceiver(socketserver.ThreadingTCPServer):
 
 def bootstrap_child() -> None:
     """Called from child process, all logging events should be transferred to parent process via socket."""
+    logging_server_port = os.getenv(LOGGING_SERVER_PORT_KEY, None)
+    if logging_server_port is None:
+        raise RuntimeError('Logging server port is not set')
     logging.root.setLevel(logging.DEBUG)
-    logging.root.addHandler(logging.handlers.SocketHandler('localhost', MULTIPROCESSING_LOGGER_BIND_PORT))
+    logging.root.addHandler(logging.handlers.SocketHandler('localhost', int(logging_server_port)))
 
 
 # typing supports
@@ -348,7 +360,7 @@ def bootstrap(formatter_str: str = default_formatter_str, log_dir: str = 'logs',
               default_log_to_screen_level: Optional[int] = None,
               write_to_file: bool = True, write_to_file_loggers: LOGGER_CONFIG_DICT = None,
               default_write_to_file_level: Optional[int] = None, file_name_prefix: str = '(root)',
-              max_file_cnt: int = 30):
+              max_file_cnt: int = 10):
     ...
 
 
@@ -358,12 +370,30 @@ def bootstrap():
     ...
 
 
+_bootstrap_called = False  # prevent duplicated calls
+
+
 def bootstrap(*args, **kwargs):
-    if mp.parent_process() is None:
+    global _bootstrap_called
+    if _bootstrap_called:
+        return
+    logging_server_port = os.getenv(LOGGING_SERVER_PORT_KEY, None)
+    if logging_server_port is None:
+        # parent process
         bootstrap_parent(*args, **kwargs)
     else:
+        # child process
         bootstrap_child()
+    _bootstrap_called = True
 
 
 # bootstrap.__annotations__ = bootstrap_parent.__annotations__
 # bootstrap.__doc__ = bootstrap_parent.__doc__
+
+def _bootstrap_auto_call():
+    # only call bootstrap for child process
+    if os.getenv(LOGGING_SERVER_PORT_KEY, None) is not None:
+        bootstrap()
+
+
+_bootstrap_auto_call()
