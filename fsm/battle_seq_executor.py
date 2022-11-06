@@ -232,6 +232,7 @@ class BattleSequenceExecutor:
             self._submit_click_event(0.5, (TO_SERVANT_X[to_servant_pos], TO_SERVANT_Y))
         elif np_card_type != NP_CARD_TYPE_EMPTY:
             raise NotImplementedError('Specifying NP card type in unsupported yet')
+        self._submit_click_event(0.5, (CV_SKILL_SPEEDUP_CLICK_X, CV_SKILL_SPEEDUP_CLICK_Y))
         self._submit_click_event(1, None)
         self._submit_click_event(TIME_WAIT_ATTACK_BUTTON, None)
         return self
@@ -249,8 +250,8 @@ class BattleSequenceExecutor:
         # 未出卡前指定敌方单体
         self._enter_attack_mode()
         self._select_enemy(enemy_location)
-        # 点宝具（第一张卡选宝具的话会等更长的时间）
-        self._submit_click_event(2 if len(self._selected_cmd_cards) == 0 else 0.5, (NP_XS[servant_pos], NP_Y))
+        # From 2.45: 选卡后宝具卡速度加快了，不用专门留时间给它了
+        self._submit_click_event(0.5, (NP_XS[servant_pos], NP_Y))
         self._selected_cmd_cards.append((self.noble_phantasm, (servant_id, enemy_location)))
         real_svt_id = self._translate_servant_id(servant_id)
         if real_svt_id in self._np_type:
@@ -309,6 +310,7 @@ class BattleSequenceExecutor:
             # 点确定
             self._submit_click_event(0.2, (APPLY_CHANGE_SERVANT_BUTTON_X, APPLY_CHANGE_SERVANT_BUTTON_Y))
             # TODO [prior: normal]: automatically re-detect command card after people changed
+        self._submit_click_event(0.5, (CV_SKILL_SPEEDUP_CLICK_X, CV_SKILL_SPEEDUP_CLICK_Y))
         self._submit_click_event(1, None)
         self._submit_click_event(TIME_WAIT_ATTACK_BUTTON, None)
         return self

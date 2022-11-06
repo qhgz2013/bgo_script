@@ -211,6 +211,11 @@ class SelectSupportHandler(ConfigurableStateHandler):
         svt_id, t = self._wrap_call_matcher(self.servant_matcher.match, _servant_empty_check, img,
                                             self._support_empty_img, range_list)
         logger.debug('Detected support servant ID: %s (used %f sec(s))' % (str(svt_id), t))
+        if len(svt_id) == 0:
+            import skimage.io
+            import os
+            os.makedirs('debug', exist_ok=True)
+            skimage.io.imsave(f'debug/{int(time())}.png', img)
 
         # match craft essence
         def _craft_essence_empty_check(img1, img2):
@@ -278,14 +283,14 @@ class SelectSupportHandler(ConfigurableStateHandler):
                     current_skill_img = skill_img[:, begin_x:begin_x + CV_SUPPORT_SKILL_BOX_SIZE, :]
                     hsv = image_process.rgb_to_hsv(current_skill_img).astype(np.float32)
                     img_digit_part = (1. - hsv[..., 1] / 255.) * (hsv[..., 2] / 255.)
-                    img_digit_part = img_digit_part[30:, 3:30]
+                    img_digit_part = img_digit_part[15:, 3:25]
                     bin_digits = np.greater_equal(img_digit_part, CV_SUPPORT_SKILL_BINARIZATION_THRESHOLD)
                     digit_segments = image_process.split_image(bin_digits)
                     digits = []
                     for segment in sorted(digit_segments, key=lambda x: (x.max_x + x.min_x)):
-                        if 50 < segment.associated_pixels.shape[0] < 150 \
-                                and abs(segment.min_y + segment.max_y - 26) <= 3 \
-                                and segment.max_x - segment.min_x < 14 <= segment.max_y - segment.min_y:
+                        if 40 < segment.associated_pixels.shape[0] < 100 \
+                                and abs(segment.min_y + segment.max_y - 20) <= 3 \
+                                and segment.max_x - segment.min_x < 12 <= segment.max_y - segment.min_y:
                             digits.append(self._digit_recognizer.recognize(segment.get_image_segment()))
                     if len(digits) == 2:
                         skill_lvl = digits[0] * 10 + digits[1]

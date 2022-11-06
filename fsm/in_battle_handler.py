@@ -39,7 +39,7 @@ class WaitAttackOrExitQuestHandler(ConfigurableStateHandler):
             img = self.attacher.get_screenshot(CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y)[..., :3]
             gray = np.mean(img, -1)
             blank_val = np.mean(np.less(gray, CV_IN_BATTLE_BLANK_SCREEN_THRESHOLD))
-            logger.debug('DEBUG value: blank ratio: %f' % blank_val)
+            # logger.debug('DEBUG value: blank ratio: %f' % blank_val)
             # skip blank screen frame
             if blank_val >= CV_IN_BATTLE_BLANK_SCREEN_RATIO:
                 continue
@@ -53,7 +53,7 @@ class WaitAttackOrExitQuestHandler(ConfigurableStateHandler):
     def _can_attack(self, img: np.ndarray) -> bool:
         btn_area = img[CV_ATTACK_BUTTON_Y1:CV_ATTACK_BUTTON_Y2, CV_ATTACK_BUTTON_X1:CV_ATTACK_BUTTON_X2]
         abs_gray_diff = image_process.mean_gray_diff_err(btn_area, self._attack_button_anchor)
-        logger.debug('DEBUG value: attack button mean_gray_diff_err = %f' % abs_gray_diff)
+        # logger.debug('DEBUG value: attack button mean_gray_diff_err = %f' % abs_gray_diff)
         return abs_gray_diff < CV_ATTACK_DIFF_THRESHOLD
 
     @staticmethod
@@ -67,7 +67,7 @@ class WaitAttackOrExitQuestHandler(ConfigurableStateHandler):
                 int(w*CV_EXIT_QUEST_SERVANT_MASK_X1S[i]):int(w*CV_EXIT_QUEST_SERVANT_MASK_X2S[i]), :] = 0
         gray = np.mean(img, -1) < CV_EXIT_QUEST_GRAY_THRESHOLD
         ratio = np.mean(gray)
-        logger.debug('DEBUG value: exit quest gray ratio: %f' % ratio)
+        # logger.debug('DEBUG value: exit quest gray ratio: %f' % ratio)
         return ratio >= CV_EXIT_QUEST_GRAY_RATIO_THRESHOLD
 
 
