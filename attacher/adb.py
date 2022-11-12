@@ -22,7 +22,7 @@ import threading
 import subprocess
 from ._ffmpeg_util import ADBScreenrecordFFMpegDecoder
 import multiprocessing as mp
-from basic_class import Point, Resolution
+from basic_class import PointF, Resolution
 
 __all__ = ['ADBScreenCapturer', 'ADBScreenrecordCapturer', 'ADBAttacher', 'ADBRootAttacher', 'EventID', 'EventType',
            'ADBScreenrecordCapturerThreaded', "ADBScreenrecordCapturerMP"]
@@ -421,24 +421,21 @@ class ADBAttacher(AttacherBase):
         """Returns the solution of input space (in pixels)."""
         return self._solution
 
-    def send_click(self, x: int, y: int, stay_time: float = 0.1):
+    def send_click(self, x: float, y: float, stay_time: float = 0.1):
         """Send click event to a point ``(x, y)``, where ``x`` and ``y`` are pixel coordinates where the coordinates at
         left-top corner are zeros. ``x`` should be ``[0, width)`` and ``y`` should be ``[0, height)``.
 
-        :param x: The pixel coordinate x.
-        :param y: The pixel coordinate y.
+        :param x: The normalized coordinate x.
+        :param y: The normalized coordinate y.
         :param stay_time: Time duration (in seconds) between pressing and releasing.
         """
         # input touchscreen swipe <x> <y> <x> <y> <t> (x, y: px, t: ms)
         # note: <x> and <y> are orientation-related. <x> for <width> axis and <y> for <height> axis
-        if x >= self._solution.width:
-            logger.warning(f'click position x={x} is out of screen width={self._solution.width}')
-        if y >= self._solution.height:
-            logger.warning(f'click position y={y} is out of screen height={self._solution.height}')
+        px, py = int(round(self.input_solution.width * x)), int(round(self.input_solution.height * y))
         t = int(round(stay_time * 1000))
-        spawn(f'input touchscreen swipe {x} {y} {x} {y} {t}', spawn_fn=self._adb_shell.interact, raise_exc=True)
+        spawn(f'input touchscreen swipe {px} {py} {px} {py} {t}', spawn_fn=self._adb_shell.interact, raise_exc=True)
 
-    def send_slide(self, p_from: Point, p_to: Point, stay_time_before_move: float = _NAN, stay_time_move: float = 2.0,
+    def send_slide(self, p_from: PointF, p_to: PointF, stay_time_before_move: float = _NAN, stay_time_move: float = 2.0,
                    stay_time_after_move: float = _NAN):
         """Send slide event from point ``p_from`` to ``p_to``.
 
@@ -451,7 +448,11 @@ class ADBAttacher(AttacherBase):
             implementation, keep it NAN).
         """
         # input touchscreen swipe <x1> <y1> <x2> <y2> <t>, similar to the above method
-        x1, x2, y1, y2 = p_from.x, p_to.x, p_from.y, p_to.y
+        # noinspection DuplicatedCode
+        x1 = int(round(self.input_solution.width * p_from.x))
+        y1 = int(round(self.input_solution.height * p_from.y))
+        x2 = int(round(self.input_solution.width * p_to.x))
+        y2 = int(round(self.input_solution.height * p_to.y))
         t = int(round(stay_time_move * 1000))
         global _warned_screencap_arg
         if (not math.isnan(stay_time_before_move) or not math.isnan(stay_time_after_move)) \
@@ -601,11 +602,15 @@ class ADBRootAttacher(ADBAttacher):
         sleep(stay_time_after_move)
         self._send_event_touch_up(device)
 
-    def send_slide(self, p_from: Point, p_to: Point, stay_time_before_move: float = 0.1, stay_time_move: float = 0.8,
+    def send_slide(self, p_from: PointF, p_to: PointF, stay_time_before_move: float = 0.1, stay_time_move: float = 0.8,
                    stay_time_after_move: float = 0.1):
         if self._rooted():
             try:
-                x1, x2, y1, y2 = p_from.x, p_to.x, p_from.y, p_to.y
+                # noinspection DuplicatedCode
+                x1 = int(round(self.input_solution.width * p_from.x))
+                y1 = int(round(self.input_solution.height * p_from.y))
+                x2 = int(round(self.input_solution.width * p_to.x))
+                y2 = int(round(self.input_solution.height * p_to.y))
                 self._send_slide_impl(x1, y1, x2, y2, stay_time_before_move, stay_time_move, stay_time_after_move)
                 return
             except Exception as ex:

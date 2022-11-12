@@ -1,10 +1,10 @@
 import numpy as np
-from .resolution_match_rule import Resolution, Rect, Point
 import matplotlib.pyplot as plt
 from io import BytesIO
 from typing import *
 from .factory import DetectionDefFactory, ClickDefFactory
 from logging import getLogger
+from basic_class import *
 
 logger = getLogger(__name__)
 
@@ -23,8 +23,8 @@ def _plot_without_scaling(img: np.ndarray, plot_rect_func_names: Set[str], plot_
     plt.imshow(img)
 
     try:
-        detection_handler = DetectionDefFactory.get_detection_def(Resolution(width, height))
-        click_handler = ClickDefFactory.get_click_def(Resolution(width, height))
+        detection_handler = DetectionDefFactory.get_detection_def(Resolution(height, width))
+        click_handler = ClickDefFactory.get_click_def(Resolution(height, width))
         for func_name in plot_rect_func_names:
             func = getattr(detection_handler, func_name)
             try:
@@ -51,7 +51,7 @@ def _plot_without_scaling(img: np.ndarray, plot_rect_func_names: Set[str], plot_
             except Exception as e:
                 logger.error(f'plot_point: {func_name} failed: {e}')
                 continue
-            if isinstance(points, Point):
+            if isinstance(points, PointF):
                 points = [points]
             elif not isinstance(points, list):
                 logger.warning(f'Method {func_name} returned {points!r} which is not a Point or a list or Point')
@@ -60,8 +60,10 @@ def _plot_without_scaling(img: np.ndarray, plot_rect_func_names: Set[str], plot_
             if func_name.startswith('get_'):
                 func_name = func_name[4:]
             for point in points:
-                plt.plot(point.x, point.y, 'go')
-                plt.text(point.x + 5, point.y - 5, func_name, color='green')
+                x = int(round(point.x * img.shape[1]))
+                y = int(round(point.y * img.shape[0]))
+                plt.plot(x, y, 'go')
+                plt.text(x + 5, y - 5, func_name, color='green')
     except ValueError:
         logger.warning(f'No handler found for resolution {width}x{height}, skip rectangle plotting')
 

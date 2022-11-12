@@ -124,3 +124,35 @@ class BasicDetectionDefImpl(AbstractDetectionDef, metaclass=ABCMeta):
     @staticmethod
     def get_continuous_battle_ui_file() -> str:
         return 'cv_data/continuous_battle.png'
+
+    @staticmethod
+    def get_fp_pool_ui_file() -> str:
+        return 'cv_data/fp_gacha_button.png'
+
+    @staticmethod
+    def get_fp_pool_ui_diff_threshold() -> float:
+        return 50  # TODO
+
+    @staticmethod
+    def get_fp_active_gray_threshold() -> int:
+        return 150
+
+    @staticmethod
+    def get_fp_active_gray_ratio_threshold() -> float:
+        return 0.01
+
+    @staticmethod
+    def get_fp_pool_gacha_confirm_file() -> str:
+        return 'cv_data/fp_gacha_confirm.png'
+
+    @staticmethod
+    def get_fp_pool_gacha_confirm_diff_threshold() -> float:
+        return 20
+
+    @staticmethod
+    def get_fp_pool_gacha_skip_diff_threshold() -> float:
+        return 20
+
+    @staticmethod
+    def get_fp_pool_gacha_skip_diff_file() -> str:
+        return 'cv_data/fp_anchor.png'

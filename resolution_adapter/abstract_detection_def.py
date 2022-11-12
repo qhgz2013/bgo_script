@@ -244,3 +244,57 @@ class AbstractDetectionDef(metaclass=ABCMeta):
     @staticmethod
     def get_continuous_battle_ui_file() -> str:
         raise NotImplementedError
+
+    # 友情池识别
+    @staticmethod
+    @plot_rect
+    def get_fp_pool_ui_rect() -> Rect:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_fp_pool_ui_file() -> str:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_fp_pool_ui_diff_threshold() -> float:
+        raise NotImplementedError
+
+    # double check: 用的是友情点不是石头（必须手动狗头）
+    @staticmethod
+    @plot_rect
+    def get_fp_active_rect() -> Rect:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_fp_active_gray_threshold() -> int:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_fp_active_gray_ratio_threshold() -> float:
+        raise NotImplementedError
+
+    @staticmethod
+    @plot_rect
+    def get_fp_pool_gacha_confirm_rect() -> Rect:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_fp_pool_gacha_confirm_file() -> str:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_fp_pool_gacha_confirm_diff_threshold() -> float:
+        raise NotImplementedError
+
+    @staticmethod
+    @plot_rect
+    def get_fp_pool_gacha_skip_check_button_rect() -> Rect:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_fp_pool_gacha_skip_diff_threshold() -> float:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_fp_pool_gacha_skip_diff_file() -> str:
+        raise NotImplementedError

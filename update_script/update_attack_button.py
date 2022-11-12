@@ -1,12 +1,14 @@
 from attacher import MumuAttacher
-from cv_positioning import *
 from skimage.io import imsave
 import numpy as np
+import image_process
+import resolution_adapter
+from basic_class import Resolution, Rect
 
 
-def _generate_attack_button_mask() -> np.ndarray:
-    dx = CV_ATTACK_BUTTON_X2 - CV_ATTACK_BUTTON_X1
-    dy = CV_ATTACK_BUTTON_Y2 - CV_ATTACK_BUTTON_Y1
+def _generate_attack_button_mask(button_rect: Rect) -> np.ndarray:
+    dx = button_rect.width
+    dy = button_rect.height
     d = min(dx, dy)
     cx = dx / 2
     cy = dy / 2
@@ -19,9 +21,14 @@ def _generate_attack_button_mask() -> np.ndarray:
 def main():
     attacher = MumuAttacher()
     # MAKE SURE YOU'RE IN BATTLE
-    img = attacher.get_screenshot(CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y)
-    battle_button = img[CV_ATTACK_BUTTON_Y1:CV_ATTACK_BUTTON_Y2, CV_ATTACK_BUTTON_X1:CV_ATTACK_BUTTON_X2, :]
-    mask = _generate_attack_button_mask()
+    img = attacher.get_screenshot()
+    detection_defs = resolution_adapter.DetectionDefFactory.get_detection_def(Resolution(img.shape[0], img.shape[1]))
+    target_resolution = detection_defs.get_target_resolution()
+    if target_resolution is not None:
+        img = image_process.resize(img, target_resolution.width, target_resolution.height)
+    button_rect = detection_defs.get_attack_button_rect()
+    battle_button = img[button_rect.y1:button_rect.y2, button_rect.x1:button_rect.x2, :]
+    mask = _generate_attack_button_mask(button_rect)
     battle_button = np.concatenate([battle_button, np.expand_dims(mask, 2)], 2)
     imsave('../cv_data/attack_button.png', battle_button)
 

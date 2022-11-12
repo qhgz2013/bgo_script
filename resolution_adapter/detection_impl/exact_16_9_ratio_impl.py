@@ -9,7 +9,7 @@ from typing import *
 class Exact16x9RatioDetectionDefImpl(BasicDetectionDefImpl):
     @staticmethod
     def get_target_resolution() -> Optional[Resolution]:
-        return Resolution(1280, 720)
+        return Resolution(720, 1280)
 
     @staticmethod
     def get_ap_bar_rect() -> Rect:
@@ -76,3 +76,19 @@ class Exact16x9RatioDetectionDefImpl(BasicDetectionDefImpl):
     @staticmethod
     def get_support_refresh_refused_detection_rect() -> Rect:
         return Rect(550, 540, 750, 580)
+
+    @staticmethod
+    def get_fp_pool_ui_rect() -> Rect:
+        return Rect(700, 480, 950, 620)
+
+    @staticmethod
+    def get_fp_active_rect() -> Rect:
+        return Rect(700, 30, 840, 55)
+
+    @staticmethod
+    def get_fp_pool_gacha_confirm_rect() -> Rect:
+        return Rect(175, 80, 1105, 635)
+
+    @staticmethod
+    def get_fp_pool_gacha_skip_check_button_rect() -> Rect:
+        return Rect(640, 10, 700, 70)

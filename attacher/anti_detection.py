@@ -6,7 +6,7 @@
 #      random uniform to add noise to the click interval.
 from dataclasses import dataclass
 from typing import *
-from basic_class import Resolution, Point
+from basic_class import Resolution, PointF
 import numpy as np
 from .base import AttacherBase
 from time import sleep
@@ -45,6 +45,10 @@ class AntiDetectionAttacher(AttacherBase):
         self.forward_attacher = forward_attacher
         self.config = config
 
+    @property
+    def input_solution(self) -> Resolution:
+        return self.forward_attacher.input_solution
+
     def _apply_random_latency(self):
         if not self.config.enable_random_latency:
             return
@@ -57,35 +61,31 @@ class AntiDetectionAttacher(AttacherBase):
         except Exception as e:
             logger.error(f'Failed to sample latency, disable random latency. Error: {e!r}', exc_info=e)
 
-    def _apply_random_offset(self, x: int, y: int) -> Tuple[int, int]:
+    def _apply_random_offset(self, x: float, y: float) -> Tuple[float, float]:
         if not self.config.enable_random_offset:
             return x, y
         try:
             sampled_offset_x = self.config.random_offset_sampling_func()
             sampled_offset_y = self.config.random_offset_sampling_func()
-            x += sampled_offset_x
-            y += sampled_offset_y
-            if hasattr(self.forward_attacher, 'input_solution'):
-                input_solution = getattr(self.forward_attacher, 'input_solution')
-                if input_solution is not None and isinstance(input_solution, Resolution):
-                    x = int(np.clip(x, 0, input_solution.width - 1))
-                    y = int(np.clip(y, 0, input_solution.height - 1))
-            return x, y
+            px, py = int(round(self.input_solution.width * x)), int(round(self.input_solution.height * y))
+            px = np.clip(px + sampled_offset_x, 0, self.input_solution.width - 1)
+            py = np.clip(py + sampled_offset_y, 0, self.input_solution.height - 1)
+            return float(px / self.input_solution.width), float(py / self.input_solution.height)
         except Exception as e:
             logger.error(f'Failed to sample offset, disable random offset. Error: {e!r}', exc_info=e)
             return x, y
 
-    def send_click(self, x: int, y: int, stay_time: float = 0.1):
+    def send_click(self, x: float, y: float, stay_time: float = 0.1):
         self._apply_random_latency()
         x, y = self._apply_random_offset(x, y)
         return self.forward_attacher.send_click(x=x, y=y, stay_time=stay_time)
 
-    def send_slide(self, p_from: Point, p_to: Point, stay_time_before_move: float = 0.1,
+    def send_slide(self, p_from: PointF, p_to: PointF, stay_time_before_move: float = 0.1,
                    stay_time_move: float = 0.8, stay_time_after_move: float = 0.1):
         self._apply_random_latency()
         x1, y1 = self._apply_random_offset(p_from.x, p_from.y)
         x2, y2 = self._apply_random_offset(p_to.x, p_to.y)
-        return self.forward_attacher.send_slide(p_from=Point(x1, y1), p_to=Point(x2, y2),
+        return self.forward_attacher.send_slide(p_from=PointF(x1, y1), p_to=PointF(x2, y2),
                                                 stay_time_before_move=stay_time_before_move,
                                                 stay_time_move=stay_time_move,
                                                 stay_time_after_move=stay_time_after_move)
