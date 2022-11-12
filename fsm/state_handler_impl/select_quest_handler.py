@@ -1,13 +1,13 @@
-from .state_handler import ConfigurableStateHandler, SingleClickAndWaitFufuHandler
+from fsm.state_handler import ConfigurableStateHandler, SingleClickAndWaitFufuHandler
 from attacher import CombinedAttacher
-from click_positioning import *
+from archives.click_positioning import *
 import logging
 from time import time
 from image_process import imread
-from cv_positioning import *
+from archives.cv_positioning import *
 import numpy as np
 from bgo_game import ScriptConfig
-from .fgo_state import FgoState
+from fsm.fgo_state import FgoState
 
 logger = logging.getLogger('bgo_script.fsm')
 

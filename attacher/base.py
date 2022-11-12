@@ -1,39 +1,23 @@
 # attacher.base
 # Basic definitions for interacting with external systems.
-# Ver 1.1
+# Ver 1.2
 # Changelog:
+# 1.2: Added registry for string lookup
 # 1.1: Changed definition of class Point for further multi-solution support, renamed AbstractAttacher to AttacherBase.
 # 1.0: Split capturer and attacher into independent class, provide CombinedAttacher as backward-compatible class.
 from abc import ABCMeta
 import numpy as np
 from typing import *
+from basic_class import *
+from util import HandlerRegistry
 
-__all__ = ['ScreenCapturer', 'AttacherBase', 'Point', 'Solution', 'CombinedAttacher']
-
-
-class Point:
-    """Normalized point."""
-    x: float
-    y: float
-
-    def __init__(self, x: float, y: float):
-        self.x = x
-        self.y = y
-
-    def __repr__(self):
-        return f'<{self.__class__.__name__} ({self.x}, {self.y})>'
-
-
-class Solution(NamedTuple):
-    """Device solution."""
-    height: int
-    width: int
+__all__ = ['ScreenCapturer', 'AttacherBase', 'CombinedAttacher', 'AttacherRegistry', 'CapturerRegistry']
 
 
 class ScreenCapturer(metaclass=ABCMeta):
     """An abstract class for capturing screenshots from device / simulator"""
 
-    def get_solution(self) -> Solution:
+    def get_resolution(self) -> Resolution:
         """Get the default screenshot solution, in (height, width) tuple."""
         raise NotImplementedError
 
@@ -43,8 +27,8 @@ class ScreenCapturer(metaclass=ABCMeta):
 
 
 class AttacherBase(metaclass=ABCMeta):
-    """AttacherBase defines the basic interface to interact with the game application."""
-    def send_click(self, x: float, y: float, stay_time: float = 0.1):
+    """``AttacherBase`` defines the basic interface to interact with the game application."""
+    def send_click(self, x: int, y: int, stay_time: float = 0.1):
         raise NotImplementedError
 
     def send_slide(self, p_from: Point, p_to: Point, stay_time_before_move: float = 0.1,
@@ -52,7 +36,15 @@ class AttacherBase(metaclass=ABCMeta):
         raise NotImplementedError
 
 
-_POINT_COMPATIBLE = Union[Point, Tuple[float, float]]
+class AttacherRegistry(HandlerRegistry[str, AttacherBase]):
+    pass
+
+
+class CapturerRegistry(HandlerRegistry[str, ScreenCapturer]):
+    pass
+
+
+_POINT_COMPATIBLE = Union[Point, Tuple[int, int]]
 _STAY_TIME_COMPATIBLE = Optional[float]
 
 
@@ -63,8 +55,8 @@ class CombinedAttacher(ScreenCapturer, AttacherBase):
         self.capturer = capturer
         self.attacher = attacher
 
-    def get_solution(self) -> Solution:
-        return self.capturer.get_solution()
+    def get_resolution(self) -> Resolution:
+        return self.capturer.get_resolution()
 
     def get_screenshot(self, width: Optional[int] = None, height: Optional[int] = None) -> np.ndarray:
         img = self.capturer.get_screenshot()
@@ -73,7 +65,7 @@ class CombinedAttacher(ScreenCapturer, AttacherBase):
         import image_process
         return image_process.resize(img, width, height)
 
-    def send_click(self, x: float, y: float, stay_time: float = 0.1):
+    def send_click(self, x: int, y: int, stay_time: float = 0.1):
         self.attacher.send_click(x, y, stay_time)
 
     def send_slide(self, p_from: _POINT_COMPATIBLE, p_to: _POINT_COMPATIBLE,

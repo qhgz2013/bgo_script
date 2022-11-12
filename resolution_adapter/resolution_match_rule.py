@@ -1,36 +1,8 @@
 from abc import ABCMeta
-from dataclasses import dataclass
+from basic_class import Resolution, Rect, Point
 
 __all__ = ['Resolution', 'AbstractResolutionMatchRule', 'ExactResolutionMatchRule', 'RangeResolutionMatchRule',
            'ExactWidthHeightRatioMatchRule', 'Rect', 'Point']
-
-
-@dataclass(order=True, unsafe_hash=True)
-class Resolution:
-    width: int
-    height: int
-
-
-@dataclass(unsafe_hash=True, order=True)
-class Rect:
-    x1: int
-    y1: int
-    x2: int
-    y2: int
-
-    @property
-    def width(self):
-        return self.x2 - self.x1
-
-    @property
-    def height(self):
-        return self.y2 - self.y1
-
-
-@dataclass(unsafe_hash=True, order=True)
-class Point:
-    x: int
-    y: int
 
 
 class AbstractResolutionMatchRule(metaclass=ABCMeta):
@@ -67,7 +39,7 @@ class ExactWidthHeightRatioMatchRule(AbstractResolutionMatchRule):
         self.width_height_ratio = width_height_ratio
 
     def match(self, resolution: Resolution) -> bool:
-        return abs(resolution.width / resolution.height - self.width_height_ratio) < 0.001
+        return abs(resolution.width / resolution.height - self.width_height_ratio) < 0.01
 
     def __repr__(self):
         return f'<ExactWidthHeightRatioMatchRule({self.width_height_ratio})>'

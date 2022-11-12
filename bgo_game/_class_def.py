@@ -2,7 +2,7 @@ from enum import IntEnum
 from typing import *
 if TYPE_CHECKING:
     from fsm.battle_seq_executor import BattleSequenceExecutor
-__all__ = ['CommandCard', 'CommandCardType', 'EatAppleType', 'DispatchedCommandCard', 'BattleController',
+__all__ = ['CommandCard', 'CommandCardType', 'APRecoveryItemType', 'DispatchedCommandCard', 'BattleController',
            'ServantConfig', 'SupportCraftEssenceConfig', 'SupportServantConfig', 'TeamConfig', 'CommandCardNotFound']
 
 
@@ -14,7 +14,7 @@ class CommandCardType(IntEnum):
     Extra = 101
 
 
-class EatAppleType(IntEnum):
+class APRecoveryItemType(IntEnum):
     DontEatMyApple = 0
     SaintQuartz = 1  # 大概不会真有人用这个吧
     GoldApple = 2

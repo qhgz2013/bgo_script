@@ -26,6 +26,7 @@ MSG_TYPE = Literal['stdout', 'stderr']
 _PIPE = subprocess.PIPE
 _T = TypeVar('_T', bound=AnyStr)
 SPAWN_FUNC_PROTOTYPE = Callable[..., Tuple[int, _T, _T]]
+ADB_DEFAULT_LISTENING_PORT = 5037
 
 
 def spawn(*cmds: str, spawn_fn: SPAWN_FUNC_PROTOTYPE = spawn_process,
@@ -250,7 +251,19 @@ class ADBServer(metaclass=SingletonMeta):
     _mutex = threading.RLock()
     _started = False  # all the subclasses share this state
 
-    def __init__(self, adb_executable_path: Optional[str] = None):
+    def _check_adb_daemon_alive_socket_impl(self) -> bool:
+        import socket
+        skt = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            skt.connect(('localhost', self.adb_server_port))
+            skt.close()
+            logger.debug(f'Check ADB daemon status: alive')
+            return True
+        except (ConnectionRefusedError, ConnectionResetError):
+            logger.debug(f'Check ADB daemon status: offline')
+            return False
+
+    def __init__(self, adb_executable_path: Optional[str] = None, adb_server_port: int = ADB_DEFAULT_LISTENING_PORT):
         if adb_executable_path is None:
             adb_executable_path = find_adb_path()
         if adb_executable_path is None:
@@ -258,8 +271,12 @@ class ADBServer(metaclass=SingletonMeta):
         if not os.path.isfile(adb_executable_path):
             raise RuntimeError(f'Adb executable "{adb_executable_path}" is not a file')
         self.adb_executable = adb_executable_path
-        logger.debug('Instantiating ADB server daemon')
-        self.stop(force=True)
+        self.adb_server_port = adb_server_port
+        # use the legacy method to set the ADB listening port
+        os.putenv('ANDROID_ADB_SERVER_PORT', str(self.adb_server_port))
+        ADBServer._started = self._check_adb_daemon_alive_socket_impl()
+        logger.debug('Checking ADB server daemon')
+        # self.stop(force=True)
         self.start()
         # setting up adb server shut down thread
         thd = threading.Thread(target=self._shutdown_adb_server, daemon=False)
@@ -284,9 +301,7 @@ class ADBServer(metaclass=SingletonMeta):
             ADBServer._started = True
 
     def _start_internal(self):
-        # self._call_hooks(self._hook_func_before_start)
         spawn(self.adb_executable, 'start-server', ignore_stderr=True, raise_exc=True)
-        # self._call_hooks(self._hook_func_after_started)
 
     def restart(self, force: bool = False):
         """Kill the existing ADB server and restart it."""
@@ -334,11 +349,12 @@ class ADBServer(metaclass=SingletonMeta):
         except AttributeError:
             return f'<{self.__class__.__name__} (uninitialized)>'
 
-    # hooks for multiprocessing
-    # todo: check state from socket
+    # hooks for multiprocessing: state is checked from socket
     def __getstate__(self):
-        return self.adb_executable, ADBServer._started
+        return self.adb_executable, self.adb_server_port
 
     def __setstate__(self, state):
-        self.adb_executable, ADBServer._started = state
+        self.adb_executable, self.adb_server_port = state
+        os.putenv('ANDROID_ADB_SERVER_PORT', str(self.adb_server_port))
         ADBServer._mutex = threading.RLock()
+        ADBServer._started = self._check_adb_daemon_alive_socket_impl()

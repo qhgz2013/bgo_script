@@ -1,13 +1,13 @@
-from .state_handler import ConfigurableStateHandler, WaitFufuStateHandler
+from fsm.state_handler import ConfigurableStateHandler, WaitFufuStateHandler
 from attacher import CombinedAttacher
-from cv_positioning import *
+from archives.cv_positioning import *
 import numpy as np
 import logging
-from click_positioning import *
+from archives.click_positioning import *
 from time import sleep
 import image_process
-from .fgo_state import FgoState
-from bgo_game import ScriptConfig, EatAppleType
+from fsm.fgo_state import FgoState
+from bgo_game import ScriptConfig, APRecoveryItemType
 
 logger = logging.getLogger('bgo_script.fsm')
 
@@ -18,8 +18,8 @@ def _imread_to_screen_size(path):
 
 class EatAppleHandler(ConfigurableStateHandler):
     _eat_apple_ui_anchor = _imread_to_screen_size(CV_EAT_APPLE_UI_FILE)
-    _y_mapper = {EatAppleType.GoldApple: EAT_GOLD_APPLE_CLICK_Y, EatAppleType.SilverApple: EAT_SILVER_APPLE_CLICK_Y,
-                 EatAppleType.BronzeApple: EAT_BRONZE_APPLE_CLICK_Y, EatAppleType.SaintQuartz: EAT_SAINT_QUARTZ_CLICK_Y}
+    _y_mapper = {APRecoveryItemType.GoldApple: EAT_GOLD_APPLE_CLICK_Y, APRecoveryItemType.SilverApple: EAT_SILVER_APPLE_CLICK_Y,
+                 APRecoveryItemType.BronzeApple: EAT_BRONZE_APPLE_CLICK_Y, APRecoveryItemType.SaintQuartz: EAT_SAINT_QUARTZ_CLICK_Y}
     __warned_eat_saint_quartz = False
 
     def __init__(self, attacher: CombinedAttacher, forward_state: FgoState, cfg: ScriptConfig):
@@ -30,13 +30,13 @@ class EatAppleHandler(ConfigurableStateHandler):
     def run_and_transit_state(self) -> FgoState:
         screenshot = self.attacher.get_screenshot(CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y)
         if self.is_in_eat_apple_ui(screenshot):
-            if self._cfg.eat_apple_type == EatAppleType.DontEatMyApple:
+            if self._cfg.eat_apple_type == APRecoveryItemType.DontEatMyApple:
                 logger.warning('AP is not enough to enter quest, exit')
                 self.attacher.send_click(CANCEL_EAT_APPLE_BUTTON_X, CANCEL_EAT_APPLE_BUTTON_Y)
                 sleep(0.5)
                 return FgoState.STATE_FINISH
             else:
-                if self._cfg.eat_apple_type == EatAppleType.SaintQuartz and not self.__warned_eat_saint_quartz:
+                if self._cfg.eat_apple_type == APRecoveryItemType.SaintQuartz and not self.__warned_eat_saint_quartz:
                     self.__warned_eat_saint_quartz = True
                     logger.warning('You are using saint quartz for ap recovery')
                 logger.info('Performing action: ap recovery')

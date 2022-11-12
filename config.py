@@ -1,4 +1,4 @@
-from bgo_game import ScriptConfig, EatAppleType, BattleController, DispatchedCommandCard, TeamConfig, ServantConfig, SupportServantConfig, SupportCraftEssenceConfig, CommandCard
+from bgo_game import BattleController, DispatchedCommandCard, TeamConfig, ServantConfig, SupportServantConfig, SupportCraftEssenceConfig, CommandCard
 from typing import *
 
 
@@ -102,7 +102,7 @@ jeanne_archer_wcab_team = TeamConfig([
     ServantConfig(svt_id=284),  # CAB
     ServantConfig(svt_id=216),  # Jeanne Archer
     SupportServantConfig(svt_id=284, craft_essence_cfg=SupportCraftEssenceConfig(910, max_break=True),
-                         skill_requirement=[10, 10, 10]),
+                         skill_requirement=[10, 10, 10]),  # QP:988, 羁绊:910
     ServantConfig(svt_id=16),
     ServantConfig(svt_id=163),
     ServantConfig(svt_id=106)
@@ -119,9 +119,5 @@ jeanne_archer_notocris_cab_team = TeamConfig([
 ])
 
 
-DEFAULT_CONFIG = ScriptConfig(
-    eat_apple_type=EatAppleType.DontEatMyApple,
-    battle_controller=SiegWCABController,
-    team_config=sieg_wcab_team,
-    max_ap=142
-)
+DEFAULT_CONTROLLER = JeanneArcherWCABController
+DEFAULT_TEAM_CONFIG = jeanne_archer_wcab_team

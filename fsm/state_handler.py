@@ -1,80 +1,75 @@
-from abc import ABC
-from bgo_game import ScriptConfig
+from abc import ABCMeta
+from bgo_game import ScriptEnv
 from .fgo_state import FgoState
-from attacher import CombinedAttacher
 from time import sleep, time
 import logging
-from cv_positioning import *
 import numpy as np
+import image_process
 
-__all__ = ['StateHandler', 'ConfigurableStateHandler', 'WaitFufuStateHandler', 'DirectStateForwarder',
-           'SingleClickHandler', 'SingleClickAndWaitFufuHandler']
+__all__ = ['StateHandler', 'WaitFufuStateHandler', 'DirectStateForwarder', 'SingleClickHandler',
+           'SingleClickAndWaitFufuHandler']
 
 logger = logging.getLogger('bgo_script.fsm')
 
 
-class StateHandler(ABC):
+class StateHandler(metaclass=ABCMeta):
     def run_and_transit_state(self) -> FgoState:
         raise NotImplementedError()
 
+    def __init__(self, env: ScriptEnv, forward_state: FgoState):
+        self.env = env
+        self.forward_state = forward_state
 
-class ConfigurableStateHandler(StateHandler, ABC):
-    def __init__(self, cfg: ScriptConfig):
-        self._cfg = cfg
+    def _get_screenshot_impl(self):
+        # get screenshot from capturer, resize to target resolution if given
+        screenshot = self.env.capturer.get_screenshot()
+        resolution = self.env.detection_definitions.get_target_resolution()
+        if resolution is not None:
+            screenshot = image_process.resize(screenshot, resolution.width, resolution.height)
+        return screenshot
 
 
 class DirectStateForwarder(StateHandler):
-    def __init__(self, forward_state: FgoState):
-        self.forward_state = forward_state
-
     def run_and_transit_state(self) -> FgoState:
         return self.forward_state
 
 
 class WaitFufuStateHandler(StateHandler):
-    def __init__(self, attacher: CombinedAttacher, forward_state: FgoState):
-        self.attacher = attacher
-        self.forward_state = forward_state
-
     def run_and_transit_state(self) -> FgoState:
         begin_timing = time()
         logger.debug('Started waiting fufu')
+        fufu_rect = self.env.detection_definitions.get_fufu_rect()
         while True:
-            screenshot = self.attacher.get_screenshot(CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y)
-            fufu_area = np.sum(screenshot[CV_FUFU_Y1:CV_FUFU_Y2, CV_FUFU_X1:CV_FUFU_X2, :3], -1)
-            ratio = np.average(fufu_area < CV_FUFU_BLANK_THRESHOLD)
-            if ratio < CV_FUFU_BLANK_RATIO_THRESHOLD:
+            screenshot = self._get_screenshot_impl()
+            fufu_area = np.sum(screenshot[fufu_rect.y1:fufu_rect.y2, fufu_rect.x1:fufu_rect.x2, :3], -1)
+            ratio = np.average(fufu_area < self.env.detection_definitions.get_fufu_blank_binarization_threshold())
+            if ratio < self.env.detection_definitions.get_fufu_blank_ratio_threshold():
                 break
             sleep(0.2)
         sleep(1)
-        logger.debug('Ended waiting fufu, waited %f sec(s)' % (time() - begin_timing))
+        logger.debug(f'Ended waiting fufu, waited {time() - begin_timing:.2f} sec(s)')
         return self.forward_state
 
 
 class SingleClickHandler(StateHandler):
-    def __init__(self, attacher: CombinedAttacher, x: float, y: float, next_state: FgoState, t_before_click: float = 0,
+    def __init__(self, env: ScriptEnv, forward_state: FgoState, x: int, y: int, t_before_click: float = 0,
                  t_after_click: float = 1):
-        self.attacher = attacher
+        super(SingleClickHandler, self).__init__(env, forward_state)
         self.x = x
         self.y = y
-        self.next_state = next_state
         self.t_before_click = t_before_click
         self.t_after_click = t_after_click
 
     def run_and_transit_state(self) -> FgoState:
         if self.t_before_click > 0:
             sleep(self.t_before_click)
-        self.attacher.send_click(self.x, self.y)
+        self.env.attacher.send_click(self.x, self.y)
         if self.t_after_click > 0:
             sleep(self.t_after_click)
-        return self.next_state
+        return self.forward_state
 
 
-class SingleClickAndWaitFufuHandler(StateHandler):
-    def __init__(self, attacher: CombinedAttacher, x: float, y: float, next_state: FgoState, t_before_click: float = 0):
-        self.attacher = attacher
-        self._click_handler = SingleClickHandler(attacher, x, y, next_state, t_before_click)
-
+class SingleClickAndWaitFufuHandler(SingleClickHandler):
     def run_and_transit_state(self) -> FgoState:
-        next_state = self._click_handler.run_and_transit_state()
-        return WaitFufuStateHandler(self.attacher, next_state).run_and_transit_state()
+        next_state = super(SingleClickAndWaitFufuHandler, self).run_and_transit_state()
+        return WaitFufuStateHandler(self.env, next_state).run_and_transit_state()

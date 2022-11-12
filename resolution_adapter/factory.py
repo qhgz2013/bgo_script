@@ -2,13 +2,14 @@ from util import HandlerRegistry
 from .resolution_match_rule import AbstractResolutionMatchRule, Resolution
 from .abstract_detection_def import AbstractDetectionDef
 from .abstract_click_def import AbstractClickDef
+from typing import *
 
 __all__ = ['DetectionDefFactory', 'ClickDefFactory']
 
 
 class DetectionDefFactory(HandlerRegistry[AbstractResolutionMatchRule, AbstractDetectionDef]):
     @classmethod
-    def get_detection_def(cls, resolution: Resolution) -> AbstractDetectionDef:
+    def get_detection_def(cls, resolution: Resolution) -> Type[AbstractDetectionDef]:
         for rule, handler in cls._registered_handlers.items():
             if rule.match(resolution):
                 return handler
@@ -17,7 +18,7 @@ class DetectionDefFactory(HandlerRegistry[AbstractResolutionMatchRule, AbstractD
 
 class ClickDefFactory(HandlerRegistry[AbstractResolutionMatchRule, AbstractClickDef]):
     @classmethod
-    def get_click_def(cls, resolution: Resolution) -> AbstractClickDef:
+    def get_click_def(cls, resolution: Resolution) -> Type[AbstractClickDef]:
         for rule, handler in cls._registered_handlers.items():
             if rule.match(resolution):
                 return handler

@@ -1,15 +1,15 @@
-from .state_handler import ConfigurableStateHandler, WaitFufuStateHandler
+from fsm.state_handler import ConfigurableStateHandler, WaitFufuStateHandler
 from attacher import CombinedAttacher
 from typing import *
-from cv_positioning import *
-from .fgo_state import FgoState
+from archives.cv_positioning import *
+from fsm.fgo_state import FgoState
 from time import sleep
 import image_process
 import numpy as np
 import logging
 from util import DigitRecognizer
 from bgo_game import ScriptConfig
-from .battle_seq_executor import BattleSequenceExecutor
+from fsm.battle_seq_executor import BattleSequenceExecutor
 
 logger = logging.getLogger('bgo_script.fsm')
 

@@ -9,7 +9,7 @@ import math
 from .adb_util import spawn, ADBServer, ADBShell
 from typing import *
 from typing import IO
-from .base import ScreenCapturer, Solution, AttacherBase, Point
+from .base import ScreenCapturer, AttacherBase, AttacherRegistry, CapturerRegistry
 import numpy as np
 from enum import IntEnum
 from collections import Counter
@@ -17,11 +17,12 @@ from logging import getLogger
 from functools import partial
 import struct
 from time import sleep, time
-from util import spawn_process_raw, LazyValue
+from util import spawn_process_raw, LazyValue, register_handler
 import threading
 import subprocess
 from ._ffmpeg_util import ADBScreenrecordFFMpegDecoder
 import multiprocessing as mp
+from basic_class import Point, Resolution
 
 __all__ = ['ADBScreenCapturer', 'ADBScreenrecordCapturer', 'ADBAttacher', 'ADBRootAttacher', 'EventID', 'EventType',
            'ADBScreenrecordCapturerThreaded', "ADBScreenrecordCapturerMP"]
@@ -82,10 +83,11 @@ def get_surface_orientation(shell: ADBShell) -> SurfaceOrientation:
     return next(iter(values.keys()))  # returns the unique value
 
 
+@register_handler(CapturerRegistry, 'adb_native')
 class ADBScreenCapturer(ScreenCapturer):
     def __init__(self, adb_server: Optional[ADBServer] = None, device: Optional[Union[int, str]] = None):
-        """Initiate a screen capturer using builtin ADB screencap command. The screenshot will be rotated to landscape
-        orientation adaptively.
+        """Initiate a screen capturer using builtin ADB ``screencap`` command. The screenshot will be rotated to
+        landscape orientation adaptively.
 
         :param adb_server: ADB server.
         :param device: Specify which device to be captured (device name or index), leave None to use default device.
@@ -98,13 +100,13 @@ class ADBScreenCapturer(ScreenCapturer):
         self._landscape_orientation = LazyValue(self._get_landscape_orientation)
         self._terminated = False
 
-    def _get_solution_native_impl(self) -> Solution:
+    def _get_solution_native_impl(self) -> Resolution:
         output = spawn('wm size', spawn_fn=self._adb_shell.interact, raise_exc=True)
         match = re.search(_WM_SOLUTION_PATTERN, output)
         if match is None:
             raise RuntimeError(f'Could not match resolution from output "{output}"')
         h, w = int(match.group('height')), int(match.group('width'))
-        return Solution(h, w)
+        return Resolution(h, w)
 
     def _get_landscape_orientation(self) -> SurfaceOrientation:
         try:
@@ -118,15 +120,15 @@ class ADBScreenCapturer(ScreenCapturer):
             else:
                 return SurfaceOrientation.ROTATION_90
 
-    def _get_solution_impl(self) -> Solution:
+    def _get_solution_impl(self) -> Resolution:
         # always returns the landscape solution here
         solution = self._get_solution_native_impl()
         if (self._landscape_orientation() & 1) == 1:
             # setting landscape orientation needs to rotate -/+ 90 deg
-            return Solution(solution.width, solution.height)
+            return Resolution(solution.width, solution.height)
         return solution
 
-    def get_solution(self) -> Solution:
+    def get_resolution(self) -> Resolution:
         if not self._adb_shell.is_alive():
             raise RuntimeError('ADB shell process is gone')
         return self._device_solution()
@@ -193,10 +195,11 @@ class ADBScreenCapturer(ScreenCapturer):
 
 
 # adb exec-out screenrecord --size wxh --bit-rate bitrate --time-limit secs --output-format=h264 -
+# performance hint: DO NOT USE "raw-frames" as output format, it is extremely slow
 class ADBScreenrecordCapturerThreaded(ADBScreenCapturer):
 
     def __init__(self, adb_server: Optional[ADBServer] = None, bitrate: Optional[int] = None,
-                 time_limit: Optional[int] = None, solution: Optional[Solution] = None,
+                 time_limit: Optional[int] = None, resolution: Optional[Resolution] = None,
                  device: Optional[str] = None, ffmpeg_executable_path: Optional[str] = None):
         """Instantiating a screen capturer via ADB screenrecord. Compared with screencap, this solution has low latency
         with more resource usage. If the video decoding speed or process speed cannot keep up, use the screencap
@@ -207,7 +210,7 @@ class ADBScreenrecordCapturerThreaded(ADBScreenCapturer):
         :param time_limit: The time limitation of screen record, in seconds, default and maximum value: 180 (3 minutes).
             It is impossible to set it to infinite since it is hard-coded in Android framework. The workaround is to
             restart recording after time limit exceeded to make it "pseudo infinite".
-        :param solution: The solution of video output, leave None to use native device solution.
+        :param resolution: The resolution of video output, leave None to use native device solution.
         :param device: Specify which device should be connected.
         :param ffmpeg_executable_path: Path of FFMpeg executable file, leave None to search in PATH variable.
         """
@@ -219,9 +222,9 @@ class ADBScreenrecordCapturerThreaded(ADBScreenCapturer):
                 device = self._adb_server.list_devices()[device]
             cmds.extend(['-s', device])
         cmds.extend(['exec-out', 'screenrecord'])
-        if solution is not None:
-            cmds.extend(['--size', f'{solution.width}x{solution.height}'])
-        self._solution = solution
+        if resolution is not None:
+            cmds.extend(['--size', f'{resolution.width}x{resolution.height}'])
+        self._resolution = resolution
         if bitrate is not None:
             cmds.extend(['--bit-rate', str(bitrate)])
         if time_limit is not None:
@@ -238,7 +241,7 @@ class ADBScreenrecordCapturerThreaded(ADBScreenCapturer):
         self._started = False
 
     def _handle_decoder_output(self, decode_stream: IO[bytes]):
-        screen_solution = self._solution or self._get_solution_native_impl()
+        screen_solution = self._resolution or self._get_solution_native_impl()
         expected_buffer_size = screen_solution.width * screen_solution.height * 3  # RGB format, raw stream
         frame_cnt = 0
         first_frame_time = 0
@@ -316,9 +319,10 @@ class ADBScreenrecordCapturerThreaded(ADBScreenCapturer):
 
 
 # multiprocessing solution
+@register_handler(CapturerRegistry, 'adb')
 class ADBScreenrecordCapturerMP(ADBScreenCapturer):
     def __init__(self, adb_server: Optional[ADBServer] = None, bitrate: Optional[int] = None,
-                 time_limit: Optional[int] = None, solution: Optional[Solution] = None,
+                 time_limit: Optional[int] = None, resolution: Optional[Resolution] = None,
                  device: Optional[str] = None, ffmpeg_executable_path: Optional[str] = None):
         """Instantiating a screen capturer via ADB screenrecord. Compared with screencap, this solution has low latency
         with more resource usage. If the video decoding speed or process speed cannot keep up, use the screencap
@@ -329,12 +333,12 @@ class ADBScreenrecordCapturerMP(ADBScreenCapturer):
         :param time_limit: The time limitation of screen record, in seconds, default and maximum value: 180 (3 minutes).
             It is impossible to set it to infinite since it is hard-coded in Android framework. The workaround is to
             restart recording after time limit exceeded to make it "pseudo infinite".
-        :param solution: The solution of video output, leave None to use native device solution.
+        :param resolution: The solution of video output, leave None to use native device solution.
         :param device: Specify which device should be connected.
         :param ffmpeg_executable_path: Path of FFMpeg executable file, leave None to search in PATH variable.
         """
         ScreenCapturer.__init__(self)
-        self._args = (adb_server, bitrate, time_limit, solution, device, ffmpeg_executable_path)
+        self._args = (adb_server, bitrate, time_limit, resolution, device, ffmpeg_executable_path)
         self._event_queue = mp.SimpleQueue()
         self._sig_req = mp.Event()
         self._sig_resp = mp.Event()
@@ -361,9 +365,9 @@ class ADBScreenrecordCapturerMP(ADBScreenCapturer):
                 instance.kill()
                 sig_resp.set()
                 break
-            elif req == 'solution':
+            elif req == 'resolution':
                 sig_resp.set()
-                event_queue.put(instance.get_solution())
+                event_queue.put(instance.get_resolution())
             elif req == 'screenshot':
                 sig_resp.set()
                 event_queue.put(instance.get_screenshot())
@@ -379,8 +383,8 @@ class ADBScreenrecordCapturerMP(ADBScreenCapturer):
             if retrieve_value:
                 return self._event_queue.get()
 
-    def get_solution(self) -> Solution:
-        return self._send_request('solution')
+    def get_resolution(self) -> Resolution:
+        return self._send_request('resolution')
 
     def get_screenshot(self) -> np.ndarray:
         return self._send_request('screenshot')
@@ -393,6 +397,7 @@ class ADBScreenrecordCapturerMP(ADBScreenCapturer):
 ADBScreenrecordCapturer = ADBScreenrecordCapturerMP
 
 
+@register_handler(AttacherRegistry, 'adb')
 class ADBAttacher(AttacherBase):
     def __init__(self, adb_server: Optional[ADBServer] = None, device: Optional[str] = None):
         """An ADB-based attacher. To enable automation, please check the USB debugging in developer setting is turned
@@ -407,28 +412,35 @@ class ADBAttacher(AttacherBase):
         # since all interactions use a normalized coordination within [0, 1], we need to obtain the device resolution
         # first
         cap = ADBScreenCapturer(self._adb_server, self._device)
-        self._solution = cap.get_solution()
+        self._solution = cap.get_resolution()
         cap.kill()
         del cap
 
-    def send_click(self, x: float, y: float, stay_time: float = 0.1):
-        """Send click event to a normalized point ``(x, y)``, where ``x`` and ``y`` are within [0, 1].
+    @property
+    def input_solution(self) -> Resolution:
+        """Returns the solution of input space (in pixels)."""
+        return self._solution
 
-        :param x: The normalized coordinate x.
-        :param y: The normalized coordinate y.
+    def send_click(self, x: int, y: int, stay_time: float = 0.1):
+        """Send click event to a point ``(x, y)``, where ``x`` and ``y`` are pixel coordinates where the coordinates at
+        left-top corner are zeros. ``x`` should be ``[0, width)`` and ``y`` should be ``[0, height)``.
+
+        :param x: The pixel coordinate x.
+        :param y: The pixel coordinate y.
         :param stay_time: Time duration (in seconds) between pressing and releasing.
         """
         # input touchscreen swipe <x> <y> <x> <y> <t> (x, y: px, t: ms)
         # note: <x> and <y> are orientation-related. <x> for <width> axis and <y> for <height> axis
-        px = int(round(self._solution.width * x))
-        py = int(round(self._solution.height * y))
+        if x >= self._solution.width:
+            logger.warning(f'click position x={x} is out of screen width={self._solution.width}')
+        if y >= self._solution.height:
+            logger.warning(f'click position y={y} is out of screen height={self._solution.height}')
         t = int(round(stay_time * 1000))
-        spawn(f'input touchscreen swipe {px} {py} {px} {py} {t}', spawn_fn=self._adb_shell.interact, raise_exc=True)
+        spawn(f'input touchscreen swipe {x} {y} {x} {y} {t}', spawn_fn=self._adb_shell.interact, raise_exc=True)
 
     def send_slide(self, p_from: Point, p_to: Point, stay_time_before_move: float = _NAN, stay_time_move: float = 2.0,
                    stay_time_after_move: float = _NAN):
-        """Send slide event from a normalized point ``p_from`` to ``p_to`` where all the coordinate ``x`` and ``y`` are
-        within [0, 1].
+        """Send slide event from point ``p_from`` to ``p_to``.
 
         :param p_from: A normalized point specifying where the slice begins
         :param p_to: A normalized point specifying  where the slice ends
@@ -439,11 +451,7 @@ class ADBAttacher(AttacherBase):
             implementation, keep it NAN).
         """
         # input touchscreen swipe <x1> <y1> <x2> <y2> <t>, similar to the above method
-        # noinspection DuplicatedCode
-        px1 = int(round(self._solution.width * p_from.x))
-        px2 = int(round(self._solution.width * p_to.x))
-        py1 = int(round(self._solution.height * p_from.y))
-        py2 = int(round(self._solution.height * p_to.y))
+        x1, x2, y1, y2 = p_from.x, p_to.x, p_from.y, p_to.y
         t = int(round(stay_time_move * 1000))
         global _warned_screencap_arg
         if (not math.isnan(stay_time_before_move) or not math.isnan(stay_time_after_move)) \
@@ -451,9 +459,10 @@ class ADBAttacher(AttacherBase):
             logger.warning(f'Parameter "stay_time_before_move" and "stay_time_after_move" is disabled for method'
                            f' {self.send_slide!r}. This message will be logged once.')
             _warned_screencap_arg = True
-        spawn(f'input touchscreen swipe {px1} {py1} {px2} {py2} {t}', spawn_fn=self._adb_shell.interact, raise_exc=True)
+        spawn(f'input touchscreen swipe {x1} {y1} {x2} {y2} {t}', spawn_fn=self._adb_shell.interact, raise_exc=True)
 
 
+# Some constants for "sendevent" command
 class EventType(IntEnum):
     EV_SYN = 0
     EV_ABS = 3
@@ -470,9 +479,10 @@ class EventID(IntEnum):
     SYN_REPORT = 0
 
 
+@register_handler(AttacherRegistry, 'adb_root')
 class ADBRootAttacher(ADBAttacher):
     def __init__(self, adb_server: Optional[ADBServer] = None, device: Optional[str] = None):
-        """An ADB-based attacher with root implementation for sending slide event via sendevent.
+        """An ADB-based attacher with root implementation for sending slide event via ``sendevent`` command.
         This attacher will fall back to basic ``ADBAttacher`` if root is unavailable.
 
         :param adb_server: ADB server.
@@ -595,12 +605,8 @@ class ADBRootAttacher(ADBAttacher):
                    stay_time_after_move: float = 0.1):
         if self._rooted():
             try:
-                # noinspection DuplicatedCode
-                px1 = int(round(self._solution.width * p_from.x))
-                px2 = int(round(self._solution.width * p_to.x))
-                py1 = int(round(self._solution.height * p_from.y))
-                py2 = int(round(self._solution.height * p_to.y))
-                self._send_slide_impl(px1, py1, px2, py2, stay_time_before_move, stay_time_move, stay_time_after_move)
+                x1, x2, y1, y2 = p_from.x, p_to.x, p_from.y, p_to.y
+                self._send_slide_impl(x1, y1, x2, y2, stay_time_before_move, stay_time_move, stay_time_after_move)
                 return
             except Exception as ex:
                 logger.warning(f'Failed to execute root implementation: {ex!r}, fall back to default implementation')

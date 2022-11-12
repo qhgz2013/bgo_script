@@ -1,16 +1,16 @@
-from .state_handler import ConfigurableStateHandler, WaitFufuStateHandler
+from fsm.state_handler import ConfigurableStateHandler, WaitFufuStateHandler
 from attacher import *
 from matcher import SupportServantMatcher, SupportCraftEssenceMatcher
 import logging
 from typing import *
-from cv_positioning import *
-from click_positioning import *
+from archives.cv_positioning import *
+from archives.click_positioning import *
 import image_process
 import numpy as np
 from time import sleep, time
 from image_process import mean_gray_diff_err
 from bgo_game import ScriptConfig, ServantConfig
-from .fgo_state import FgoState
+from fsm.fgo_state import FgoState
 from util import DigitRecognizer
 
 

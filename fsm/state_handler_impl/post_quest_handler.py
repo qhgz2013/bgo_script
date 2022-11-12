@@ -1,13 +1,13 @@
-from .state_handler import StateHandler, WaitFufuStateHandler, ConfigurableStateHandler
+from fsm.state_handler import StateHandler, WaitFufuStateHandler, ConfigurableStateHandler
 from attacher import CombinedAttacher
-from click_positioning import *
+from archives.click_positioning import *
 from time import sleep
 import image_process
-from cv_positioning import *
+from archives.cv_positioning import *
 from image_process import mean_gray_diff_err
 import logging
 from bgo_game import ScriptConfig
-from .fgo_state import FgoState
+from fsm.fgo_state import FgoState
 
 logger = logging.getLogger('bgo_script.fsm')
 

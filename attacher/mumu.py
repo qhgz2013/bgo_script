@@ -9,11 +9,12 @@ import win32ui
 import win32con
 import numpy as np
 from logging import getLogger
-from .base import ScreenCapturer
+from .base import ScreenCapturer, CapturerRegistry, AttacherRegistry
 from time import sleep
-from util import LazyValue
+from util import LazyValue, register_handler
 from .adb_util import ADBServer, spawn
 from .adb import EventID, EventType, ADBRootAttacher, ADBAttacher
+from basic_class import Resolution
 
 __all__ = ['WinAPIScreenCapturer', 'MumuScreenCapturer', 'MumuADBServer', 'MumuAttacher', 'MumuRootAttacher']
 
@@ -78,9 +79,9 @@ class WinAPIScreenCapturer(ScreenCapturer):
         super(WinAPIScreenCapturer, self).__init__()
         self.screen_cap_handle = LazyValue(self.locate_handle)
 
-    def get_solution(self) -> Tuple[int, int]:
+    def get_resolution(self) -> Resolution:
         left, top, right, bottom = win32gui.GetWindowRect(self.screen_cap_handle())
-        return bottom - top, right - left
+        return Resolution(bottom - top, right - left)
 
     def get_screenshot(self) -> np.ndarray:
         return get_screenshot_winapi_impl(self.screen_cap_handle())
@@ -90,6 +91,7 @@ class WinAPIScreenCapturer(ScreenCapturer):
         raise NotImplementedError
 
 
+@register_handler(CapturerRegistry, 'mumu')
 class MumuScreenCapturer(WinAPIScreenCapturer):
     """Screen capture implementation for mumu simulator."""
     __warned_minimize = False
@@ -128,12 +130,14 @@ class MumuADBServer(ADBServer):
 
 
 # the original one uses WinAPI to simulate clicks and slides, but it does not work now
+@register_handler(AttacherRegistry, 'mumu')
 class MumuAttacher(ADBAttacher):
     def __init__(self, adb_server: Optional[ADBServer] = None):
         adb_server = adb_server or MumuADBServer()
         super(MumuAttacher, self).__init__(adb_server, device='localhost:7555')
 
 
+@register_handler(AttacherRegistry, 'mumu_root')
 class MumuRootAttacher(ADBRootAttacher):
     def __init__(self, adb_server: Optional[ADBServer] = None):
         adb_server = adb_server or MumuADBServer()

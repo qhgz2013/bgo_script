@@ -1,7 +1,7 @@
 # Provide a registry for managing different implementations
-# Version: 1.0.0
+# Version: 1.0.1
 # Changelog:
-#
+# 1.0.1: Fixed _registered_handlers field is shared among different HandlerRegistry
 from typing import *
 
 __all__ = ['HandlerRegistry', 'register_handler']
@@ -11,21 +11,21 @@ _TV = TypeVar('_TV')
 
 class HandlerRegistry(Generic[_TK, _TV]):
     """A registry for handling multiple implementations via keys. See ``avenger.config`` for example."""
-    _registered_handlers = {}  # type: Dict[_TK, _TV]
+    _registered_handlers = {}  # type: Dict[_TK, Type[_TV]]
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         cls._registered_handlers = {}
 
     @classmethod
-    def register_handler(cls, handler_name: _TK, handler_class: _TV) -> None:
+    def register_handler(cls, handler_name: _TK, handler_class: Type[_TV]) -> None:
         """Register a handler to current registry. If ``handler_name`` already registered before, then the previous
         registered handler will be replaced by new handler class.
         """
         cls._registered_handlers[handler_name] = handler_class
 
     @classmethod
-    def get_handler(cls, handler_name: _TK) -> Optional[_TV]:
+    def get_handler(cls, handler_name: _TK) -> Optional[Type[_TV]]:
         """Get registered handler with name ``handler_name``. Return None if not found."""
         return cls._registered_handlers.get(handler_name, None)
 
@@ -40,8 +40,8 @@ class HandlerRegistry(Generic[_TK, _TV]):
         return list(cls._registered_handlers.keys())
 
 
-def register_handler(registry: Type[HandlerRegistry], handler_name: Union[_TK, Sequence[_TK]]) \
-        -> Callable[[Type[HandlerRegistry]], Type[HandlerRegistry]]:
+def register_handler(registry: Type[HandlerRegistry[_TK, _TV]], handler_name: Union[_TK, Sequence[_TK]]) \
+        -> Callable[[_TV], _TV]:
     """A decorator for registering handler.
 
     Example::
@@ -79,7 +79,7 @@ def register_handler(registry: Type[HandlerRegistry], handler_name: Union[_TK, S
     :param handler_name: The name for current handler.
     :return A decorator function for class.
     """
-    def do_handler_registration(handler_class: Type[HandlerRegistry]):
+    def do_handler_registration(handler_class: Type[_TV]):
         if isinstance(handler_name, (list, tuple)):
             for name in handler_name:
                 registry.register_handler(name, handler_class)
