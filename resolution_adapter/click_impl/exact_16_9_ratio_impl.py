@@ -166,3 +166,7 @@ class Exact16x9RatioClickDefImpl(AbstractClickDef):
     @staticmethod
     def fp_pool_continuous_gacha() -> PointF:
         return PointF(0.5938, 0.9306)
+
+    @staticmethod
+    def fp_overflow_synthesis() -> PointF:
+        return PointF(0.5, 0.6598)

@@ -23,4 +23,9 @@ class FgoFSMFacadeFriendPointGacha(FgoFSMFacadeBase):
                                         FriendPointGachaConfirmHandler(env, s.STATE_FP_GACHA_SKIP))
         self.executor.add_state_handler(s.STATE_FP_GACHA_SKIP,
                                         FriendPointGachaSkipHandler(env, s.STATE_FP_GACHA_CONFIRM))
-        self.executor.add_state_handler(s.STATE_FP_GACHA_ITEM_OVERFLOW, DirectStateForwarder(env, forward_state))
+        self.executor.add_state_handler(s.STATE_FP_GACHA_ITEM_OVERFLOW,
+                                        FriendPointGachaItemOverflowHandler(env, s.STATE_ERROR))
+        self.executor.add_state_handler(s.STATE_FP_GACHA_ITEM_OVERFLOW_SVT,
+                                        DirectStateForwarder(env, s.STATE_FINISH))
+        self.executor.add_state_handler(s.STATE_FP_GACHA_ITEM_OVERFLOW_CE,
+                                        DirectStateForwarder(env, s.STATE_FINISH))

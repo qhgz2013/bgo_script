@@ -196,3 +196,8 @@ class AbstractClickDef(metaclass=ABCMeta):
     @plot_point
     def fp_pool_continuous_gacha() -> PointF:
         raise NotImplementedError
+
+    @staticmethod
+    @plot_point
+    def fp_overflow_synthesis() -> PointF:
+        raise NotImplementedError

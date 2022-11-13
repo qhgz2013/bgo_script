@@ -9,6 +9,10 @@ import argparse
 from time import time
 import json
 import os
+from image_process import perception_hash
+from io import BytesIO
+from PIL import Image
+import numpy as np
 
 logger = None  # type: Optional[logging.Logger]
 
@@ -284,7 +288,8 @@ def create_sqlite_connection(db_path: str) -> sqlite3.Connection:
     csr = conn.cursor()
     create_table_not_exists(csr, "create table db_vars(key text primary key, value text)")
 
-    create_table_not_exists(csr, "create table image(image_key text primary key, image_data blob)")
+    create_table_not_exists(csr, "create table image(image_key text primary key, image_data blob, hash integer)")
+    csr.execute("create index if not exists image_hash_index on image(hash)")
     create_table_not_exists(csr, "create table servant_meta(servant_id int primary key, meta_json text)")
     create_table_not_exists(csr, "create table craft_essence_meta(ce_id int primary key, meta_json text)")
     create_table_not_exists(csr, "create table servant_info(servant_id int primary key, info_json text)")
@@ -425,6 +430,13 @@ def fetch_image(sess: requests.Session, url: str) -> bytes:
     return content
 
 
+def compute_phash(img_blob: bytes) -> int:
+    img = Image.open(BytesIO(img_blob))
+    # noinspection PyTypeChecker
+    img = np.array(img, dtype=np.uint8)
+    return perception_hash(img)
+
+
 # noinspection DuplicatedCode
 def fetch_servant_images(sess: requests.Session, db_conn: sqlite3.Connection, servant_info: ServantInfo) -> None:
     csr = db_conn.cursor()
@@ -441,7 +453,9 @@ def fetch_servant_images(sess: requests.Session, db_conn: sqlite3.Connection, se
             if is_exist:
                 continue
             image_data = fetch_image(sess, asset_url)
-            csr.execute("insert into image(image_key, image_data) values (?, ?)", (asset_url, image_data))
+            image_hash = compute_phash(image_data)
+            csr.execute("insert into image(image_key, image_data, hash) values (?, ?, ?)",
+                        (asset_url, image_data, image_hash))
             # noinspection SqlResolve
             csr.execute(f"insert into servant_{asset_name}(servant_id, image_key) values (?, ?)",
                         (servant_info.collection_no, asset_url))
@@ -465,7 +479,9 @@ def fetch_craft_essence_images(sess: requests.Session, db_conn: sqlite3.Connecti
             if is_exist:
                 continue
             image_data = fetch_image(sess, asset_url)
-            csr.execute("insert into image(image_key, image_data) values (?, ?)", (asset_url, image_data))
+            image_hash = compute_phash(image_data)
+            csr.execute("insert into image(image_key, image_data, hash) values (?, ?, ?)",
+                        (asset_url, image_data, image_hash))
             # noinspection SqlResolve
             csr.execute(f"insert into craft_essence_{asset_name}(ce_id, image_key) values (?, ?)",
                         (ce_info.collection_no, asset_url))

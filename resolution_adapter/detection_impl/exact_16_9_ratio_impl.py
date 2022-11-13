@@ -92,3 +92,12 @@ class Exact16x9RatioDetectionDefImpl(BasicDetectionDefImpl):
     @staticmethod
     def get_fp_pool_gacha_skip_check_button_rect() -> Rect:
         return Rect(640, 10, 700, 70)
+
+    @staticmethod
+    def get_fp_item_overflow_rect() -> Rect:
+        # same as gacha_confirm_rect?
+        return Rect(175, 80, 1105, 635)
+
+    @staticmethod
+    def get_craft_essence_synthesis_ui_rect() -> Rect:
+        return Rect(400, 565, 500, 595)

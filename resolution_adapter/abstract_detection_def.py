@@ -298,3 +298,23 @@ class AbstractDetectionDef(metaclass=ABCMeta):
     @staticmethod
     def get_fp_pool_gacha_skip_diff_file() -> str:
         raise NotImplementedError
+
+    @staticmethod
+    def get_fp_item_overflow_file() -> str:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_fp_item_overflow_rect() -> Rect:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_craft_essence_synthesis_ui_rect() -> Rect:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_craft_essence_synthesis_ui_gray_threshold() -> float:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_craft_essence_synthesis_ui_gray_ratio_threshold() -> float:
+        raise NotImplementedError

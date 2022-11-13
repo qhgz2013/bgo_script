@@ -156,3 +156,15 @@ class BasicDetectionDefImpl(AbstractDetectionDef, metaclass=ABCMeta):
     @staticmethod
     def get_fp_pool_gacha_skip_diff_file() -> str:
         return 'cv_data/fp_anchor.png'
+
+    @staticmethod
+    def get_fp_item_overflow_file() -> str:
+        return 'cv_data/fp_item_overflow.png'
+
+    @staticmethod
+    def get_craft_essence_synthesis_ui_gray_threshold() -> float:
+        return 90
+
+    @staticmethod
+    def get_craft_essence_synthesis_ui_gray_ratio_threshold() -> float:
+        return 0.98
