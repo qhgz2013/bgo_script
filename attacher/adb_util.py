@@ -26,7 +26,7 @@ MSG_TYPE = Literal['stdout', 'stderr']
 _PIPE = subprocess.PIPE
 _T = TypeVar('_T', bound=AnyStr)
 SPAWN_FUNC_PROTOTYPE = Callable[..., Tuple[int, _T, _T]]
-ADB_DEFAULT_LISTENING_PORT = 5037
+ADB_DEFAULT_LISTENING_PORT = 5038
 
 
 def spawn(*cmds: str, spawn_fn: SPAWN_FUNC_PROTOTYPE = spawn_process,
@@ -254,12 +254,22 @@ class ADBServer(metaclass=SingletonMeta):
     def _check_adb_daemon_alive_socket_impl(self) -> bool:
         import socket
         skt = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # try:
+        #     skt.connect(('localhost', self.adb_server_port))
+        #     skt.close()
+        #     logger.debug(f'Check ADB daemon status: alive')
+        #     return True
+        # except (ConnectionRefusedError, ConnectionResetError):
+        #     logger.debug(f'Check ADB daemon status: offline')
+        #     return False
+        # a non-blocking method (answered by ChatGPT :D)
         try:
-            skt.connect(('localhost', self.adb_server_port))
-            skt.close()
+            skt.bind(('localhost', self.adb_server_port))
+        except OSError:
             logger.debug(f'Check ADB daemon status: alive')
             return True
-        except (ConnectionRefusedError, ConnectionResetError):
+        else:
+            skt.close()
             logger.debug(f'Check ADB daemon status: offline')
             return False
 
