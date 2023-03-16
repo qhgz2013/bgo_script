@@ -29,12 +29,12 @@ def backend_determine(call_func_list: List[Callable], args: tuple = tuple(), kwa
 #     return backend_call('imread', img_path)
 def backend_support(group_name: str, call_priority: int = -1):
     """
-    Add a image process backend to provide function redundancy
+    Add an image process backend to provide function redundancy
 
     :param group_name: The name of redundancy group
-    :param call_priority: Call priority, starting from highest integer to 0, then the default value -1. Func with same
-     priority are ordered by binding time
-    :return: null
+    :param call_priority: Call priority, starting from the highest integer to 0, then the default value -1. Func with
+     same priority are ordered by binding time
+    :return: Decorator function
     """
     def internal_call(func: Callable):
         def wrapped(*args, **kwargs):

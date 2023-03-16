@@ -12,12 +12,15 @@ try:
     # noinspection PyUnresolvedReferences
     import numba
     jit_no_python = numba.njit
-    logger.info('Package "numba" found, using @njit to accelerate computation')
+    logger.debug('Package "numba" found, using @njit to accelerate computation')
 except ImportError:
     def jit_no_python(fn):
         # default decorator
         return fn
-    logger.info('Package "numba" not found, it is an optional package which can improve image processing speed')
+    logger.debug('Package "numba" not found, it is an optional package which can improve image processing speed')
+
+__all__ = ['ImageSegment', 'split_image', 'extend_alpha_1px', 'normalize_image', 'read_digit_label_dir',
+           'rev_alpha_from_file', 'image_gradient']
 
 
 # image segmentation class (generated from split_image function)
@@ -207,3 +210,27 @@ def rev_alpha_from_file(file: str) -> np.ndarray:
     img = imread(file)
     _, alpha = split_rgb_alpha(img)
     return 255 - alpha
+
+
+def image_gradient(img: np.ndarray, x_direction: bool = True, y_direction: bool = True,
+                   offset_pixel: int = 1) -> np.ndarray:
+    """Compute the gradient of image in x or y direction.
+
+    :param img: Input image, shape (h, w) or (h, w, c)
+    :param x_direction: Accumulate gradients among x direction
+    :param y_direction: Accumulate gradients among y direction
+    :param offset_pixel: Offset pixels for computing gradient
+    :return: 2D uint8 image array, in (h, w) shape
+    """
+    if len(img.shape) == 3:
+        img = np.mean(img.astype(np.float32), axis=-1)
+    img = img.astype(np.int32)
+    img_out = np.zeros_like(img)
+    if x_direction:
+        grad_x = np.abs(img[:, offset_pixel:] - img[:, :-offset_pixel])
+        img_out[:, :-offset_pixel] += grad_x
+    if y_direction:
+        grad_y = np.abs(img[offset_pixel:, :] - img[:-offset_pixel, :])
+        img_out[:-offset_pixel, :] += grad_y
+    img_out = np.clip(img_out, 0, 255).astype(np.uint8)
+    return img_out
