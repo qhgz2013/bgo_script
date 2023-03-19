@@ -98,6 +98,8 @@ class CraftEssenceMeta:
     original_name: str  # JP name
     rarity: int
     type: str
+    valentine_equip_owner: Optional[int] = None
+    bond_equip_owner: Optional[int] = None
 
 
 @dataclass
@@ -183,13 +185,24 @@ def parse_json_into_dataclass(json_obj: Dict[str, Any], dataclass_type: Type[T],
             continue
         if dest_type_str.startswith('typing.'):
             dest_type_str = dest_type_str[7:]  # skip "typing."
-        # handle Union type (partially support)
+        # handle Union type (partially support) and skip empty values
         if dest_type_str.startswith('Union['):
             if not dest_type_str.endswith(', NoneType]'):
                 raise ValueError('Union type only supports NoneType')
             dest_type_str = dest_type_str[6:-11]  # skip "Union[" and ", NoneType]"
             if dest_type_str.startswith('typing.'):
                 dest_type_str = dest_type_str[7:]
+            if value is None:
+                kwargs[key] = None  # skip None
+                continue
+        elif dest_type_str.startswith('Optional['):
+            dest_type_str = dest_type_str[9:-1]  # skip "Optional[]"
+            if dest_type_str.startswith('typing.'):
+                dest_type_str = dest_type_str[7:]
+            if value is None:
+                kwargs[key] = None  # skip None
+                continue
+        # handle non-empty values
         if dest_type_str.startswith('Dict[str,'):
             dest_type_str = dest_type_str[9:-1].strip()
             dest_type = import_class_from_str(dest_type_str)
