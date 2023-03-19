@@ -1,7 +1,8 @@
 # attacher.adb_util
 # Provides some util classes and IPC helpers for interacting with ADB server and ADB shell.
-# Ver 1.1
+# Ver 1.2
 # Changelog:
+# 1.2: Log a warning if ADB shell does not response in time.
 # 1.1: Added pickling support for ADBServer
 # 1.0: Moved from util package.
 from typing import *
@@ -69,7 +70,7 @@ def find_adb_path() -> Optional[str]:
 
 
 class ADBShell:
-    def __init__(self, adb_path: str, target_device: Optional[str] = None):
+    def __init__(self, adb_path: str, target_device: Optional[str] = None, warn_timeout_secs: Optional[float] = 5.0):
         """A wrapper for ADB shell commands with mux functionality. It is capable of running multiple commands within
         same ADB shell process, rather than spawning new process to run exact one command, which may introduce too much
         process creation overhead.
@@ -78,11 +79,14 @@ class ADBShell:
         :param target_device: Device name to be interacted with, which equals to "adb shell -s target_device".
             Leave None to use default device (if only one device is connected). Use "adb devices" command or call
             ADBServer.list_devices() to list all available devices.
+        :param warn_timeout_secs: Timeout (seconds) for waiting for ADB shell to complete a command session.
+            If timeout is reached, a warning will be logged. Set to None to disable timeout.
         """
         if target_device is None:
             cmd = [adb_path, 'shell']
         else:
             cmd = [adb_path, '-s', target_device, 'shell']
+        self._warn_timeout_secs = warn_timeout_secs
         self._target_device = target_device
         self._adb_proc = subprocess.Popen(cmd, stdin=_PIPE, stdout=_PIPE, stderr=_PIPE)
         self._mutex = threading.RLock()
@@ -213,7 +217,14 @@ class ADBShell:
             self._adb_proc.stdin.write(cmd)
             self._adb_proc.stdin.flush()
             self._session_started.set()
-        self._session_finished.wait()
+        # wait for the session to finish, log a warning if timeout
+        if self._warn_timeout_secs is not None:
+            if not self._session_finished.wait(self._warn_timeout_secs):
+                logger.warning(f'[PID {self._adb_proc.pid}] Session {boundary} is not finished after waiting '
+                               f'{self._warn_timeout_secs} seconds')
+                self._session_finished.wait()
+        else:
+            self._session_finished.wait()
         self._session_finished.clear()
         if not wait:
             return None
@@ -254,14 +265,6 @@ class ADBServer(metaclass=SingletonMeta):
     def _check_adb_daemon_alive_socket_impl(self) -> bool:
         import socket
         skt = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # try:
-        #     skt.connect(('localhost', self.adb_server_port))
-        #     skt.close()
-        #     logger.debug(f'Check ADB daemon status: alive')
-        #     return True
-        # except (ConnectionRefusedError, ConnectionResetError):
-        #     logger.debug(f'Check ADB daemon status: offline')
-        #     return False
         # a non-blocking method (answered by ChatGPT :D)
         try:
             skt.bind(('localhost', self.adb_server_port))
@@ -285,7 +288,6 @@ class ADBServer(metaclass=SingletonMeta):
         # use the legacy method to set the ADB listening port
         os.putenv('ANDROID_ADB_SERVER_PORT', str(self.adb_server_port))
         ADBServer._started = self._check_adb_daemon_alive_socket_impl()
-        logger.debug('Checking ADB server daemon')
         # self.stop(force=True)
         self.start()
         # setting up adb server shut down thread
