@@ -170,3 +170,67 @@ class Exact16x9RatioClickDefImpl(AbstractClickDef):
     @staticmethod
     def fp_overflow_synthesis() -> PointF:
         return PointF(0.5, 0.6598)
+
+    @staticmethod
+    def craft_essence_synthesis_target_select() -> PointF:
+        return PointF(0.1563, 0.5556)
+
+    @staticmethod
+    def craft_essence_synthesis_material_select() -> PointF:
+        return PointF(0.34, 0.3264)
+
+    @staticmethod
+    def craft_essence_change_ui_size() -> PointF:
+        return PointF(0.0235, 0.9375)
+
+    @staticmethod
+    def craft_essence_synthesis_filter() -> PointF:
+        return PointF(0.8829, 0.1806)
+
+    @staticmethod
+    def craft_essence_order_by_rarity() -> PointF:
+        return PointF(0.3321, 0.45)
+
+    @staticmethod
+    def craft_essence_toggle_order() -> PointF:
+        return PointF(0.9746, 0.1806)
+
+    @staticmethod
+    def craft_essence_filter_cancel() -> PointF:
+        return PointF(0.3321, 0.889)
+
+    @staticmethod
+    def craft_essence_filter_apply() -> PointF:
+        return PointF(0.6641, 0.889)
+
+    @staticmethod
+    def craft_essence_toggle_smart_filter() -> PointF:
+        return PointF(0.4532, 0.6528)
+
+    @staticmethod
+    def craft_essence_toggle_selective_filter() -> PointF:
+        return PointF(0.7969, 0.6528)
+
+    @staticmethod
+    def craft_essence_toggle_lock() -> PointF:
+        return PointF(0.0234, 0.5)
+
+    @staticmethod
+    def craft_essence_toggle_ce_selection() -> PointF:
+        return PointF(0.0234, 0.3333)
+
+    @staticmethod
+    def craft_essence_confirm() -> PointF:
+        return PointF(0.8984, 0.9375)
+
+    @staticmethod
+    def craft_essence_cancel() -> PointF:
+        return PointF(0.07813, 0.0556)
+
+    @staticmethod
+    def craft_essence_double_confirm_yes() -> PointF:
+        return PointF(0.6563, 0.8194)
+
+    @staticmethod
+    def craft_essence_double_confirm_no() -> PointF:
+        return PointF(0.3516, 0.8194)

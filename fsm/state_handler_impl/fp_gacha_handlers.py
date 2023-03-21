@@ -85,8 +85,8 @@ class FriendPointGachaConfirmHandler(StateHandler):
         button = self.env.click_definitions.fp_pool_gacha_confirm()
         self.env.attacher.send_click(button.x, button.y)
 
-        # wait 0.5s
-        sleep(0.5)
+        # wait 1.5s
+        sleep(1.5)
 
         # wait fufu
         wait_fufu_handler = WaitFufuStateHandler(self.env, self.forward_state)

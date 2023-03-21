@@ -168,3 +168,79 @@ class BasicDetectionDefImpl(AbstractDetectionDef, metaclass=ABCMeta):
     @staticmethod
     def get_craft_essence_synthesis_ui_gray_ratio_threshold() -> float:
         return 0.98
+
+    @staticmethod
+    def get_craft_essence_material_ui_size_file() -> str:
+        return 'cv_data/synthesis_ui_size.png'
+
+    @staticmethod
+    def get_craft_essence_ui_size_diff_threshold() -> float:
+        return 15  # correct: ~7.4, others are: 31.3, 50.8
+
+    @staticmethod
+    def get_craft_essence_order_by_rarity_r_threshold() -> float:
+        return 120
+
+    @staticmethod
+    def get_craft_essence_order_by_rarity_r_ratio_threshold() -> float:
+        return 0.7
+
+    @staticmethod
+    def get_craft_essence_extra_filter_b_threshold() -> float:
+        return 150
+
+    @staticmethod
+    def get_craft_essence_extra_filter_b_ratio_threshold() -> float:
+        return 0.6  # 0.16 if disable, 0.7 if enabled
+
+    @staticmethod
+    def get_craft_essence_n_materials_per_row() -> int:
+        return 7
+
+    @staticmethod
+    def get_craft_essence_frame_detection_ratio() -> float:
+        return 0.23
+
+    @staticmethod
+    def get_craft_essence_unavailable_v_threshold() -> float:
+        return 0.5  # should be less than 1 - get_craft_essence_unavailable_v_rescale_ratio()
+
+    @staticmethod
+    def get_craft_essence_unavailable_v_rescale_ratio() -> float:
+        return 0.4
+
+    @staticmethod
+    def get_craft_essence_empty_slot_h_diff_threshold() -> int:
+        return 20  # <= 75
+
+    @staticmethod
+    def get_craft_essence_synthesis_result_ui_file() -> str:
+        return 'cv_data/ce_synthesis_result.png'
+
+    @staticmethod
+    def get_craft_essence_lock_std_threshold() -> float:
+        return 50  # locked >= 70, unlock <= 28
+
+    @staticmethod
+    def get_craft_essence_wait_synthesis_complete_diff_threshold() -> float:
+        return 3  # <= 5 ok
+
+    @staticmethod
+    def get_craft_essence_grid_detection_tol_pixels() -> int:
+        return 3
+
+    @staticmethod
+    def get_craft_essence_grid_detection_hsv_threshold() -> int:
+        return 25
+
+    @staticmethod
+    def get_craft_essence_grid_detection_conf_threshold() -> float:
+        return 0.8
+
+    @staticmethod
+    def get_craft_essence_target_empty_file() -> str:
+        return 'cv_data/craft_essence_target_empty.png'
+
+    @staticmethod
+    def get_craft_essence_target_empty_diff_threshold() -> float:
+        return 10  # <= 3

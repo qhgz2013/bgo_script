@@ -13,3 +13,4 @@ logs/
 *.log
 *.pkl
 debug/
+docs_not_staged/

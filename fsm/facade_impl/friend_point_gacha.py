@@ -16,7 +16,7 @@ class FgoFSMFacadeFriendPointGacha(FgoFSMFacadeBase):
         super(FgoFSMFacadeFriendPointGacha, self).__init__(env, forward_state)
 
         self.executor.add_state_handler(s.STATE_BEGIN, DirectStateForwarder(env, s.STATE_CHECK_FP_GACHA_UI))
-        # self.executor.add_state_handler(s.STATE_BEGIN, DirectStateForwarder(env, s.STATE_FP_GACHA_SKIP))
+        # self.executor.add_state_handler(s.STATE_BEGIN, DirectStateForwarder(env, s.STATE_FP_GACHA_ITEM_OVERFLOW_CE))
         self.executor.add_state_handler(s.STATE_CHECK_FP_GACHA_UI,
                                         CheckFriendPointGachaUIHandler(env, s.STATE_FP_GACHA_CONFIRM))
         self.executor.add_state_handler(s.STATE_FP_GACHA_CONFIRM,
@@ -28,4 +28,4 @@ class FgoFSMFacadeFriendPointGacha(FgoFSMFacadeBase):
         self.executor.add_state_handler(s.STATE_FP_GACHA_ITEM_OVERFLOW_SVT,
                                         DirectStateForwarder(env, s.STATE_FINISH))
         self.executor.add_state_handler(s.STATE_FP_GACHA_ITEM_OVERFLOW_CE,
-                                        DirectStateForwarder(env, s.STATE_FINISH))
+                                        CraftEssenceSynthesisHandler(env, s.STATE_FINISH))

@@ -201,3 +201,87 @@ class AbstractClickDef(metaclass=ABCMeta):
     @plot_point
     def fp_overflow_synthesis() -> PointF:
         raise NotImplementedError
+
+    # 礼装强化
+    # <===== Craft Essence Synthesis Begin =====
+    @staticmethod
+    @plot_point
+    def craft_essence_synthesis_target_select() -> PointF:
+        raise NotImplementedError
+
+    @staticmethod
+    @plot_point
+    def craft_essence_synthesis_material_select() -> PointF:
+        raise NotImplementedError
+
+    @staticmethod
+    @plot_point
+    def craft_essence_change_ui_size() -> PointF:
+        raise NotImplementedError
+
+    @staticmethod
+    @plot_point
+    def craft_essence_synthesis_filter() -> PointF:
+        raise NotImplementedError
+
+    @staticmethod
+    @plot_point
+    def craft_essence_order_by_rarity() -> PointF:
+        raise NotImplementedError
+
+    @staticmethod
+    @plot_point
+    def craft_essence_toggle_order() -> PointF:
+        raise NotImplementedError
+
+    @staticmethod
+    @plot_point
+    def craft_essence_filter_cancel() -> PointF:
+        raise NotImplementedError
+
+    @staticmethod
+    @plot_point
+    def craft_essence_filter_apply() -> PointF:
+        raise NotImplementedError
+
+    @staticmethod
+    @plot_point
+    def craft_essence_toggle_smart_filter() -> PointF:
+        raise NotImplementedError
+
+    @staticmethod
+    @plot_point
+    def craft_essence_toggle_selective_filter() -> PointF:
+        raise NotImplementedError
+
+    @staticmethod
+    @plot_point
+    def craft_essence_toggle_lock() -> PointF:
+        raise NotImplementedError
+
+    @staticmethod
+    @plot_point
+    def craft_essence_toggle_ce_selection() -> PointF:
+        raise NotImplementedError
+
+    @staticmethod
+    @plot_point
+    def craft_essence_confirm() -> PointF:
+        raise NotImplementedError
+
+    @staticmethod
+    @plot_point
+    def craft_essence_cancel() -> PointF:
+        raise NotImplementedError
+
+    @staticmethod
+    @plot_point
+    def craft_essence_double_confirm_yes() -> PointF:
+        raise NotImplementedError
+
+    @staticmethod
+    @plot_point
+    def craft_essence_double_confirm_no() -> PointF:
+        raise NotImplementedError
+
+    # <===== Craft Essence Synthesis End =====

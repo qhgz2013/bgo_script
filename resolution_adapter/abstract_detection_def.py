@@ -307,6 +307,8 @@ class AbstractDetectionDef(metaclass=ABCMeta):
     def get_fp_item_overflow_rect() -> Rect:
         raise NotImplementedError
 
+    # 礼装强化界面识别
+    # <===== Craft Essence Synthesis Begin =====
     @staticmethod
     def get_craft_essence_synthesis_ui_rect() -> Rect:
         raise NotImplementedError
@@ -318,3 +320,145 @@ class AbstractDetectionDef(metaclass=ABCMeta):
     @staticmethod
     def get_craft_essence_synthesis_ui_gray_ratio_threshold() -> float:
         raise NotImplementedError
+
+    @staticmethod
+    def get_craft_essence_material_height() -> int:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_craft_essence_material_margin_y() -> int:
+        raise NotImplementedError
+
+    @staticmethod
+    @plot_rect
+    def get_craft_essence_material_ui_size_rect() -> Rect:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_craft_essence_material_ui_size_file() -> str:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_craft_essence_ui_size_diff_threshold() -> float:
+        raise NotImplementedError
+
+    @staticmethod
+    @plot_rect
+    def get_craft_essence_order_ascending_rect() -> Rect:
+        raise NotImplementedError
+
+    @staticmethod
+    @plot_rect
+    def get_craft_essence_order_by_rarity_rect() -> Rect:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_craft_essence_order_by_rarity_r_threshold() -> float:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_craft_essence_order_by_rarity_r_ratio_threshold() -> float:
+        raise NotImplementedError
+
+    @staticmethod
+    @plot_rect
+    def get_craft_essence_smart_filter_rect() -> Rect:
+        raise NotImplementedError
+
+    @staticmethod
+    @plot_rect
+    def get_craft_essence_selective_filter_rect() -> Rect:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_craft_essence_extra_filter_b_threshold() -> float:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_craft_essence_extra_filter_b_ratio_threshold() -> float:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_craft_essence_material_x_range() -> Tuple[int, int]:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_craft_essence_material_margin_x() -> int:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_craft_essence_n_materials_per_row() -> int:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_craft_essence_material_y_start() -> int:
+        raise NotImplementedError
+
+    # 礼装框内部的图片
+    @staticmethod
+    def get_craft_essence_material_inner_image_rect() -> Rect:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_craft_essence_frame_detection_ratio() -> float:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_craft_essence_unavailable_v_threshold() -> float:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_craft_essence_unavailable_v_rescale_ratio() -> float:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_craft_essence_empty_slot_h_diff_threshold() -> int:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_craft_essence_synthesis_result_ui_file() -> str:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_craft_essence_lock_detection_y_range() -> Tuple[int, int]:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_craft_essence_lock_std_threshold() -> float:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_craft_essence_wait_synthesis_complete_diff_threshold() -> float:
+        raise NotImplementedError
+
+    # grid detection params
+    @staticmethod
+    def get_craft_essence_grid_detection_tol_pixels() -> int:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_craft_essence_grid_detection_hsv_threshold() -> int:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_craft_essence_grid_detection_area_min_pixels() -> int:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_craft_essence_grid_detection_conf_threshold() -> float:
+        raise NotImplementedError
+
+    @staticmethod
+    @plot_rect
+    def get_craft_essence_target_rect() -> Rect:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_craft_essence_target_empty_file() -> str:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_craft_essence_target_empty_diff_threshold() -> float:
+        raise NotImplementedError
+
+    # <===== Craft Essence Synthesis End =====

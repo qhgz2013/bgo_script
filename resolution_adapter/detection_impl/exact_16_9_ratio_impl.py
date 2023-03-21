@@ -101,3 +101,61 @@ class Exact16x9RatioDetectionDefImpl(BasicDetectionDefImpl):
     @staticmethod
     def get_craft_essence_synthesis_ui_rect() -> Rect:
         return Rect(400, 565, 500, 595)
+
+    @staticmethod
+    def get_craft_essence_material_height() -> int:
+        return 128
+
+    @staticmethod
+    def get_craft_essence_material_margin_y() -> int:
+        return 14
+
+    @staticmethod
+    def get_craft_essence_material_ui_size_rect() -> Rect:
+        return Rect(0, 640, 60, 710)
+
+    @staticmethod
+    def get_craft_essence_order_ascending_rect() -> Rect:
+        return Rect(1235, 120, 1260, 140)
+
+    @staticmethod
+    def get_craft_essence_order_by_rarity_rect() -> Rect:
+        return Rect(330, 290, 520, 358)
+
+    @staticmethod
+    def get_craft_essence_smart_filter_rect() -> Rect:
+        return Rect(550, 440, 610, 500)
+
+    @staticmethod
+    def get_craft_essence_selective_filter_rect() -> Rect:
+        return Rect(990, 440, 1050, 500)
+
+    @staticmethod
+    def get_craft_essence_material_x_range() -> Tuple[int, int]:
+        # margin: 16, width: 117
+        return 74, 989  # 75, 990 <- offset 1 px left
+
+    @staticmethod
+    def get_craft_essence_material_margin_x() -> int:
+        return 16
+
+    @staticmethod
+    def get_craft_essence_material_y_start() -> int:
+        return 170
+
+    @staticmethod
+    def get_craft_essence_material_inner_image_rect() -> Rect:
+        # 113 x 113
+        return Rect(2, 4, 115, 117)
+
+    @staticmethod
+    def get_craft_essence_lock_detection_y_range() -> Tuple[int, int]:
+        return 40, 70  # x: <= x1 of get_craft_essence_material_inner_image_rect
+
+    @staticmethod
+    def get_craft_essence_grid_detection_area_min_pixels() -> int:
+        return 8
+
+    @staticmethod
+    def get_craft_essence_target_rect() -> Rect:
+        return Rect(22, 103, 370, 700)
