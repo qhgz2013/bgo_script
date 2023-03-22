@@ -1,25 +1,22 @@
-from fsm.state_handler import ConfigurableStateHandler, SingleClickAndWaitFufuHandler
-from attacher import CombinedAttacher
-from archives.click_positioning import *
+from ..state_handler import StateHandler, SingleClickAndWaitFufuHandler
 import logging
 from time import time
 from image_process import imread
-from archives.cv_positioning import *
 import numpy as np
-from bgo_game import ScriptConfig
+from bgo_game import ScriptEnv
 from fsm.fgo_state import FgoState
 
 logger = logging.getLogger('bgo_script.fsm')
 
 
-class SelectQuestHandler(ConfigurableStateHandler):
-    _eat_apple_ui_anchor = imread(CV_EAT_APPLE_UI_FILE)
+class SelectQuestHandler(StateHandler):
+    _eat_apple_ui_anchor = None
 
-    def __init__(self, attacher: CombinedAttacher, forward_state: FgoState, cfg: ScriptConfig):
-        super().__init__(cfg)
-        self.attacher = attacher
-        self.forward_state = forward_state
+    def __init__(self, env: ScriptEnv, forward_state: FgoState):
+        super().__init__(env, forward_state)
         self._last_enter_quest_time = None
+        if self._eat_apple_ui_anchor is None:
+            self._eat_apple_ui_anchor = imread(self.env.detection_definitions.get_eat_apple_ui_file())
 
     def run_and_transit_state(self) -> FgoState:
         # todo [PRIOR: low]: implement quest select
@@ -41,25 +38,22 @@ class SelectQuestHandler(ConfigurableStateHandler):
         # Timing debug (performance test)
         current = time()
         if self._last_enter_quest_time is not None:
-            used = current - self._last_enter_quest_time
-            logger.info('Script performance: %f sec(s) / quest' % used)
+            logger.info(f'Script performance: {current - self._last_enter_quest_time:.2f} sec(s) / quest')
         self._last_enter_quest_time = current
         self._estimate_ap()
         # 现在默认是选择任务列表中最上面的那个本
-        next_state = SingleClickAndWaitFufuHandler(self.attacher, FIRST_QUEST_X, FIRST_QUEST_Y, self.forward_state).\
+        first_quest = self.env.click_definitions.enter_first_quest()
+        next_state = SingleClickAndWaitFufuHandler(self.env, self.forward_state, first_quest.x, first_quest.y).\
             run_and_transit_state()
         return next_state
 
     def _estimate_ap(self):
-        screenshot = self.attacher.get_screenshot(CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y)
-        img = screenshot[CV_AP_BAR_Y1:CV_AP_BAR_Y2, CV_AP_BAR_X1:CV_AP_BAR_X2, 1]
+        screenshot = self._get_screenshot_impl()
+        ap_bar_rect = self.env.detection_definitions.get_ap_bar_rect()
+        img = screenshot[ap_bar_rect.y1:ap_bar_rect.y2, ap_bar_rect.x1:ap_bar_rect.x2, 1]
         g_val = np.average(img, 0)
-        normalized_ap_val = np.average(g_val > CV_AP_GREEN_THRESHOLD)
-        if normalized_ap_val < 0.02 or normalized_ap_val > 0.98:
-            logger.info('The AP estimation may be incorrect since it is nearly empty or full')
+        normalized_ap_val = np.average(g_val > self.env.detection_definitions.get_ap_green_threshold())
+        # if normalized_ap_val < 0.02 or normalized_ap_val > 0.98:
+        #     logger.info('The AP estimation may be incorrect since it is nearly empty or full')
         ap_correction = 0.8324 * normalized_ap_val + 0.0931  # linear correction, R^2=0.9998
-        if self._cfg.max_ap is not None:
-            ap_val = ap_correction * self._cfg.max_ap
-            logger.info('Estimated current AP: %d' % int(ap_val + 0.5))
-        else:
-            logger.info('Estimated current AP: %f%% (Max AP not configured)' % (ap_correction * 100))
+        logger.info(f'Estimated current AP: {ap_correction * 100:.2f}% (Max AP not configured)')

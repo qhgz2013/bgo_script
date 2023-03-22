@@ -1,44 +1,37 @@
-from fsm.state_handler import StateHandler, WaitFufuStateHandler, ConfigurableStateHandler
-from attacher import CombinedAttacher
-from archives.click_positioning import *
+from ..state_handler import StateHandler, WaitFufuStateHandler
 from time import sleep
 import image_process
-from archives.cv_positioning import *
-from image_process import mean_gray_diff_err
 import logging
-from bgo_game import ScriptConfig
-from fsm.fgo_state import FgoState
+from bgo_game import ScriptEnv
+from ..fgo_state import FgoState
 
 logger = logging.getLogger('bgo_script.fsm')
 
 
-def _imread_to_screen_size(path):
-    return image_process.resize(image_process.imread(path), CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y)
-
-
 class ExitQuestHandler(StateHandler):
-    def __init__(self, attacher: CombinedAttacher, forward_state: FgoState):
-        self.attacher = attacher
-        self.forward_state = forward_state
 
     def run_and_transit_state(self) -> FgoState:
+        button = self.env.click_definitions.exit_battle_button()
         for _ in range(7):
-            self.attacher.send_click(BATTLE_EXIT_BUTTON_X, BATTLE_EXIT_BUTTON_Y)
+            self.env.attacher.send_click(button.x, button.y)
             sleep(0.5)
-        return WaitFufuStateHandler(self.attacher, self.forward_state).run_and_transit_state()
+        return WaitFufuStateHandler(self.env, self.forward_state).run_and_transit_state()
 
 
 class FriendUIHandler(StateHandler):
-    _support_anchor = _imread_to_screen_size(CV_REQUEST_SUPPORT_UI_FILE)
+    _support_anchor = None
 
-    def __init__(self, attacher: CombinedAttacher, forward_state: FgoState):
-        self.attacher = attacher
-        self.forward_state = forward_state
+    def __init__(self, env: ScriptEnv, forward_state: FgoState):
+        super().__init__(env, forward_state)
+        if self._support_anchor is None:
+            resolution = self.env.detection_definitions.get_target_resolution()
+            self._support_anchor = image_process.resize(image_process.imread(
+                self.env.detection_definitions.get_request_support_ui_file()), resolution.width, resolution.height)
 
     def _is_in_requesting_friend_ui(self) -> bool:
-        img = self.attacher.get_screenshot(CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y)
-        val = mean_gray_diff_err(image_process.resize(img, self._support_anchor.shape[1],
-                                                      self._support_anchor.shape[0]), self._support_anchor)
+        img = self._get_screenshot_impl()
+        val = image_process.mean_gray_diff_err(image_process.resize(
+            img, self._support_anchor.shape[1], self._support_anchor.shape[0]), self._support_anchor)
         logger.debug('DEBUG value friend_ui mean_gray_diff_err = %f' % val)
         return val < 10
 
@@ -46,40 +39,45 @@ class FriendUIHandler(StateHandler):
         # 检查并跳过发送好友申请界面（用于选择非好友助战但好友未满时的情况）
         if self._is_in_requesting_friend_ui():
             logger.info('Detected friend request UI, skipped')
-            self.attacher.send_click(SUPPORT_REQUEST_BUTTON_SKIP_X, SUPPORT_REQUEST_BUTTON_Y)
+            skip_button = self.env.click_definitions.support_request_skip()
+            self.env.attacher.send_click(skip_button.x, skip_button.y)
             sleep(2)
-            return WaitFufuStateHandler(self.attacher, self.forward_state).run_and_transit_state()
+            return WaitFufuStateHandler(self.env, self.forward_state).run_and_transit_state()
         return self.forward_state
 
 
-class ContinuousBattleHandler(ConfigurableStateHandler):
-    _anchor = _imread_to_screen_size(CV_CONTINUOUS_BATTLE_UI_FILE)
+class ContinuousBattleHandler(StateHandler):
+    _anchor = None
 
-    def __init__(self, attacher: CombinedAttacher, forward_state_pos: FgoState, forward_state_neg: FgoState,
-                 cfg: ScriptConfig):
-        super().__init__(cfg)
-        self.attacher = attacher
+    def __init__(self, env: ScriptEnv, forward_state_pos: FgoState, forward_state_neg: FgoState):
+        super().__init__(env, forward_state_pos)
         self.forward_state_pos = forward_state_pos
         self.forward_state_neg = forward_state_neg
+        if self._anchor is None:
+            resolution = self.env.detection_definitions.get_target_resolution()
+            self._anchor = image_process.resize(image_process.imread(
+                self.env.detection_definitions.get_continuous_battle_ui_file()), resolution.width, resolution.height)
 
     def _is_in_continuous_battle_confirm_ui(self) -> bool:
-        img = self.attacher.get_screenshot(CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y)
+        img = self._get_screenshot_impl()
         v = image_process.mean_gray_diff_err(self._anchor, img)
         logger.debug('DEBUG value: is_in_continuous_battle_confirm_ui mean_gray_diff_err = %f' % v)
-        return v < 10
+        return v < 10  # TODO: parameterize
 
     def run_and_transit_state(self) -> FgoState:
-        if self._cfg.enable_continuous_battle:
+        cont_battle_confirm = self.env.click_definitions.continuous_battle_confirm()
+        cont_battle_cancel = self.env.click_definitions.continuous_battle_cancel()
+        if self.env.enable_continuous_battle:
             if self._is_in_continuous_battle_confirm_ui():
                 logger.debug('Enable continuous battle')
-                self.attacher.send_click(CONTINUOUS_BATTLE_BUTTON_CONFIRM_X, CONTINUOUS_BATTLE_BUTTON_Y)
-                next_state = WaitFufuStateHandler(self.attacher, self.forward_state_pos).run_and_transit_state()
+                self.env.attacher.send_click(cont_battle_confirm.x, cont_battle_confirm.y)
+                next_state = WaitFufuStateHandler(self.env, self.forward_state_pos).run_and_transit_state()
             else:
                 logger.error('Continuous battle scene not detected, assume quest is exited')
-                self.attacher.send_click(CONTINUOUS_BATTLE_BUTTON_CANCEL_X, CONTINUOUS_BATTLE_BUTTON_Y)
+                self.env.attacher.send_click(cont_battle_cancel.x, cont_battle_cancel.y)
                 next_state = self.forward_state_neg
         else:
-            self.attacher.send_click(CONTINUOUS_BATTLE_BUTTON_CANCEL_X, CONTINUOUS_BATTLE_BUTTON_Y)
+            self.env.attacher.send_click(cont_battle_cancel.x, cont_battle_cancel.y)
             next_state = self.forward_state_neg
         sleep(0.5)
         return next_state

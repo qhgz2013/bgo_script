@@ -141,7 +141,7 @@ class CraftEssenceSynthesisHandler(StateHandler):
             sleep(1)
         logger.debug('Check finished')
 
-    def _check_filter(self):
+    def _check_filter(self, smart_filtering: bool = False):
         logger.info('Running filter check')
         # only check once during the script time life
         target_filter_click_pos = self.env.click_definitions.craft_essence_synthesis_filter()
@@ -173,9 +173,11 @@ class CraftEssenceSynthesisHandler(StateHandler):
         img_bin = img_in_rect[..., 2] >= \
             self.env.detection_definitions.get_craft_essence_extra_filter_b_threshold()
         ratio = np.mean(img_bin)
-        logger.debug(f'ratio: {ratio}')
-        if ratio >= self.env.detection_definitions.get_craft_essence_extra_filter_b_ratio_threshold():
-            logger.info('Filter updated: disable smart filter')
+        logger.debug(f'smart filtering ratio: {ratio}')
+        smart_filtering_enabled = \
+            ratio >= self.env.detection_definitions.get_craft_essence_extra_filter_b_ratio_threshold()
+        if smart_filtering_enabled != smart_filtering:
+            logger.info('Filter updated: toggle smart filter')
             click_pos = self.env.click_definitions.craft_essence_toggle_smart_filter()
             self.env.attacher.send_click(click_pos.x, click_pos.y)
             sleep(0.5)
@@ -187,9 +189,9 @@ class CraftEssenceSynthesisHandler(StateHandler):
         img_bin = img_in_rect[..., 2] >= \
             self.env.detection_definitions.get_craft_essence_extra_filter_b_threshold()
         ratio = np.mean(img_bin)
-        logger.debug(f'ratio: {ratio}')
+        logger.debug(f'selective filtering ratio: {ratio}')
         if ratio >= self.env.detection_definitions.get_craft_essence_extra_filter_b_ratio_threshold():
-            logger.info('Filter updated: disable selective filter')
+            logger.info('Filter updated: toggle selective filter')
             click_pos = self.env.click_definitions.craft_essence_toggle_selective_filter()
             self.env.attacher.send_click(click_pos.x, click_pos.y)
             sleep(0.5)
@@ -586,7 +588,7 @@ class CraftEssenceSynthesisHandler(StateHandler):
 
             # step 8: check material filter
             if not self._material_filter_checked:
-                self._check_filter()
+                self._check_filter(smart_filtering=True)
                 self._material_filter_checked = True
 
             # step 9: detect material grid

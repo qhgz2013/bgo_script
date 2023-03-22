@@ -109,6 +109,14 @@ class AbstractDetectionDef(metaclass=ABCMeta):
         raise NotImplementedError
 
     @staticmethod
+    def get_support_detection_craft_essence_img_size() -> Tuple[int, int]:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_support_detection_craft_essence_crop_height() -> int:
+        raise NotImplementedError
+
+    @staticmethod
     def get_support_detection_servant_split_y() -> int:
         raise NotImplementedError
 
@@ -185,11 +193,7 @@ class AbstractDetectionDef(metaclass=ABCMeta):
         raise NotImplementedError
 
     @staticmethod
-    def get_exit_quest_gray_threshold() -> int:
-        raise NotImplementedError
-
-    @staticmethod
-    def get_exit_quest_gray_ratio_threshold() -> float:
+    def get_exit_quest_diff_threshold() -> int:
         raise NotImplementedError
 
     @staticmethod
@@ -198,6 +202,10 @@ class AbstractDetectionDef(metaclass=ABCMeta):
 
     @staticmethod
     def get_in_battle_blank_screen_ratio_threshold() -> float:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_exit_quest_ui_file() -> str:
         raise NotImplementedError
 
     # 战斗场次识别

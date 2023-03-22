@@ -87,6 +87,21 @@ class JeanneArcherNitocrisCABController(BattleController):
             self.noble_phantasm(216).attack(0).attack(1)
 
 
+class MorganWFoxController(BattleController):
+    def __call__(self, battle: int, max_battle: int, turn: int, cards: Optional[Sequence[DispatchedCommandCard]]):
+        if battle == 1:
+            self.use_skill(314, 2, 309).use_support_skill(2, 309)
+            self.noble_phantasm(309).attack(0).attack(1)
+        elif battle == 2:
+            self.use_skill(309, 0).use_skill(309, 1, 309).use_support_skill(0, 309)
+            self.noble_phantasm(309).attack(0).attack(1)
+        elif battle == 3:
+            self.use_skill(314, 0, 309).use_skill(309, 1, 309)
+            self.use_clothes_skill(2, 309)
+            self.use_skill(309, 0)
+            self.noble_phantasm(309).attack(0).attack(1)
+
+
 # WCAB + Sieg
 sieg_wcab_team = TeamConfig([
     ServantConfig(svt_id=284),
@@ -118,6 +133,15 @@ jeanne_archer_notocris_cab_team = TeamConfig([
     ServantConfig(svt_id=106)
 ])
 
+morgan_wfox_team = TeamConfig([
+    ServantConfig(svt_id=314),  # Fox
+    ServantConfig(svt_id=309),  # Morgan
+    SupportServantConfig(svt_id=314, craft_essence_cfg=SupportCraftEssenceConfig(1582, max_break=True),
+                         skill_requirement=[10, 10, 10]),
+    ServantConfig(svt_id=1),
+    ServantConfig(svt_id=2),
+    ServantConfig(svt_id=3)
+])
 
-DEFAULT_CONTROLLER = JeanneArcherWCABController
-DEFAULT_TEAM_CONFIG = jeanne_archer_wcab_team
+DEFAULT_CONTROLLER = MorganWFoxController
+DEFAULT_TEAM_CONFIG = morgan_wfox_team

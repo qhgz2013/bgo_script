@@ -1,23 +1,22 @@
 import sqlite3
 import os
 import numpy as np
-import cv2
 from util import pickle_loads, pickle_load, pickle_dump, RWLock
-from cv_positioning import *
 import image_process
 import logging
 from typing import *
 import threading
 from time import time, sleep
-# import matplotlib.pyplot as plt
+from bgo_game import ScriptEnv
+import matplotlib.pyplot as plt
 
-SQL_PATH = CV_FGO_DATABASE_FILE
 logger = logging.getLogger('bgo_script.matcher')
 
 
 class AbstractFgoMaterialMatcher:
-    def __init__(self, sql_path: str = SQL_PATH):
+    def __init__(self, sql_path: str, env: ScriptEnv):
         self.sql_path = sql_path
+        self.env = env
         assert os.path.isfile(self.sql_path), 'Given sql_path is not a file'
         self.sqlite_connection = sqlite3.connect(self.sql_path, check_same_thread=False)
         self.cached_icon_meta = None
@@ -30,24 +29,25 @@ class AbstractFgoMaterialMatcher:
 class SupportServantMatcher(AbstractFgoMaterialMatcher):
     __warn_size_mismatch = False
 
-    def __init__(self, sql_path: str = SQL_PATH):
-        super().__init__(sql_path)
-
     def match(self, img_arr: np.ndarray) -> int:
+        img_arr = img_arr[5:163, 3:-3, :]  # TODO: remove this hardcoded crop area
         cursor = self.sqlite_connection.cursor()
-        img_arr_resized = image_process.resize(img_arr, CV_SUPPORT_SERVANT_IMG_SIZE[1], CV_SUPPORT_SERVANT_IMG_SIZE[0])
-        servant_part = img_arr_resized[:CV_SUPPORT_SERVANT_SPLIT_Y, :, :3]
+        h, w = self.env.detection_definitions.get_support_detection_servant_img_size()
+        img_arr_resized = image_process.resize(img_arr, w, h)
+        split_y = self.env.detection_definitions.get_support_detection_servant_split_y()
+        servant_part = img_arr_resized[:split_y, :, :3]
+
+        # plt.figure()
+        # plt.imshow(servant_part)
+        # plt.show()
+
         hsv_servant_part = image_process.rgb_to_hsv(servant_part)
         # querying servant icon database
         if self.cached_icon_meta is None:
-            cursor.execute("select id from servant_icon order by id desc limit 1")
-            newest_svt_id = cursor.fetchone()[0]
-            cursor.execute("select count(1) from servant_icon")
-            entries = cursor.fetchone()[0]
-            cursor.execute("select id, image_key from servant_icon")
+            cursor.execute("select servant_id, image_key from servant_faces")
             self.cached_icon_meta = cursor.fetchall()
-            logger.info('Finished querying support servant database, %d entries with newest servant id: %d' %
-                        (entries, newest_svt_id))
+            logger.info(f'Finished querying support servant database, {len(self.cached_icon_meta)} entries with newest '
+                        f'servant id: {max(map(lambda x: x[0], self.cached_icon_meta))}')
         # querying image data
         min_servant_id = 0
         min_abs_err = 0
@@ -56,19 +56,18 @@ class SupportServantMatcher(AbstractFgoMaterialMatcher):
                 cursor.execute("select image_data from image where image_key = ?", (image_key,))
                 binary_data = cursor.fetchone()[0]
                 # clipping alpha and opacity border
-                np_image = image_process.imdecode(binary_data)[3:-3, 3:-3, :]
-                if np_image.shape[:2] != CV_SUPPORT_SERVANT_IMG_SIZE:
+                np_image = image_process.imdecode(binary_data)
+                if np_image.shape[:2] != (h, w):
                     if not self.__warn_size_mismatch:
                         self.__warn_size_mismatch = True
                         logger.warning('The configuration of image size for support servant matching is different from '
                                        'database size, performance will decrease: servant id: %d, key: %s' %
                                        (servant_id, image_key))
-                    np_image = image_process.resize(np_image, CV_SUPPORT_SERVANT_IMG_SIZE[1],
-                                                    CV_SUPPORT_SERVANT_IMG_SIZE[0])
+                    np_image = image_process.resize(np_image, w, h)
                 np_image, alpha = image_process.split_rgb_alpha(np_image)
                 hsv_image = image_process.rgb_to_hsv(np_image)
                 self.cached_icons[image_key] = np.concatenate([hsv_image, np.expand_dims(alpha, 2)], axis=2)
-            anchor_servant_part = self.cached_icons[image_key][:CV_SUPPORT_SERVANT_SPLIT_Y, ...]
+            anchor_servant_part = self.cached_icons[image_key][:split_y, ...]
             hsv_err = image_process.mean_hsv_diff_err(anchor_servant_part, hsv_servant_part, 'hsv', 'hsv')
             if min_servant_id == 0 or hsv_err < min_abs_err:
                 min_servant_id = servant_id
@@ -81,74 +80,72 @@ class SupportServantMatcher(AbstractFgoMaterialMatcher):
 class ServantCommandCardMatcher(AbstractFgoMaterialMatcher):
     __warn_size_mismatch = False
 
-    def __init__(self, sql_path: str = SQL_PATH):
-        super().__init__(sql_path)
-
     def match(self, img_arr: np.ndarray, candidate_servant_list: Optional[List[int]] = None) -> int:
-        blur_radius = 2
-        cursor = self.sqlite_connection.cursor()
-        target_size = CV_COMMAND_CARD_IMG_SIZE
-        # import matplotlib.pyplot as plt
-        # plt.figure()
-        # plt.imshow(img_arr)
-        # plt.show()
-        img_arr_resized = image_process.resize(img_arr, target_size[1], target_size[0])
-        img_arr_resized, img_alpha = image_process.split_rgb_alpha(img_arr_resized)
-        # use blur to remove high frequency noise introduced by interpolation, but blurring with alpha channel will
-        # produce some weird artifacts on the edge of alpha, same ops to db images
-        img_arr_resized = image_process.gauss_blur(img_arr_resized, blur_radius)
-        hsv_img = np.concatenate([image_process.rgb_to_hsv(img_arr_resized), np.expand_dims(img_alpha, 2)], 2)
-        # querying servant icon database
-        if self.cached_icon_meta is None:
-            cursor.execute("select id from servant_command_card_icon order by id desc limit 1")
-            newest_svt_id = cursor.fetchone()[0]
-            cursor.execute("select count(1) from servant_command_card_icon")
-            entries = cursor.fetchone()[0]
-            cursor.execute("select id, image_key from servant_command_card_icon")
-            result = cursor.fetchall()
-            svt_id_img_key_list = dict()  # type: Dict[int, List[str]]
-            for id_, image_key in result:
-                if id_ not in svt_id_img_key_list:
-                    svt_id_img_key_list[id_] = []
-                svt_id_img_key_list[id_].append(image_key)
-            self.cached_icon_meta = svt_id_img_key_list
-            logger.info('Finished querying servant command card database, %d entries with newest servant id: %d' %
-                        (entries, newest_svt_id))
-        # querying image data
-        query_target = set(candidate_servant_list) or self.cached_icon_meta.keys()
-        min_servant_id = 0
-        min_err = 0
-        for servant_id in query_target:
-            image_keys = self.cached_icon_meta[servant_id]
-            for image_key in image_keys:
-                if image_key not in self.cached_icons:
-                    cursor.execute("select image_data, name from image where image_key = ?", (image_key,))
-                    binary_data, name = cursor.fetchone()
-                    # All icon are PNG file with extra alpha channel
-                    np_image = image_process.imdecode(binary_data)
-                    # split alpha channel
-                    assert np_image.shape[-1] == 4, 'Servant Icon should be RGBA channel'
-                    if np_image.shape[:2] != target_size:
-                        if not self.__warn_size_mismatch:
-                            self.__warn_size_mismatch = True
-                            logger.warning('The configuration of image size for command card matching is different from'
-                                           ' database size, performance will decrease: servant id: %d, key: %s' %
-                                           (servant_id, image_key))
-                        np_image = image_process.resize(np_image, target_size[1], target_size[0])
-                    np_image = image_process.gauss_blur(np_image, blur_radius)
-                    np_image, alpha = image_process.split_rgb_alpha(np_image)
-                    hsv_image = image_process.rgb_to_hsv(np_image)
-                    # weighted by alpha channel size
-                    self.cached_icons[image_key] = np.concatenate([hsv_image, np.expand_dims(alpha, 2)], 2)
-                anchor = self.cached_icons[image_key]
-                # err_map = image_process.mean_hsv_diff_err_dbg(anchor, hsv_img, 'hsv', 'hsv')
-                hsv_err = image_process.mean_hsv_diff_err(anchor, hsv_img, 'hsv', 'hsv')
-                if min_servant_id == 0 or hsv_err < min_err:
-                    min_servant_id = servant_id
-                    min_err = hsv_err
-                    logger.debug('svt_id = %d, key = %s, hsv_err = %f' % (servant_id, image_key, hsv_err))
-        cursor.close()
-        return min_servant_id
+        raise NotImplementedError
+        # blur_radius = 2
+        # cursor = self.sqlite_connection.cursor()
+        # target_size = CV_COMMAND_CARD_IMG_SIZE
+        # # import matplotlib.pyplot as plt
+        # # plt.figure()
+        # # plt.imshow(img_arr)
+        # # plt.show()
+        # img_arr_resized = image_process.resize(img_arr, target_size[1], target_size[0])
+        # img_arr_resized, img_alpha = image_process.split_rgb_alpha(img_arr_resized)
+        # # use blur to remove high frequency noise introduced by interpolation, but blurring with alpha channel will
+        # # produce some weird artifacts on the edge of alpha, same ops to db images
+        # img_arr_resized = image_process.gauss_blur(img_arr_resized, blur_radius)
+        # hsv_img = np.concatenate([image_process.rgb_to_hsv(img_arr_resized), np.expand_dims(img_alpha, 2)], 2)
+        # # querying servant icon database
+        # if self.cached_icon_meta is None:
+        #     cursor.execute("select id from servant_command_card_icon order by id desc limit 1")
+        #     newest_svt_id = cursor.fetchone()[0]
+        #     cursor.execute("select count(1) from servant_command_card_icon")
+        #     entries = cursor.fetchone()[0]
+        #     cursor.execute("select id, image_key from servant_command_card_icon")
+        #     result = cursor.fetchall()
+        #     svt_id_img_key_list = dict()  # type: Dict[int, List[str]]
+        #     for id_, image_key in result:
+        #         if id_ not in svt_id_img_key_list:
+        #             svt_id_img_key_list[id_] = []
+        #         svt_id_img_key_list[id_].append(image_key)
+        #     self.cached_icon_meta = svt_id_img_key_list
+        #     logger.info('Finished querying servant command card database, %d entries with newest servant id: %d' %
+        #                 (entries, newest_svt_id))
+        # # querying image data
+        # query_target = set(candidate_servant_list) or self.cached_icon_meta.keys()
+        # min_servant_id = 0
+        # min_err = 0
+        # for servant_id in query_target:
+        #     image_keys = self.cached_icon_meta[servant_id]
+        #     for image_key in image_keys:
+        #         if image_key not in self.cached_icons:
+        #             cursor.execute("select image_data, name from image where image_key = ?", (image_key,))
+        #             binary_data, name = cursor.fetchone()
+        #             # All icon are PNG file with extra alpha channel
+        #             np_image = image_process.imdecode(binary_data)
+        #             # split alpha channel
+        #             assert np_image.shape[-1] == 4, 'Servant Icon should be RGBA channel'
+        #             if np_image.shape[:2] != target_size:
+        #                 if not self.__warn_size_mismatch:
+        #                     self.__warn_size_mismatch = True
+        #                     logger.warning('The configuration of image size for command card matching is different from'
+        #                                    ' database size, performance will decrease: servant id: %d, key: %s' %
+        #                                    (servant_id, image_key))
+        #                 np_image = image_process.resize(np_image, target_size[1], target_size[0])
+        #             np_image = image_process.gauss_blur(np_image, blur_radius)
+        #             np_image, alpha = image_process.split_rgb_alpha(np_image)
+        #             hsv_image = image_process.rgb_to_hsv(np_image)
+        #             # weighted by alpha channel size
+        #             self.cached_icons[image_key] = np.concatenate([hsv_image, np.expand_dims(alpha, 2)], 2)
+        #         anchor = self.cached_icons[image_key]
+        #         # err_map = image_process.mean_hsv_diff_err_dbg(anchor, hsv_img, 'hsv', 'hsv')
+        #         hsv_err = image_process.mean_hsv_diff_err(anchor, hsv_img, 'hsv', 'hsv')
+        #         if min_servant_id == 0 or hsv_err < min_err:
+        #             min_servant_id = servant_id
+        #             min_err = hsv_err
+        #             logger.debug('svt_id = %d, key = %s, hsv_err = %f' % (servant_id, image_key, hsv_err))
+        # cursor.close()
+        # return min_servant_id
 
 
 def deserialize_cv2_keypoint(serialized_tuple):
@@ -160,96 +157,62 @@ def deserialize_cv2_keypoint(serialized_tuple):
 
 # todo [PRIOR: high]: Multi-process support
 class SupportCraftEssenceMatcher(AbstractFgoMaterialMatcher):
-    # noinspection PyUnresolvedReferences
-    def __init__(self, sql_path: str = SQL_PATH):
-        super(SupportCraftEssenceMatcher, self).__init__(sql_path)
-        if image_process.sift_class is None:
-            raise RuntimeError('SIFT is disabled due to current OpenCV binaries')
-        self.sift_detector = image_process.sift_class.create()
-        self.matcher = cv2.DescriptorMatcher_create(cv2.DescriptorMatcher_FLANNBASED)
-        # self.matcher = cv2.BFMatcher()
-        if CV_ENABLE_SUPPORT_CRAFT_ESSENCE_CACHE and os.path.isfile(CV_SUPPORT_CRAFT_ESSENCE_CACHE_FILE_PATH):
-            with open(CV_SUPPORT_CRAFT_ESSENCE_CACHE_FILE_PATH, 'rb') as f:
-                self.image_cacher = pickle_load(f)
-                logger.info('Loaded previously saved support craft essence cache')
-        else:
-            self.image_cacher = image_process.ImageHashCacher(image_process.perception_hash,
-                                                              image_process.mean_gray_diff_err)
-        # for async dumping cache to file
-        self._image_cacher_dump_rwlock = RWLock()
-        self._image_cacher_dump_ts = None
-        self._image_cacher_dump_event = threading.Event()
-        if CV_ENABLE_SUPPORT_CRAFT_ESSENCE_CACHE:
-            self._image_cacher_dump_thd = threading.Thread(target=self._dump_image_cache, daemon=False)
-            self._image_cacher_dump_thd.start()
+    __warn_size_mismatch = False
 
-    def _dump_image_cache(self):
-        loop_duration = 0.2
-        while threading.main_thread().is_alive():
-            # wait until _image_cacher_dump_event is set
-            if not self._image_cacher_dump_event.wait(loop_duration):
-                continue
-            # wait until current time satisfies _image_cacher_dump_ts (delayed writing)
-            if time() < self._image_cacher_dump_ts:
-                sleep(loop_duration)
-                continue
-            # write to cache
-            with self._image_cacher_dump_rwlock.w_locked():
-                with open(CV_SUPPORT_CRAFT_ESSENCE_CACHE_FILE_PATH, 'wb') as f:
-                    pickle_dump(self.image_cacher, f)
-                logger.info('Support craft essence cache dumped')
-                self._image_cacher_dump_event.clear()
-        # dump immediately after main thread exited
-        with self._image_cacher_dump_rwlock.w_locked():
-            if self._image_cacher_dump_event.is_set():
-                with open(CV_SUPPORT_CRAFT_ESSENCE_CACHE_FILE_PATH, 'wb') as f:
-                    pickle_dump(self.image_cacher, f)
+    def __init__(self, sql_path: str, env: ScriptEnv):
+        super(SupportCraftEssenceMatcher, self).__init__(sql_path, env)
+        self.image_cacher = image_process.ImageHashCacher(image_process.perception_hash,
+                                                          image_process.mean_gray_diff_err)
 
     def match(self, img_arr: np.ndarray) -> int:
+        img_arr = img_arr[5:-2, 3:-3, :]
         cursor = self.sqlite_connection.cursor()
-        ratio_thresh = 0.7
-        img_arr_resized = image_process.resize(img_arr, CV_SUPPORT_SERVANT_IMG_SIZE[1], CV_SUPPORT_SERVANT_IMG_SIZE[0])
-        craft_essence_part = img_arr_resized[CV_SUPPORT_SERVANT_SPLIT_Y:-3, 2:-2, :]
+        svt_h, svt_w = self.env.detection_definitions.get_support_detection_servant_img_size()  # 128x128
+        img_arr_resized = image_process.resize(img_arr, svt_w, svt_h)
+        h, w = self.env.detection_definitions.get_support_detection_craft_essence_img_size()  # 68x150
+        crop_height = self.env.detection_definitions.get_support_detection_craft_essence_crop_height()  # 40
+        split_h = int(round(crop_height * (svt_w / w)))
+        split_y = svt_h - split_h
+        craft_essence_part = image_process.resize(img_arr_resized[split_y:, ...], w, crop_height)
+
+        # plt.figure()
+        # plt.imshow(craft_essence_part)
+        # plt.show()
+
         # CACHE ACCESS
-        with self._image_cacher_dump_rwlock.r_locked():
-            cache_key = self.image_cacher.get(craft_essence_part, None)
-            if cache_key is not None:
-                return cache_key
-            # if craft_essence_part in self.image_cacher:
-            #     return self.image_cacher[craft_essence_part]
+        cache_key = self.image_cacher.get(craft_essence_part, None)
+        if cache_key is not None:
+            return cache_key
         if self.cached_icon_meta is None:
-            cursor.execute("select id from craft_essence_icon order by id desc limit 1")
-            newest_craft_essence_id = cursor.fetchone()[0]
-            cursor.execute("select count(1) from craft_essence_icon")
-            entries = cursor.fetchone()[0]
-            cursor.execute("select id, image_key from craft_essence_icon")
+            cursor.execute("select ce_id, image_key from craft_essence_equip_face")
             self.cached_icon_meta = cursor.fetchall()
-            logger.info('Finished querying craft essence database, %d entries with newest craft essence id: %d' %
-                        (entries, newest_craft_essence_id))
-        _, target_descriptor = self.sift_detector.detectAndCompute(craft_essence_part, None)
-        max_matches = 0
-        max_craft_essence_id = 0
-        for craft_essence_id, image_key in self.cached_icon_meta:
+            logger.info(f'Finished querying craft essence database, {len(self.cached_icon_meta)} entries with newest '
+                        f'craft essence id: {max(map(lambda x: x[0], self.cached_icon_meta))}')
+
+        # querying image data
+        min_ce_id = 0
+        min_abs_err = 0
+        for ce_id, image_key in self.cached_icon_meta:
             if image_key not in self.cached_icons:
-                cursor.execute("select descriptors from image_sift_descriptor where image_key = ?", (image_key,))
-                descriptor_blob = cursor.fetchone()[0]
-                # keypoint = [deserialize_cv2_keypoint(x) for x in pickle_loads(keypoint_blob)]
-                descriptors = pickle_loads(descriptor_blob)
-                self.cached_icons[image_key] = descriptors  # {'key_point': keypoint, 'descriptor': descriptors}
-            knn_matches = self.matcher.knnMatch(target_descriptor, self.cached_icons[image_key], 2)
-            # knn_matches = self.matcher.match(target_descriptor, self.cached_icons[image_key]['descriptor'])
-            good_matches = []
-            for m, n in knn_matches:
-                if m.distance < ratio_thresh * n.distance:
-                    good_matches.append(m)
-            len_good_matches = len(good_matches)
-            if len_good_matches > max_matches:
-                max_matches = len_good_matches
-                max_craft_essence_id = craft_essence_id
-                logger.debug('craft_essence_id = %d, sift_matches = %d' % (craft_essence_id, len_good_matches))
+                cursor.execute("select image_data from image where image_key = ?", (image_key,))
+                binary_data = cursor.fetchone()[0]
+                # clipping alpha and opacity border
+                np_image = image_process.imdecode(binary_data)  # 68x150
+                if np_image.shape[:2] != (h, w):
+                    if not self.__warn_size_mismatch:
+                        self.__warn_size_mismatch = True
+                        logger.warning('The configuration of image size for support CE matching is different from '
+                                       'database size, performance will decrease: ce id: %d, key: %s' %
+                                       (ce_id, image_key))
+                if crop_height != h:
+                    # craft essence equip face in support selection stage is cropped
+                    padding = int(round((h - crop_height) / 2))
+                    np_image = np_image[padding:padding+crop_height, ...]
+                self.cached_icons[image_key] = np_image
+            err = image_process.mean_gray_diff_err(craft_essence_part, self.cached_icons[image_key])
+            if min_ce_id == 0 or err < min_abs_err:
+                min_ce_id = ce_id
+                min_abs_err = err
+                logger.debug('ce_id = %d, key = %s, err = %f' % (ce_id, image_key, err))
         cursor.close()
-        with self._image_cacher_dump_rwlock.w_locked():
-            self.image_cacher[craft_essence_part] = max_craft_essence_id
-            self._image_cacher_dump_ts = time() + 60  # save cache after 60 secs
-            self._image_cacher_dump_event.set()
-        return max_craft_essence_id
+        return min_ce_id

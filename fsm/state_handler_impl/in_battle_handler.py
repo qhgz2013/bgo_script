@@ -1,104 +1,90 @@
-from fsm.state_handler import ConfigurableStateHandler, WaitFufuStateHandler
-from attacher import CombinedAttacher
+from ..state_handler import WaitFufuStateHandler, StateHandler
 from typing import *
-from archives.cv_positioning import *
 from fsm.fgo_state import FgoState
 from time import sleep
 import image_process
 import numpy as np
 import logging
 from util import DigitRecognizer
-from bgo_game import ScriptConfig
+from bgo_game import ScriptEnv
 from fsm.battle_seq_executor import BattleSequenceExecutor
 
 logger = logging.getLogger('bgo_script.fsm')
 
 
-class EnterQuestHandler(ConfigurableStateHandler):
-    def __init__(self, attacher: CombinedAttacher, forward_state: FgoState, cfg: ScriptConfig):
-        super().__init__(cfg)
-        self.attacher = attacher
-        self.forward_state = forward_state
+class EnterQuestHandler(StateHandler):
+    def run_and_transit_state(self) -> FgoState:
+        executor = BattleSequenceExecutor(self.env, self.env.runtime_var_store)
+        self.env.runtime_var_store['EXECUTOR_INSTANCE'] = executor
+        return WaitFufuStateHandler(self.env, self.forward_state).run_and_transit_state()
+
+
+class WaitAttackOrExitQuestHandler(StateHandler):
+    _attack_button_anchor = None
+    _exit_quest_img = None
+
+    def __init__(self, env: ScriptEnv):
+        super().__init__(env, forward_state=FgoState.STATE_BATTLE_LOOP_ATK)
+        if self._attack_button_anchor is None:
+            self._attack_button_anchor = image_process.imread(
+                self.env.detection_definitions.get_attack_button_anchor_file())
+        if self._exit_quest_img is None:
+            self._exit_quest_img = image_process.imread(
+                self.env.detection_definitions.get_exit_quest_ui_file())
 
     def run_and_transit_state(self) -> FgoState:
-        executor = BattleSequenceExecutor(self.attacher, self._cfg)
-        self._cfg.DO_NOT_MODIFY_BATTLE_VARS['EXECUTOR_INSTANCE'] = executor
-        return WaitFufuStateHandler(self.attacher, self.forward_state).run_and_transit_state()
-
-
-class WaitAttackOrExitQuestHandler(ConfigurableStateHandler):
-    _attack_button_anchor = image_process.imread(CV_ATTACK_BUTTON_ANCHOR)
-
-    def __init__(self, attacher: CombinedAttacher, cfg: ScriptConfig):
-        super().__init__(cfg)
-        self.attacher = attacher
-
-    def run_and_transit_state(self) -> FgoState:
+        blank_threshold = self.env.detection_definitions.get_in_battle_blank_screen_threshold()
+        blank_ratio = self.env.detection_definitions.get_in_battle_blank_screen_ratio_threshold()
         while True:
             sleep(0.2)
-            img = self.attacher.get_screenshot(CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y)[..., :3]
+            img = self._get_screenshot_impl()
             gray = np.mean(img, -1)
-            blank_val = np.mean(np.less(gray, CV_IN_BATTLE_BLANK_SCREEN_THRESHOLD))
+            blank_val = np.mean(np.less(gray, blank_threshold))
             # logger.debug('DEBUG value: blank ratio: %f' % blank_val)
             # skip blank screen frame
-            if blank_val >= CV_IN_BATTLE_BLANK_SCREEN_RATIO:
+            if blank_val >= blank_ratio:
                 continue
             if self._can_attack(gray):
                 return FgoState.STATE_BATTLE_LOOP_ATK
             if self._is_exit_quest_scene(img):
-                self._cfg.DO_NOT_MODIFY_BATTLE_VARS['BATTLE_LOOP_NEXT_STATE'] = FgoState.STATE_EXIT_QUEST
-                self._cfg.DO_NOT_MODIFY_BATTLE_VARS['SGN_BATTLE_STATE_CHANGED'].set()
+                self.env.runtime_var_store['BATTLE_LOOP_NEXT_STATE'] = FgoState.STATE_EXIT_QUEST
+                self.env.runtime_var_store['SGN_BATTLE_STATE_CHANGED'].set()
                 return FgoState.STATE_EXIT_QUEST
 
     def _can_attack(self, img: np.ndarray) -> bool:
-        btn_area = img[CV_ATTACK_BUTTON_Y1:CV_ATTACK_BUTTON_Y2, CV_ATTACK_BUTTON_X1:CV_ATTACK_BUTTON_X2]
+        button_rect = self.env.detection_definitions.get_attack_button_rect()
+        btn_area = img[button_rect.y1:button_rect.y2, button_rect.x1:button_rect.x2]
         abs_gray_diff = image_process.mean_gray_diff_err(btn_area, self._attack_button_anchor)
         # logger.debug('DEBUG value: attack button mean_gray_diff_err = %f' % abs_gray_diff)
-        return abs_gray_diff < CV_ATTACK_DIFF_THRESHOLD
+        return abs_gray_diff < self.env.detection_definitions.get_attack_button_diff_threshold()
 
-    @staticmethod
-    def _is_exit_quest_scene(img: np.ndarray) -> bool:
-        img = img[CV_EXIT_QUEST_Y1:CV_EXIT_QUEST_Y2, CV_EXIT_QUEST_X1:CV_EXIT_QUEST_X2, :].copy()
-        h, w = img.shape[:2]
-        img[int(h*CV_EXIT_QUEST_TITLE_MASK_Y1):int(h*CV_EXIT_QUEST_TITLE_MASK_Y2),
-            int(w*CV_EXIT_QUEST_TITLE_MASK_X1):int(w*CV_EXIT_QUEST_TITLE_MASK_Y2), :] = 0
-        for i in range(len(CV_EXIT_QUEST_SERVANT_MASK_X1S)):
-            img[int(h*CV_EXIT_QUEST_SERVANT_MASK_Y1):int(h*CV_EXIT_QUEST_SERVANT_MASK_Y2),
-                int(w*CV_EXIT_QUEST_SERVANT_MASK_X1S[i]):int(w*CV_EXIT_QUEST_SERVANT_MASK_X2S[i]), :] = 0
-        gray = np.mean(img, -1) < CV_EXIT_QUEST_GRAY_THRESHOLD
-        ratio = np.mean(gray)
-        # logger.debug('DEBUG value: exit quest gray ratio: %f' % ratio)
-        return ratio >= CV_EXIT_QUEST_GRAY_RATIO_THRESHOLD
+    def _is_exit_quest_scene(self, img: np.ndarray) -> bool:
+        exit_quest_rect = self.env.detection_definitions.get_exit_quest_rect()
+        img = img[exit_quest_rect.y1:exit_quest_rect.y2, exit_quest_rect.x1:exit_quest_rect.x2, :].copy()
+        diff = image_process.mean_gray_diff_err(img, self._exit_quest_img)
+        logger.debug(f'DEBUG value: exit quest diff: {diff}')
+        return diff < self.env.detection_definitions.get_exit_quest_diff_threshold()
 
 
-class BattleLoopAttackHandler(ConfigurableStateHandler):
-    # _battle_digits = image_process.read_digit_label_dir(CV_BATTLE_DIGIT_DIRECTORY)
+class BattleLoopAttackHandler(StateHandler):
 
-    def __init__(self, attacher: CombinedAttacher, cfg: ScriptConfig):
-        super().__init__(cfg)
-        self.attacher = attacher
-        self._digit_recognizer = DigitRecognizer(CV_BATTLE_DIGIT_DIRECTORY)
-
-    # def _digit_recognize(self, digit_img: np.ndarray) -> int:
-    #     min_digit = None
-    #     min_error = float('inf')
-    #     for candidate_digit in self._battle_digits:
-    #         abs_err = np.mean(np.abs(digit_img.astype(np.float) - self._battle_digits[candidate_digit]))
-    #         if abs_err < min_error:
-    #             min_error = abs_err
-    #             min_digit = candidate_digit
-    #     return min_digit
+    def __init__(self, env: ScriptEnv):
+        super().__init__(env, forward_state=FgoState.STATE_BATTLE_LOOP_WAIT_ATK_OR_EXIT)
+        self._digit_recognizer = DigitRecognizer(self.env.detection_definitions.get_battle_digit_dir())
 
     def _get_current_battle(self, img: np.ndarray) -> Tuple[int, int]:
-        img = img[CV_BATTLE_DETECTION_Y1:CV_BATTLE_DETECTION_Y2, CV_BATTLE_DETECTION_X1:CV_BATTLE_DETECTION_X2, :]
-        s = np.greater(image_process.rgb_to_hsv(img)[..., 2], CV_BATTLE_DIGIT_THRESHOLD)
+        battle_digit_rect = self.env.detection_definitions.get_battle_digit_rect()
+        img = img[battle_digit_rect.y1:battle_digit_rect.y2, battle_digit_rect.x1:battle_digit_rect.x2, :]
+        threshold = self.env.detection_definitions.get_battle_digit_threshold()
+        s = np.greater(image_process.rgb_to_hsv(img)[..., 2], threshold)
         s = s.astype('uint8') * 255
         # split digits
         rects = image_process.split_image(s)
         # re-order based on x position
         cx = [(x.min_x + x.max_x) / 2 for x in rects]
+        pixel_threshold = self.env.detection_definitions.get_battle_filter_pixel_threshold()
         rects = [x[1] for x in sorted(zip(cx, rects), key=lambda t: t[0])
-                 if x[1].associated_pixels.shape[0] > CV_BATTLE_FILTER_PIXEL_THRESHOLD]
+                 if x[1].associated_pixels.shape[0] > pixel_threshold]
         logger.debug('Digit rects: %s' % str(rects))
         if len(rects) != 3:
             logger.warning('Detected %d rects, it is incorrect' % len(rects))
@@ -111,9 +97,9 @@ class BattleLoopAttackHandler(ConfigurableStateHandler):
             self._digit_recognizer.recognize(rects[-1].get_image_segment())
 
     def run_and_transit_state(self) -> FgoState:
-        var = self._cfg.DO_NOT_MODIFY_BATTLE_VARS
+        var = self.env.runtime_var_store
         if not var['SKIP_QUEST_INFO_DETECTION']:
-            img = self.attacher.get_screenshot(CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y)[..., :3]
+            img = self._get_screenshot_impl()[..., :3]
             cur_battle, max_battle = self._get_current_battle(img)
             if cur_battle != var['CURRENT_BATTLE']:
                 var['TURN'] = 1  # reset turn

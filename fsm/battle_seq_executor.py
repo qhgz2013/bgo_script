@@ -1,14 +1,14 @@
 from typing import *
-from attacher import CombinedAttacher
-from bgo_game import ScriptConfig, CommandCardDetector, CommandCardType, DispatchedCommandCard
-from cv_positioning import *
-from click_positioning import *
+import image_process
+from bgo_game import ScriptEnv, CommandCardType, DispatchedCommandCard
 from time import sleep
 import threading
 import logging
 from .fgo_state import FgoState
 import sqlite3
 import numpy as np
+import json
+from collections import Counter
 
 logger = logging.getLogger('bgo_script.fsm')
 SERVANT_ID_EMPTY = -1
@@ -33,18 +33,29 @@ def _init_battle_vars(d: Dict[str, Any]):
     d['DELEGATE_THREAD_EXCEPTION'] = None
 
 
-def _fetch_np_card_type() -> Dict[int, int]:
+def _fetch_np_card_type(env: ScriptEnv) -> Dict[int, int]:
     global _cache_np_card_type
     if _cache_np_card_type is None:
-        conn = sqlite3.connect(CV_FGO_DATABASE_FILE)
+        conn = sqlite3.connect(env.detection_definitions.get_database_file())
         csr = conn.cursor()
+        card_mapper = {'quick': CommandCardType.Quick, 'arts': CommandCardType.Arts, 'buster': CommandCardType.Buster}
         try:
             # if exception is raised here, try downloading the newest database or generate it from code
             logger.debug("Querying servant noble phantasm type")
-            csr.execute("select id, np_type from servant_np")
-            _cache_np_card_type = {k: v for k, v in csr.fetchall()}
-            csr.execute("select id from servant_np order by id desc limit 1")
-            max_id = csr.fetchone()[0]
+            csr.execute("select servant_id, info_json from servant_info")
+            svt_info_json = {k: v for k, v in csr.fetchall()}
+            max_id = max(svt_info_json.keys())
+            _cache_np_card_type = {}
+            for svt_id, info_json in svt_info_json.items():
+                info_dict = json.loads(info_json)
+                nps = info_dict['noble_phantasms']
+                if len(nps) == 0:
+                    continue
+                np_card_type = Counter(map(lambda x: x['card'], nps))
+                if len(np_card_type) > 1:
+                    logger.warning(f'Servant {svt_id} has multiple NP card types: {np_card_type}')
+                card_type = card_mapper[np_card_type.most_common(1)[0][0]]
+                _cache_np_card_type[svt_id] = card_type
             logger.debug(f'Queried {len(_cache_np_card_type)} entries with newest servant id {max_id}')
         finally:
             csr.close()
@@ -58,7 +69,7 @@ def _get_svt_id_from_cmd_card(card: DispatchedCommandCard):
 
 # TODO [PRIOR: middle]: 重构这个类，增加宇宙凛的指令卡变色
 class BattleSequenceExecutor:
-    def __init__(self, attacher: CombinedAttacher, cfg: ScriptConfig, enable_card_reselection_feat: bool = True,
+    def __init__(self, env: ScriptEnv, enable_card_reselection_feat: bool = True,
                  enable_fast_cmd_card_detect: bool = True):
         # enable_card_reselection_feat: when it is set, command cards (including NPs) will be auto-reselected when
         #     re-entering the command card selection UI (the re-enter happens when command card selection is interrupted
@@ -70,18 +81,18 @@ class BattleSequenceExecutor:
         self.SERVANT_ID_SUPPORT = SERVANT_ID_SUPPORT
         self.NP_CARD_TYPE_EMPTY = NP_CARD_TYPE_EMPTY
 
-        self.attacher = attacher
-        self.cfg = cfg
-        self.team_config = cfg.team_config
+        self.env = env
+        self.attacher = env.attacher
+        self.team_config = env.team_config
         self.enable_card_reselection_feature = enable_card_reselection_feat
         self.enable_fast_cmd_card_detect = enable_fast_cmd_card_detect
-        _init_battle_vars(cfg.DO_NOT_MODIFY_BATTLE_VARS)
-        self._controller = cfg.battle_controller(self)
+        _init_battle_vars(env.runtime_var_store)
+        self._controller = env.controller_cls(self)
         # use another thread to keep execution context while running __call__
         logger.debug('Creating thread to handle controller execution, waiting initialization response')
         thd = threading.Thread(target=self._thd_callback, daemon=True, name='Script controller context')
         thd.start()
-        self.cfg.DO_NOT_MODIFY_BATTLE_VARS['SGN_THD_INIT_FINISHED'].wait()
+        self.env.runtime_var_store['SGN_THD_INIT_FINISHED'].wait()
         logger.debug('Thread initialized with TID = %d' % thd.ident)
         self._attack_button_clicked = False
         self._dispatched_cards = []
@@ -89,7 +100,7 @@ class BattleSequenceExecutor:
         self._servants = [x.svt_id for x in self.team_config.self_owned_servants]
         self._servants.insert(self.team_config.support_location, SERVANT_ID_SUPPORT)
         self._last_selected_enemy = None
-        self._np_type = _fetch_np_card_type()
+        self._np_type = _fetch_np_card_type(self.env)
         # tracking selected command card type and servant ids
         self._selected_cmd_card_type = set()
         self._selected_cmd_card_svt_id = set()
@@ -103,7 +114,7 @@ class BattleSequenceExecutor:
         self._selected_cmd_card_svt_id.clear()
 
     def _thd_callback(self):
-        var = self.cfg.DO_NOT_MODIFY_BATTLE_VARS
+        var = self.env.runtime_var_store
         var['SGN_THD_INIT_FINISHED'].set()
         state_changed = var['SGN_BATTLE_STATE_CHANGED']
         try:
@@ -144,7 +155,7 @@ class BattleSequenceExecutor:
 
     def _translate_servant_id(self, servant_id: int) -> int:
         if servant_id == SERVANT_ID_SUPPORT:
-            return self.cfg.team_config.support_servant.svt_id
+            return self.env.team_config.support_servant.svt_id
         elif servant_id == SERVANT_ID_EMPTY:
             return SERVANT_ID_EMPTY
         elif servant_id > 0:
@@ -154,7 +165,7 @@ class BattleSequenceExecutor:
 
     def _submit_click_event(self, t: float, loc: Optional[Tuple[float, float]] = None):
         if t == TIME_WAIT_ATTACK_BUTTON:
-            var = self.cfg.DO_NOT_MODIFY_BATTLE_VARS
+            var = self.env.runtime_var_store
             var['SGN_WAIT_STATE_TRANSITION'].set()
             logger.debug('Wait SGN_BATTLE_STATE_CHANGED')
             var['SGN_BATTLE_STATE_CHANGED'].wait()
@@ -167,7 +178,8 @@ class BattleSequenceExecutor:
     def _enter_attack_mode(self):
         if not self._attack_button_clicked:
             self._attack_button_clicked = True
-            self._submit_click_event(0.5, (ATTACK_BUTTON_X, ATTACK_BUTTON_Y))
+            attack_button = self.env.click_definitions.attack_button()
+            self._submit_click_event(0.5, (attack_button.x, attack_button.y))
             # re-select previous selected command cards (when executing ATTACK/NP -> SKILL -> ATTACK/NP sequence)
             if self.enable_card_reselection_feature and len(self._selected_cmd_cards) > 0:
                 logger.debug('Enabled card reselection feature: perform %d selection' % len(self._selected_cmd_cards))
@@ -179,7 +191,8 @@ class BattleSequenceExecutor:
     def _exit_attack_mode(self):
         if self._attack_button_clicked:
             self._attack_button_clicked = False
-            self._submit_click_event(0.5, (ATTACK_BACK_BUTTON_X, ATTACK_BACK_BUTTON_Y))
+            attack_back_button = self.env.click_definitions.attack_back_button()
+            self._submit_click_event(0.5, (attack_back_button.x, attack_back_button.y))
 
     def _select_enemy(self, enemy_location: int):
         if enemy_location == ENEMY_LOCATION_EMPTY:
@@ -188,7 +201,8 @@ class BattleSequenceExecutor:
             logger.warning('Ignored enemy_location param: it can be specified for the first selection')
             return
         if self._last_selected_enemy is None or self._last_selected_enemy != enemy_location:
-            self._submit_click_event(0.5, (ENEMY_XS[enemy_location], ENEMY_Y))
+            enemy_pos = self.env.click_definitions.select_enemy()[enemy_location]
+            self._submit_click_event(0.5, (enemy_pos.x, enemy_pos.y))
             self._last_selected_enemy = enemy_location
 
     def remove_servant(self, servant_id: int) -> 'BattleSequenceExecutor':
@@ -226,13 +240,16 @@ class BattleSequenceExecutor:
         self._exit_attack_mode()
         self._select_enemy(enemy_location)
         # 点击技能
-        self._submit_click_event(0.5, (SKILL_XS[servant_pos * 3 + skill_index], SKILL_Y))
+        skill_btn = self.env.click_definitions.skill_buttons()[servant_pos * 3 + skill_index]
+        self._submit_click_event(0.5, (skill_btn.x, skill_btn.y))
         # 若是我方单体技能，则选定我方一个目标
         if to_servant_pos != SERVANT_ID_EMPTY:
-            self._submit_click_event(0.5, (TO_SERVANT_X[to_servant_pos], TO_SERVANT_Y))
+            to_svt = self.env.click_definitions.to_servant()[to_servant_pos]
+            self._submit_click_event(0.5, (to_svt.x, to_svt.y))
         elif np_card_type != NP_CARD_TYPE_EMPTY:
             raise NotImplementedError('Specifying NP card type in unsupported yet')
-        self._submit_click_event(0.5, (CV_SKILL_SPEEDUP_CLICK_X, CV_SKILL_SPEEDUP_CLICK_Y))
+        speed_up_click = self.env.click_definitions.skill_speedup()
+        self._submit_click_event(0.5, (speed_up_click.x, speed_up_click.y))
         self._submit_click_event(1, None)
         self._submit_click_event(TIME_WAIT_ATTACK_BUTTON, None)
         return self
@@ -251,7 +268,8 @@ class BattleSequenceExecutor:
         self._enter_attack_mode()
         self._select_enemy(enemy_location)
         # From 2.45: 选卡后宝具卡速度加快了，不用专门留时间给它了
-        self._submit_click_event(0.5, (NP_XS[servant_pos], NP_Y))
+        np_pos = self.env.click_definitions.np_buttons()[servant_pos]
+        self._submit_click_event(0.5, (np_pos.x, np_pos.y))
         self._selected_cmd_cards.append((self.noble_phantasm, (servant_id, enemy_location)))
         real_svt_id = self._translate_servant_id(servant_id)
         if real_svt_id in self._np_type:
@@ -271,8 +289,8 @@ class BattleSequenceExecutor:
         self._enter_attack_mode()
         self._select_enemy(enemy_location)
         # 选卡
-        self._submit_click_event(1 if len(self._selected_cmd_cards) == 0 else 0.2,
-                                 (COMMAND_CARD_XS[command_card_index], COMMAND_CARD_Y))
+        cmd_card_pos = self.env.click_definitions.command_card()[command_card_index]
+        self._submit_click_event(1 if len(self._selected_cmd_cards) == 0 else 0.2, (cmd_card_pos.x, cmd_card_pos.y))
         if len(self._dispatched_cards) > 0:
             # command card selection tracking is disabled when no dispatched command card data available
             self._selected_cmd_card_type.add(self._dispatched_cards[command_card_index].card_type)
@@ -287,13 +305,16 @@ class BattleSequenceExecutor:
         self._exit_attack_mode()
         self._select_enemy(enemy_location)
         # 搓按钮
-        self._submit_click_event(1, (CLOTHES_BUTTON_X, CLOTHES_BUTTON_Y))
-        self._submit_click_event(0.5, (CLOTHES_SKILL_XS[skill_index], CLOTHES_BUTTON_Y))
+        cloth_button = self.env.click_definitions.clothes_button()
+        self._submit_click_event(1, (cloth_button.x, cloth_button.y))
+        cloth_skill_btn = self.env.click_definitions.clothes_skills()[skill_index]
+        self._submit_click_event(0.5, (cloth_skill_btn.x, cloth_skill_btn.y))
         # 选技能
         if isinstance(to_servant_id, int):
             servant_pos = self._lookup_servant_position(to_servant_id)
             assert servant_pos < 3, 'Could not use skill to backup member'
-            self._submit_click_event(0.5, (TO_SERVANT_X[servant_pos], TO_SERVANT_Y))
+            to_svt = self.env.click_definitions.to_servant()[servant_pos]
+            self._submit_click_event(0.5, (to_svt.x, to_svt.y))
         else:
             assert (isinstance(to_servant_id, tuple) or isinstance(to_servant_id, list)) and len(to_servant_id) == 2, \
                 'invalid type or length of input servant tuple (used for changing servants)'
@@ -303,24 +324,26 @@ class BattleSequenceExecutor:
             t = self._servants[servant_pos1]
             self._servants[servant_pos1] = self._servants[servant_pos2]
             self._servants[servant_pos2] = t
+            change_pos = self.env.click_definitions.change_servant()
             # 选择第一个servant
-            self._submit_click_event(0.5, (CHANGE_SERVANT_XS[servant_pos1], CHANGE_SERVANT_Y))
+            self._submit_click_event(0.5, (change_pos[servant_pos1].x, change_pos[servant_pos1].y))
             # 选择第二个servant
-            self._submit_click_event(0.2, (CHANGE_SERVANT_XS[servant_pos2], CHANGE_SERVANT_Y))
+            self._submit_click_event(0.2, (change_pos[servant_pos2].x, change_pos[servant_pos2].y))
             # 点确定
-            self._submit_click_event(0.2, (APPLY_CHANGE_SERVANT_BUTTON_X, APPLY_CHANGE_SERVANT_BUTTON_Y))
+            change_apply = self.env.click_definitions.apply_order_change_button()
+            self._submit_click_event(0.2, (change_apply.x, change_apply.y))
             # TODO [prior: normal]: automatically re-detect command card after people changed
-        self._submit_click_event(0.5, (CV_SKILL_SPEEDUP_CLICK_X, CV_SKILL_SPEEDUP_CLICK_Y))
+        speedup_button = self.env.click_definitions.skill_speedup()
+        self._submit_click_event(0.5, (speedup_button.x, speedup_button.y))
         self._submit_click_event(1, None)
         self._submit_click_event(TIME_WAIT_ATTACK_BUTTON, None)
         return self
 
     def _refresh_command_card_list(self, force: bool = False):
-        # backward compatibility
-        var = self.cfg.DO_NOT_MODIFY_BATTLE_VARS
+        var = self.env.runtime_var_store
         if force:
             should_detect_command_card = True
-        elif self.cfg.detect_command_card is None:
+        else:
             should_detect_command_card = self._controller.__require_battle_card_detection__(
                 var['CURRENT_BATTLE'], var['MAX_BATTLE'], var['TURN'])
             if should_detect_command_card is None:
@@ -332,17 +355,18 @@ class BattleSequenceExecutor:
                                f' returned a value with type {type(should_detect_command_card)} (Expected: bool)')
                 # convert to bool
                 should_detect_command_card = should_detect_command_card != 0
-        else:
-            should_detect_command_card = self.cfg.detect_command_card
         self._dispatched_cards.clear()
         if should_detect_command_card:
             self._enter_attack_mode()
             sleep(0.5)
-            img = self.attacher.get_screenshot(CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y)
+            img = self.env.capturer.get_screenshot()
+            resolution = self.env.detection_definitions.get_target_resolution()
+            img = image_process.resize(img, resolution.width, resolution.height)
             if self.enable_fast_cmd_card_detect:
                 candidate_svt = [self._translate_servant_id(x) for x in self._servants[:3]]
             else:
                 candidate_svt = None
+            from bgo_game._command_card_detector import CommandCardDetector  # TODO!
             new_cards = CommandCardDetector.detect_command_cards(img[..., :3], candidate_svt)
             self._dispatched_cards.extend(new_cards)
 

@@ -41,11 +41,19 @@ class Exact16x9RatioDetectionDefImpl(BasicDetectionDefImpl):
 
     @staticmethod
     def get_support_detection_servant_img_size() -> Tuple[int, int]:
-        return 144, 132  # todo: use new image size
+        return 128, 128
+
+    @staticmethod
+    def get_support_detection_craft_essence_img_size() -> Tuple[int, int]:
+        return 68, 150  # the original size is 68x150, but cropped to 40x150 in support selection stage
+
+    @staticmethod
+    def get_support_detection_craft_essence_crop_height() -> int:
+        return 40
 
     @staticmethod
     def get_support_detection_servant_split_y() -> int:
-        return 107
+        return 102
 
     @staticmethod
     def get_support_craft_essence_max_break_rect() -> Rect:

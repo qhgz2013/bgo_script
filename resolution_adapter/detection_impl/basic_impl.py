@@ -82,12 +82,8 @@ class BasicDetectionDefImpl(AbstractDetectionDef, metaclass=ABCMeta):
         return 'cv_data/support_skill_digit'
 
     @staticmethod
-    def get_exit_quest_gray_threshold() -> int:
-        return 25
-
-    @staticmethod
-    def get_exit_quest_gray_ratio_threshold() -> float:
-        return 0.98
+    def get_exit_quest_diff_threshold() -> int:
+        return 3
 
     @staticmethod
     def get_in_battle_blank_screen_threshold() -> int:
@@ -96,6 +92,10 @@ class BasicDetectionDefImpl(AbstractDetectionDef, metaclass=ABCMeta):
     @staticmethod
     def get_in_battle_blank_screen_ratio_threshold() -> float:
         return 0.75
+
+    @staticmethod
+    def get_exit_quest_ui_file() -> str:
+        return 'cv_data/exit_quest_ui.png'
 
     @staticmethod
     def get_battle_digit_dir() -> str:

@@ -20,6 +20,7 @@ class APRecoveryItemType(IntEnum):
     GoldApple = 2
     SilverApple = 3
     BronzeApple = 4
+    BronzeSapling = 5
 
 
 # 一般情况下的指令卡类
@@ -207,8 +208,9 @@ class TeamConfig:
                 self.support_servant = svt
             else:
                 self.self_owned_servants.append(svt)
-        if self.support_location is None:
-            raise ValueError('Could not find support servant in the team configuration')
+        # - commented this since some quests do not require support servant
+        # if self.support_location is None:
+        #     raise ValueError('Could not find support servant in the team configuration')
 
 
 class CommandCardNotFound(Exception):

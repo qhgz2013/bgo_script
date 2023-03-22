@@ -1,17 +1,15 @@
-from fsm.state_handler import ConfigurableStateHandler, WaitFufuStateHandler
-from attacher import *
+from ..state_handler import StateHandler, WaitFufuStateHandler
 from matcher import SupportServantMatcher, SupportCraftEssenceMatcher
 import logging
 from typing import *
-from archives.cv_positioning import *
-from archives.click_positioning import *
 import image_process
 import numpy as np
 from time import sleep, time
 from image_process import mean_gray_diff_err
-from bgo_game import ScriptConfig, ServantConfig
+from bgo_game import ScriptEnv, ServantConfig
 from fsm.fgo_state import FgoState
 from util import DigitRecognizer
+from basic_class import PointF
 
 
 logger = logging.getLogger('bgo_script.fsm')
@@ -42,38 +40,48 @@ class SupportServant(ServantConfig):
         return s + '>'
 
 
-class SelectSupportHandler(ConfigurableStateHandler):
-    _support_empty_img = image_process.imread(CV_SUPPORT_EMPTY_FILE)
-    _support_craft_essence_img = image_process.imread(CV_SUPPORT_CRAFT_ESSENCE_FILE)
-    _support_craft_essence_img2 = image_process.imread(CV_SUPPORT_CRAFT_ESSENCE_FILE2)
+class SelectSupportHandler(StateHandler):
+    _support_empty_img = None
+    _support_craft_essence_imgs = None
     _support_craft_essence_img_resized = None  # assigned in run-time, resized _support_max_break_img
-    _support_max_break_img = image_process.imread(CV_SUPPORT_CRAFT_ESSENCE_MAX_BREAK_FILE)
+    _support_max_break_img = None
 
-    servant_matcher = SupportServantMatcher(CV_FGO_DATABASE_FILE)
-    craft_essence_matcher = SupportCraftEssenceMatcher(CV_FGO_DATABASE_FILE)
+    servant_matcher = None
+    craft_essence_matcher = None
 
-    def __init__(self, attacher: CombinedAttacher, forward_state: FgoState, cfg: ScriptConfig):
-        super().__init__(cfg)
-        self.attacher = attacher
-        self.forward_state = forward_state
-        self._support_svt = self._cfg.team_config.support_servant
+    def __init__(self, env: ScriptEnv, forward_state: FgoState):
+        super().__init__(env, forward_state)
+        self._support_svt = self.env.team_config.support_servant
         # noinspection PyTypeChecker
-        self._scroll_down_y = SUPPORT_SCROLLDOWN_Y_MUMU
-        self._digit_recognizer = DigitRecognizer(CV_SUPPORT_SKILL_DIGIT_DIR)
+        self._scroll_down_y = self.env.click_definitions.support_scrolldown_y_mumu()
+        self._digit_recognizer = DigitRecognizer(self.env.detection_definitions.get_support_skill_digit_dir())
+        if self._support_empty_img is None:
+            self._support_empty_img = image_process.imread(self.env.detection_definitions.get_support_empty_file())
+        if self._support_craft_essence_imgs is None:
+            self._support_craft_essence_imgs = [image_process.imread(x) for x in
+                                                self.env.detection_definitions.get_support_empty_craft_essence_files()]
+        if self._support_max_break_img is None:
+            self._support_max_break_img = image_process.imread(self.env.detection_definitions.get_max_break_icon_file())
+        if self.servant_matcher is None:
+            self.servant_matcher = SupportServantMatcher(self.env.detection_definitions.get_database_file(), self.env)
+        if self.craft_essence_matcher is None:
+            self.craft_essence_matcher = SupportCraftEssenceMatcher(self.env.detection_definitions.get_database_file(),
+                                                                    self.env)
 
     def run_and_transit_state(self) -> FgoState:
         suc = False
+        resolution = self.env.detection_definitions.get_target_resolution()
         while True:
             sleep(0.5)
-            img = self.attacher.get_screenshot(CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y)[..., :3]
+            img = self._get_screenshot_impl()[..., :3]
             support_range = self._split_support_image(img)
             svt_data = self.match_support_servant(img, support_range)
             for i in range(len(svt_data)):
                 if self._check_config(svt_data[i]):
                     # servant matched
                     logger.info('Found required support')
-                    self.attacher.send_click(0.5, (support_range[i][0] + support_range[i][1]) /
-                                             2 / CV_SCREENSHOT_RESOLUTION_Y)
+                    self.env.attacher.send_click(0.5,
+                                                 (support_range[i][0] + support_range[i][1]) / 2 / resolution.height)
                     sleep(0.5)
                     suc = True
                     break
@@ -119,17 +127,18 @@ class SelectSupportHandler(ConfigurableStateHandler):
 
     def _action_scroll_down(self):
         logger.info('scrolling down')
-        self.attacher.send_slide((0.5, 0.9), (0.5, 0.9 - self._scroll_down_y))
+        self.env.attacher.send_slide(PointF(0.5, 0.9), PointF(0.5, 0.9 - self._scroll_down_y))
         sleep(1.5)
 
-    @classmethod
-    def _split_support_image(cls, img: np.ndarray) -> List[Tuple[int, int]]:
+    def _split_support_image(self, img: np.ndarray) -> List[Tuple[int, int]]:
         # new detection result begins here
-        part = img[:, CV_SUPPORT_DETECT_X1:CV_SUPPORT_DETECT_X2, :]
+        x1, x2 = self.env.detection_definitions.get_support_detection_x()
+        part = img[:, x1:x2, :]
         gray = np.mean(part, axis=2)
         avg = np.mean(gray, axis=1)
         td = np.zeros_like(avg)
-        td[:-CV_SUPPORT_TD_PIXEL] = avg[:-CV_SUPPORT_TD_PIXEL] - avg[CV_SUPPORT_TD_PIXEL:]
+        grad_pixels = self.env.detection_definitions.get_support_detection_gray_grad_offset_pixel()
+        td[:-grad_pixels] = avg[:-grad_pixels] - avg[grad_pixels:]
         # logger.debug('support split: temporal differentiate array:\n%s' % str(td))
         # import matplotlib.pyplot as plt
         # plt.figure()
@@ -137,34 +146,36 @@ class SelectSupportHandler(ConfigurableStateHandler):
         # plt.show()
         y = 150
         range_list = []
-        threshold = CV_SUPPORT_DETECT_DIFF_THRESHOLD
+        threshold = self.env.detection_definitions.get_support_detection_diff_threshold()
         # TODO [PRIOR: nice-to-have]: 修改为支持多段合并的识别模式（对上升沿和下降沿分别进行匹配）
-        while y < CV_SCREENSHOT_RESOLUTION_Y:
-            while y < CV_SCREENSHOT_RESOLUTION_Y and td[y] > -threshold:
+        resolution = self.env.detection_definitions.get_target_resolution()
+        y_len_lo, y_len_hi = self.env.detection_definitions.get_support_detection_y_len_threshold_range()
+        while y < resolution.height:
+            while y < resolution.height and td[y] > -threshold:
                 y += 1
-            while y < CV_SCREENSHOT_RESOLUTION_Y and td[y] < -threshold:
+            while y < resolution.height and td[y] < -threshold:
                 y += 1
             begin_y = y - 1
-            while y < CV_SCREENSHOT_RESOLUTION_Y and td[y] < threshold:
+            while y < resolution.height and td[y] < threshold:
                 y += 1
-            while y < CV_SCREENSHOT_RESOLUTION_Y and td[y] > threshold:
+            while y < resolution.height and td[y] > threshold:
                 y += 1
             end_y = y - 1
-            if y == CV_SCREENSHOT_RESOLUTION_Y:
+            if y == resolution.height:
                 break
             len_y = end_y - begin_y
-            if CV_SUPPORT_DETECT_Y_LEN_THRESHOLD_LO <= len_y <= CV_SUPPORT_DETECT_Y_LEN_THRESHOLD_HI:
+            if y_len_lo <= len_y <= y_len_hi:
                 range_list.append((begin_y, end_y))
                 logger.debug('support detection: %d -> %d (len = %d)' % (begin_y, end_y, end_y-begin_y))
             else:
                 logger.debug('support detection: %d -> %d (len = %d) (ignored)' % (begin_y, end_y, end_y-begin_y))
         return range_list
 
-    @staticmethod
-    def _get_scrollbar_pos(img: np.ndarray) -> Tuple[float, float]:
-        scrollbar = img[CV_SUPPORT_SCROLLBAR_Y1:CV_SUPPORT_SCROLLBAR_Y2,
-                        CV_SUPPORT_SCROLLBAR_X1:CV_SUPPORT_SCROLLBAR_X2, :]
-        score = np.mean(np.mean(scrollbar, -1), -1) < CV_SUPPORT_BAR_GRAY_THRESHOLD
+    def _get_scrollbar_pos(self, img: np.ndarray) -> Tuple[float, float]:
+        scrollbar_rect = self.env.detection_definitions.get_support_scrollbar_rect()
+        scrollbar = img[scrollbar_rect.y1:scrollbar_rect.y2, scrollbar_rect.x1:scrollbar_rect.x2, :]
+        score = np.mean(np.mean(scrollbar, -1), -1) < \
+            self.env.detection_definitions.get_support_scrollbar_gray_threshold()
         start_y, end_y = 0, 0
         for y in range(score.shape[0]):
             if not score[y]:
@@ -181,25 +192,28 @@ class SelectSupportHandler(ConfigurableStateHandler):
 
     def refresh_support(self):
         logger.info('Refreshing support')
+        refresh_button = self.env.click_definitions.support_refresh()
+        refresh_refused_rect = self.env.detection_definitions.get_support_refresh_refused_detection_rect()
+        refresh_refused_confirm = self.env.click_definitions.support_refresh_refused_confirm()
+        refresh_confirm = self.env.click_definitions.support_refresh_confirm()
         while True:
             sleep(0.5)
-            self.attacher.send_click(SUPPORT_REFRESH_BUTTON_X, SUPPORT_REFRESH_BUTTON_Y)
+            self.env.attacher.send_click(refresh_button.x, refresh_button.y)
             sleep(0.5)
             # Check clickable
-            img = self.attacher.get_screenshot(CV_SCREENSHOT_RESOLUTION_X, CV_SCREENSHOT_RESOLUTION_Y)
-            img = image_process.rgb_to_hsv(img[..., :3])[
-                  CV_SUPPORT_REFRESH_REFUSED_DETECTION_Y1:CV_SUPPORT_REFRESH_REFUSED_DETECTION_Y2,
-                  CV_SUPPORT_REFRESH_REFUSED_DETECTION_X1:CV_SUPPORT_REFRESH_REFUSED_DETECTION_X2, 1]
-            if np.mean(img) < CV_SUPPORT_REFRESH_REFUSED_DETECTION_S_THRESHOLD:
-                self.attacher.send_click(SUPPORT_REFRESH_REFUSED_CONFIRM_X, SUPPORT_REFRESH_REFUSED_CONFIRM_Y)
+            img = self._get_screenshot_impl()
+            img = image_process.rgb_to_hsv(img[..., :3])[refresh_refused_rect.y1:refresh_refused_rect.y2,
+                                                         refresh_refused_rect.x1:refresh_refused_rect.x2, 1]
+            if np.mean(img) < self.env.detection_definitions.get_support_refresh_refused_detection_s_threshold():
+                self.env.attacher.send_click(refresh_refused_confirm.x, refresh_refused_confirm.y)
                 logger.info('Could not refresh support temporarily, retry in 5 secs')
                 sleep(5)
             else:
                 break
         sleep(0.5)
-        self.attacher.send_click(SUPPORT_REFRESH_BUTTON_CONFIRM_X, SUPPORT_REFRESH_BUTTON_CONFIRM_Y)
+        self.env.attacher.send_click(refresh_confirm.x, refresh_confirm.y)
         sleep(1)
-        assert WaitFufuStateHandler(self.attacher, FgoState.STATE_BEGIN).run_and_transit_state() == FgoState.STATE_BEGIN
+        WaitFufuStateHandler(self.env, self.forward_state).run_and_transit_state()
         sleep(0.5)
 
     def match_support_servant(self, img: np.ndarray, range_list: List[Tuple[int, int]]) -> List[SupportServant]:
@@ -226,18 +240,26 @@ class SelectSupportHandler(ConfigurableStateHandler):
             logger.debug('DEBUG value: empty support craft essence check: mean_gray_diff_err = %f' % v)
             return v < 10
         ce_id, t = self._wrap_call_matcher(self.craft_essence_matcher.match, _craft_essence_empty_check, img,
-                                           [self._support_craft_essence_img, self._support_craft_essence_img2],
-                                           range_list)
+                                           self._support_craft_essence_imgs, range_list)
         logger.debug('Detected support craft essence ID: %s (used %f sec(s))' % (str(ce_id), t))
         ret_list = [SupportServant(x, y) for x, y in zip(svt_id, ce_id)]
+        x1, x2 = self.env.detection_definitions.get_support_detection_servant_x()
+        max_break_rect = self.env.detection_definitions.get_support_craft_essence_max_break_rect()
+        max_break_threshold = self.env.detection_definitions.get_support_craft_essence_max_break_err_threshold()
+
+        img_gray = np.mean(img, -1)
+        vertical_diff = np.zeros_like(img_gray, dtype=np.float32)
+        # pixel offset for computing abs difference
+        step_size = self.env.detection_definitions.get_support_skill_v_diff_step_size()
+        vertical_diff[:-step_size, :] = np.abs(img_gray[:-step_size, :] - img_gray[step_size:, :])
+
         for i, (y1, y2) in enumerate(range_list):
             # detect craft essence max break state
             if ce_id[i] == 0:
                 ret_list[i].craft_essence_max_break = False
             else:
-                icon = img[y1:y2, CV_SUPPORT_SERVANT_X1:CV_SUPPORT_SERVANT_X2, :]
-                icon = icon[CV_SUPPORT_CRAFT_ESSENCE_MAX_BREAK_Y1:CV_SUPPORT_CRAFT_ESSENCE_MAX_BREAK_Y2,
-                            CV_SUPPORT_CRAFT_ESSENCE_MAX_BREAK_X1:CV_SUPPORT_CRAFT_ESSENCE_MAX_BREAK_X2, :]
+                icon = img[y1:y2, x1:x2, :]
+                icon = icon[max_break_rect.y1:max_break_rect.y2, max_break_rect.x1:max_break_rect.x2, :]
                 if self._support_craft_essence_img_resized is None:
                     # reduce unnecessary resize ops
                     anchor = image_process.resize(self._support_max_break_img, icon.shape[1], icon.shape[0])
@@ -248,43 +270,45 @@ class SelectSupportHandler(ConfigurableStateHandler):
                 hsv_err = image_process.mean_hsv_diff_err(icon, anchor)
                 # logger.debug('DEBUG value: support craft essence max break check: gray_diff_err = %f, hsv_err = %f' %
                 #              (err, hsv_err))
-                ret_list[i].craft_essence_max_break = hsv_err < CV_SUPPORT_CRAFT_ESSENCE_MAX_BREAK_THRESHOLD
+                ret_list[i].craft_essence_max_break = hsv_err < max_break_threshold
 
             # skip when support servant is empty
             if svt_id[i] == 0:
                 continue
             # detect friend state
-            friend_img = img[y1+CV_SUPPORT_FRIEND_DETECT_Y1:y1+CV_SUPPORT_FRIEND_DETECT_Y2,
-                             CV_SUPPORT_FRIEND_DETECT_X1:CV_SUPPORT_FRIEND_DETECT_X2, :]
+            friend_rect = self.env.detection_definitions.get_support_friend_detect_rect()
+            friend_img = img[y1+friend_rect.y1:y1+friend_rect.y2, friend_rect.x1:friend_rect.x2, :]
             # omit B channel here
-            friend_part_binary = np.greater_equal(np.mean(friend_img[..., :2], 2),
-                                                  CV_SUPPORT_FRIEND_DISCRETE_THRESHOLD)
-            is_friend = np.mean(friend_part_binary) > CV_SUPPORT_FRIEND_DETECT_THRESHOLD
+            friend_part_binary = np.greater_equal(
+                np.mean(friend_img[..., :2], 2),
+                self.env.detection_definitions.get_support_friend_binarization_threshold())
+            is_friend = np.mean(friend_part_binary) > \
+                self.env.detection_definitions.get_support_friend_ratio_threshold()
             ret_list[i].is_friend = is_friend
 
             # skill level detection
-            skill_img = img[y1+CV_SUPPORT_SKILL_BOX_OFFSET_Y:y1+CV_SUPPORT_SKILL_BOX_OFFSET_Y+CV_SUPPORT_SKILL_BOX_SIZE,
-                            CV_SUPPORT_SKILL_BOX_OFFSET_X1:CV_SUPPORT_SKILL_BOX_OFFSET_X2, :3].copy()
-            gray = np.mean(skill_img, -1)
-            vertical_diff = np.zeros_like(gray, dtype=np.float32)
-            step_size = CV_SUPPORT_SKILL_V_DIFF_STEP_SIZE  # pixel offset for computing abs difference
-            vertical_diff[:-step_size, :] = np.abs(gray[:-step_size, :] - gray[step_size:, :])
+            skill_box_rects = self.env.detection_definitions.get_support_skill_box_rect()
+            # skill_img = img[y1+CV_SUPPORT_SKILL_BOX_OFFSET_Y:y1+CV_SUPPORT_SKILL_BOX_OFFSET_Y+CV_SUPPORT_SKILL_BOX_SIZE,
+            #                 CV_SUPPORT_SKILL_BOX_OFFSET_X1:CV_SUPPORT_SKILL_BOX_OFFSET_X2, :3].copy()
             # just use the first several pixels and last several pixels to determine
-            edge_size = CV_SUPPORT_SKILL_V_DIFF_EDGE_SIZE
+            edge_size = self.env.detection_definitions.get_support_skill_v_diff_edge_size()
             skills = []
-            for j in range(3):
-                begin_x = j * (CV_SUPPORT_SKILL_BOX_MARGIN_X + CV_SUPPORT_SKILL_BOX_SIZE)
-                v_diff_current_skill = np.mean(vertical_diff[:, begin_x:begin_x+CV_SUPPORT_SKILL_BOX_SIZE], -1)
+            for j, skill_box_rect in enumerate(skill_box_rects):
+                # begin_x = j * (CV_SUPPORT_SKILL_BOX_MARGIN_X + CV_SUPPORT_SKILL_BOX_SIZE)
+                v_diff_current_skill = np.mean(vertical_diff[y1+skill_box_rect.y1:y1+skill_box_rect.y2,
+                                                             skill_box_rect.x1:skill_box_rect.x2], -1)
                 max_v_diff = np.maximum(np.max(v_diff_current_skill[:edge_size]),
                                         np.max(v_diff_current_skill[-edge_size:]))
                 logger.debug(f'DEBUG value: max_v_diff = {max_v_diff}')
-                if max_v_diff > CV_SUPPORT_SKILL_V_DIFF_THRESHOLD:
+                if max_v_diff > self.env.detection_definitions.get_support_skill_v_diff_threshold():
                     # digit recognition, using SSIM metric, split by S (-> 0) and V (-> 255)
-                    current_skill_img = skill_img[:, begin_x:begin_x + CV_SUPPORT_SKILL_BOX_SIZE, :]
+                    current_skill_img = img[y1+skill_box_rect.y1:y1+skill_box_rect.y2,
+                                            skill_box_rect.x1:skill_box_rect.x2, :]
                     hsv = image_process.rgb_to_hsv(current_skill_img).astype(np.float32)
                     img_digit_part = (1. - hsv[..., 1] / 255.) * (hsv[..., 2] / 255.)
                     img_digit_part = img_digit_part[15:, 3:25]
-                    bin_digits = np.greater_equal(img_digit_part, CV_SUPPORT_SKILL_BINARIZATION_THRESHOLD)
+                    bin_digits = np.greater_equal(
+                        img_digit_part, self.env.detection_definitions.get_support_skill_binarization_threshold())
                     digit_segments = image_process.split_image(bin_digits)
                     digits = []
                     for segment in sorted(digit_segments, key=lambda x: (x.max_x + x.min_x)):
@@ -313,15 +337,15 @@ class SelectSupportHandler(ConfigurableStateHandler):
         logger.info('Detected support servant info: %s' % str(ret_list))
         return ret_list
 
-    @staticmethod
-    def _wrap_call_matcher(func: Callable[[np.ndarray], int],
+    def _wrap_call_matcher(self, func: Callable[[np.ndarray], int],
                            empty_check_func: Callable[[np.ndarray, np.ndarray], bool],
                            img: np.ndarray, empty_img: Optional[Union[np.ndarray, Sequence[np.ndarray]]],
                            range_list: List[Tuple[int, int]]) -> Tuple[List[int], float]:
         t = time()
         ret = []
+        x1, x2 = self.env.detection_definitions.get_support_detection_servant_x()
         for y1, y2 in range_list:
-            icon = img[y1:y2, CV_SUPPORT_SERVANT_X1:CV_SUPPORT_SERVANT_X2, :]
+            icon = img[y1:y2, x1:x2, :]
             if empty_img is not None:
                 if isinstance(empty_img, np.ndarray):
                     empty_img = [empty_img]

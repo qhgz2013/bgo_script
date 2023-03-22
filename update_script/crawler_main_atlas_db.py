@@ -37,6 +37,7 @@ class ServantMeta:
     atk_max: int
     attribute: str
     class_name: str
+    class_id: int
     collection_no: int
     costume: Dict[str, ServantCostume]
     face: str  # url
@@ -67,6 +68,18 @@ class ServantExtraAssets:
 
 
 @dataclass
+class ServantNoblePhantasm:
+    id: int
+    num: int
+    card: str
+    name: str  # EN
+    original_name: str  # JP
+    ruby: str  # JP
+    icon: str  # url
+    # other fields omitted
+
+
+@dataclass
 class ServantInfo:
     id: int
     atk_base: int
@@ -83,6 +96,8 @@ class ServantInfo:
     name: str  # EN
     original_battle_name: str  # JP
     original_name: str  # JP
+    cards: List[str]
+    noble_phantasms: List[ServantNoblePhantasm]
     # other fields are not used
 
 
@@ -195,6 +210,7 @@ def parse_json_into_dataclass(json_obj: Dict[str, Any], dataclass_type: Type[T],
             if value is None:
                 kwargs[key] = None  # skip None
                 continue
+            dest_type = dest_type.__args__[0]
         elif dest_type_str.startswith('Optional['):
             dest_type_str = dest_type_str[9:-1]  # skip "Optional[]"
             if dest_type_str.startswith('typing.'):
@@ -202,6 +218,7 @@ def parse_json_into_dataclass(json_obj: Dict[str, Any], dataclass_type: Type[T],
             if value is None:
                 kwargs[key] = None  # skip None
                 continue
+            dest_type = dest_type.__args__[0]
         # handle non-empty values
         if dest_type_str.startswith('Dict[str,'):
             dest_type_str = dest_type_str[9:-1].strip()
