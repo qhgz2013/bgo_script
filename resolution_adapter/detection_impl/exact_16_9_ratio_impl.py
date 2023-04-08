@@ -4,6 +4,8 @@ from ..factory import DetectionDefFactory
 from util import register_handler
 from typing import *
 
+__all__ = ['Exact16x9RatioDetectionDefImpl']
+
 
 @register_handler(DetectionDefFactory, ExactWidthHeightRatioMatchRule(16 / 9))
 class Exact16x9RatioDetectionDefImpl(BasicDetectionDefImpl):
@@ -87,7 +89,11 @@ class Exact16x9RatioDetectionDefImpl(BasicDetectionDefImpl):
 
     @staticmethod
     def get_fp_pool_ui_rect() -> Rect:
-        return Rect(700, 480, 950, 620)
+        return Rect(695, 480, 955, 580)
+
+    @staticmethod
+    def get_fp_pool_ui_rect_daily() -> Rect:
+        return Rect(510, 480, 770, 580)
 
     @staticmethod
     def get_fp_active_rect() -> Rect:

@@ -23,6 +23,7 @@ import subprocess
 from ._ffmpeg_util import ADBScreenrecordFFMpegDecoder
 import multiprocessing as mp
 from basic_class import PointF, Resolution
+import image_process
 
 __all__ = ['ADBScreenCapturer', 'ADBScreenrecordCapturer', 'ADBAttacher', 'ADBRootAttacher', 'EventID', 'EventType',
            'ADBScreenrecordCapturerThreaded', "ADBScreenrecordCapturerMP"]
@@ -31,6 +32,7 @@ __all__ = ['ADBScreenCapturer', 'ADBScreenrecordCapturer', 'ADBAttacher', 'ADBRo
 _WM_SOLUTION_PATTERN = re.compile(r'(?P<width>\d+)x(?P<height>\d+)$')
 _LANDSCAPE_ORIENTATION_PATTERN = re.compile(r'mLandscapeRotation=(?:(?P<val>\d+)|(?P<var>ROTATION_(\d+)))')
 _SURFACE_ORIENTATION_PATTERN = re.compile(r'SurfaceOrientation:\s*(\d+)')
+_SURFACE_ORIENTATION_PATTERN_NEW = re.compile(r'orientation=\s*(\d+)')
 _NAN = float('nan')
 _PIPE = subprocess.PIPE
 # variables (user-defined)
@@ -50,6 +52,11 @@ class SurfaceOrientation(IntEnum):
     ROTATION_270 = 3
 
 
+class ADBScreencapTransferFormat(IntEnum):
+    Raw = 1
+    PNG = 2
+
+
 def get_landscape_orientation(shell: ADBShell) -> SurfaceOrientation:
     """Get the device orientation for landscape mode."""
     output = spawn('dumpsys window|grep mLandscapeRotation', spawn_fn=shell.interact, raise_exc=True)
@@ -61,21 +68,19 @@ def get_landscape_orientation(shell: ADBShell) -> SurfaceOrientation:
     return getattr(SurfaceOrientation, match.group('var'))
 
 
-def get_surface_orientation(shell: ADBShell) -> SurfaceOrientation:
-    """Get the current device orientation (aka surface orientation)."""
-    output = spawn('dumpsys input|grep SurfaceOrientation', spawn_fn=shell.interact, raise_exc=True)
-    # since the output maybe multi-lined (from several device), we need to further determine if they are the same
-
-    def _gen_landscape_orientation() -> Iterable[SurfaceOrientation]:
+def _gen_landscape_orientation(output: str, pattern: re.Pattern) -> SurfaceOrientation:
+    def _gen_internal():
         for line in output.split('\n'):
             line = line.rstrip()
             if len(line) == 0:
                 continue
-            match = re.search(_SURFACE_ORIENTATION_PATTERN, line)
+            match = re.search(pattern, line)
             if match is None:
-                raise ValueError(f'Could not get landscape orientation: invalid output {line}')
+                # raise ValueError(f'Could not get landscape orientation: invalid output {line}')
+                continue
             yield SurfaceOrientation(int(match.group(1)))
-    values = Counter(_gen_landscape_orientation())
+    # since the output maybe multi-lined (from several device), we need to further determine if they are the same
+    values = Counter(_gen_internal())
     if len(values) == 0:
         raise ValueError('No orientation detected')
     if len(values) > 1:
@@ -83,14 +88,29 @@ def get_surface_orientation(shell: ADBShell) -> SurfaceOrientation:
     return next(iter(values.keys()))  # returns the unique value
 
 
+def get_surface_orientation(shell: ADBShell) -> SurfaceOrientation:
+    """Get the current device orientation (aka surface orientation)."""
+    # not work for android 13 (at least my new device is not working)
+    ret_val, output, _ = shell.interact('dumpsys input|grep SurfaceOrientation')
+    if ret_val == 0:
+        return _gen_landscape_orientation(output, _SURFACE_ORIENTATION_PATTERN)
+    ret_val, output, _ = shell.interact('dumpsys input|grep orientation')
+    if ret_val == 0:
+        return _gen_landscape_orientation(output, _SURFACE_ORIENTATION_PATTERN_NEW)
+    raise ValueError('Could not get device surface orientation')
+
+
+# NOTE: old version of ADB will incur malformed output even exec-out is used
 @register_handler(CapturerRegistry, 'adb_native')
 class ADBScreenCapturer(ScreenCapturer):
-    def __init__(self, adb_server: Optional[ADBServer] = None, device: Optional[Union[int, str]] = None):
+    def __init__(self, adb_server: Optional[ADBServer] = None, device: Optional[Union[int, str]] = None,
+                 transfer_format: ADBScreencapTransferFormat = ADBScreencapTransferFormat.Raw):
         """Initiate a screen capturer using builtin ADB ``screencap`` command. The screenshot will be rotated to
         landscape orientation adaptively.
 
         :param adb_server: ADB server.
         :param device: Specify which device to be captured (device name or index), leave None to use default device.
+        :param transfer_format: The format of the screenshot.
         """
         super(ADBScreenCapturer, self).__init__()
         self._adb_server = adb_server or ADBServer()
@@ -99,6 +119,7 @@ class ADBScreenCapturer(ScreenCapturer):
         self._device_solution = LazyValue(self._get_solution_impl)
         self._landscape_orientation = LazyValue(self._get_landscape_orientation)
         self._terminated = False
+        self._transfer_format = transfer_format
 
     def _get_solution_native_impl(self) -> Resolution:
         output = spawn('wm size', spawn_fn=self._adb_shell.interact, raise_exc=True)
@@ -133,7 +154,7 @@ class ADBScreenCapturer(ScreenCapturer):
             raise RuntimeError('ADB shell process is gone')
         return self._device_solution()
 
-    def _get_screenshot_impl(self) -> np.ndarray:
+    def _get_screenshot_impl_raw(self) -> np.ndarray:
         # sometimes this command will halt, don't know why, so add timeout 5 secs here
         func = partial(spawn_process_raw, timeout=5., timed_out_retry=5)
         blob = spawn(self._adb_server.adb_executable, 'exec-out', 'screencap', spawn_fn=func)
@@ -147,9 +168,25 @@ class ADBScreenCapturer(ScreenCapturer):
             # src code: https://github.com/aosp-mirror/platform_frameworks_base/blob/master/cmds/screencap/screencap.cpp
             begin_pos = 16
         elif unused_bytes != 0:
-            raise ValueError('Invalid RGBA data array: length corrupted')
-        img = np.frombuffer(blob[begin_pos:], 'uint8').reshape(height, width, 4)
+            raise ValueError('Invalid RGBA data array: length corrupted, '
+                             'check your device, connection cable and ADB version!')
+        img = np.frombuffer(blob[begin_pos:], 'uint8').reshape((height, width, 4))
         return img
+
+    def _get_screenshot_impl_png(self) -> np.ndarray:
+        func = partial(spawn_process_raw, timeout=5., timed_out_retry=5)
+        blob = spawn(self._adb_server.adb_executable, 'exec-out', 'screencap', '-p', spawn_fn=func)
+        try:
+            return image_process.imdecode(blob)
+        except Exception as e:
+            raise RuntimeError(f'Failed to decode PNG image: {e!r}, '
+                               f'check your device, connection cable and ADB version!')
+
+    def _get_screenshot_impl(self) -> np.ndarray:
+        if self._transfer_format == ADBScreencapTransferFormat.Raw:
+            return self._get_screenshot_impl_raw()
+        else:
+            return self._get_screenshot_impl_png()
 
     def get_screenshot(self) -> np.ndarray:
         # always returns the landscape-orientated screenshot
@@ -192,6 +229,10 @@ class ADBScreenCapturer(ScreenCapturer):
         if not self._terminated:
             self._terminated = True
             self._adb_shell.kill()
+
+    @property
+    def transfer_format(self) -> ADBScreencapTransferFormat:
+        return self._transfer_format
 
 
 # adb exec-out screenrecord --size wxh --bit-rate bitrate --time-limit secs --output-format=h264 -
@@ -241,8 +282,8 @@ class ADBScreenrecordCapturerThreaded(ADBScreenCapturer):
         self._started = False
 
     def _handle_decoder_output(self, decode_stream: IO[bytes]):
-        screen_solution = self._resolution or self._get_solution_native_impl()
-        expected_buffer_size = screen_solution.width * screen_solution.height * 3  # RGB format, raw stream
+        solution = self._resolution or self._get_solution_native_impl()
+        expected_buffer_size = solution.width * solution.height * 3  # RGB format, raw stream
         frame_cnt = 0
         first_frame_time = 0
         while True:
@@ -255,7 +296,7 @@ class ADBScreenrecordCapturerThreaded(ADBScreenCapturer):
                                f'but got {len(bytes_read)} bytes, terminating ADB screenrecord process')
                 self._screenrecord_proc.terminate()
                 break
-            frame = np.frombuffer(bytes_read, dtype=np.uint8).reshape(screen_solution.height, screen_solution.width, 3)
+            frame = np.frombuffer(bytes_read, dtype=np.uint8).reshape((solution.height, solution.width, 3))
             # performance tracking
             if frame_cnt == 0:
                 first_frame_time = time()

@@ -5,6 +5,8 @@ from typing import *
 from util import register_handler
 from basic_class import *
 
+__all__ = ['Exact16x9RatioClickDefImpl']
+
 
 @register_handler(ClickDefFactory, ExactWidthHeightRatioMatchRule(16 / 9))
 class Exact16x9RatioClickDefImpl(AbstractClickDef):

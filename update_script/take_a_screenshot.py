@@ -1,4 +1,4 @@
-from attacher import MumuScreenCapturer
+from attacher import ADBScreenCapturer, MumuScreenCapturer
 import matplotlib.pyplot as plt
 import image_process
 import resolution_adapter
@@ -9,8 +9,11 @@ import argparse
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--grid', action='store_true', help='Show grid')
+    parser.add_argument('--capturer', choices=['adb_native', 'mumu'], default='mumu', type=str)
     args, _ = parser.parse_known_args()
-    img = MumuScreenCapturer().get_screenshot()
+    cap_dict = {'adb_native': ADBScreenCapturer, 'mumu': MumuScreenCapturer}
+    cap = cap_dict[args.capturer]()
+    img = cap.get_screenshot()
     detection_defs = resolution_adapter.DetectionDefFactory.get_detection_def(Resolution(img.shape[0], img.shape[1]))
     target_resolution = detection_defs.get_target_resolution()
     if target_resolution is not None:

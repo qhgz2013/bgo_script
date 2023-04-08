@@ -253,10 +253,16 @@ class AbstractDetectionDef(metaclass=ABCMeta):
     def get_continuous_battle_ui_file() -> str:
         raise NotImplementedError
 
-    # 友情池识别
+    # 友情池的十连按钮（非每日首次）识别
     @staticmethod
     @plot_rect
     def get_fp_pool_ui_rect() -> Rect:
+        raise NotImplementedError
+
+    # 首次的位置
+    @staticmethod
+    @plot_rect
+    def get_fp_pool_ui_rect_daily() -> Rect:
         raise NotImplementedError
 
     @staticmethod

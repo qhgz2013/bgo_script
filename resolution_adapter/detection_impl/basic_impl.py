@@ -2,6 +2,8 @@ from ..abstract_detection_def import AbstractDetectionDef
 from abc import ABCMeta
 from typing import *
 
+__all__ = ['BasicDetectionDefImpl']
+
 
 # original value defined in cv_positioning.py
 class BasicDetectionDefImpl(AbstractDetectionDef, metaclass=ABCMeta):
@@ -15,7 +17,7 @@ class BasicDetectionDefImpl(AbstractDetectionDef, metaclass=ABCMeta):
 
     @staticmethod
     def get_fufu_blank_ratio_threshold() -> float:
-        return 0.995
+        return 0.992  # previous: 0.995
 
     @staticmethod
     def get_attack_button_anchor_file() -> str:
@@ -151,7 +153,7 @@ class BasicDetectionDefImpl(AbstractDetectionDef, metaclass=ABCMeta):
 
     @staticmethod
     def get_fp_pool_gacha_skip_diff_threshold() -> float:
-        return 20
+        return 40  # previous: 20
 
     @staticmethod
     def get_fp_pool_gacha_skip_diff_file() -> str:

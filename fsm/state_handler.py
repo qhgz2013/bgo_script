@@ -39,12 +39,13 @@ class WaitFufuStateHandler(StateHandler):
         begin_timing = time()
         logger.debug('Started waiting fufu')
         fufu_rect = self.env.detection_definitions.get_fufu_rect()
+        ratio_threshold = self.env.detection_definitions.get_fufu_blank_ratio_threshold()
         while True:
             screenshot = self._get_screenshot_impl()
             fufu_area = np.sum(screenshot[fufu_rect.y1:fufu_rect.y2, fufu_rect.x1:fufu_rect.x2, :3], -1)
             ratio = np.average(fufu_area < self.env.detection_definitions.get_fufu_blank_binarization_threshold())
-            logger.debug(f'Wait fufu debug: mean: {np.mean(fufu_area)}, ratio: {ratio}')
-            if ratio < self.env.detection_definitions.get_fufu_blank_ratio_threshold():
+            logger.debug(f'Wait fufu debug: mean: {np.mean(fufu_area)}, ratio: {ratio} (threshold: {ratio_threshold})')
+            if ratio < ratio_threshold:
                 break
             sleep(0.2)
         sleep(1)

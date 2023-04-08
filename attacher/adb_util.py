@@ -25,7 +25,7 @@ _cache_adb_path = None
 _DEVICE_PATTERN = re.compile(r'^(?P<device_name>[^\s]+)\s+(?P<device_type>device)$')
 MSG_TYPE = Literal['stdout', 'stderr']
 _PIPE = subprocess.PIPE
-_T = TypeVar('_T', bound=AnyStr)
+_T = TypeVar('_T', bound=str)
 SPAWN_FUNC_PROTOTYPE = Callable[..., Tuple[int, _T, _T]]
 ADB_DEFAULT_LISTENING_PORT = 5038
 

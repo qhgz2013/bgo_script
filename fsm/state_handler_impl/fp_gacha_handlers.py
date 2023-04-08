@@ -36,9 +36,19 @@ class CheckFriendPointGachaUIHandler(StateHandler):
         anchor_rect = self.env.detection_definitions.get_fp_pool_ui_rect()
         img_in_anchor = img[anchor_rect.y1:anchor_rect.y2, anchor_rect.x1:anchor_rect.x2, :]
         diff = image_process.mean_gray_diff_err(img_in_anchor, self._anchor_file)
-        if diff > self.env.detection_definitions.get_fp_pool_ui_diff_threshold():
-            logger.error('Friend point gacha UI not detected.')
-            return FgoState.STATE_ERROR
+        threshold = self.env.detection_definitions.get_fp_pool_ui_diff_threshold()
+        logger.debug(f'fp_pool_ui_diff: {diff}, threshold: {threshold}')
+        is_free = False  # 是否是每日首次友情池十连
+        if diff > threshold:
+            # TODO: check daily bonus
+            rect_daily = self.env.detection_definitions.get_fp_pool_ui_rect_daily()
+            img_in_anchor = img[rect_daily.y1:rect_daily.y2, rect_daily.x1:rect_daily.x2, :]
+            diff = image_process.mean_gray_diff_err(img_in_anchor, self._anchor_file)
+            logger.debug(f'fp_pool_ui_diff2: {diff}')
+            is_free = True
+            if diff > threshold:
+                logger.error('Friend point gacha UI not detected.')
+                return FgoState.STATE_ERROR
 
         # step 2: double-check friend point is active (highlighted at the top of summon UI)
         if not _check_fp_usage_is_active(img, self.env):
@@ -47,7 +57,7 @@ class CheckFriendPointGachaUIHandler(StateHandler):
 
         # all check passed: click gacha button and wait confirm
         button = self.env.click_definitions.fp_pool_gacha()
-        self.env.attacher.send_click(button.x, button.y)
+        self.env.attacher.send_click(button.x, 0.5 if is_free else button.y)
 
         # wait 0.5s
         sleep(0.5)
@@ -106,14 +116,15 @@ class FriendPointGachaSkipHandler(StateHandler):
     def run_and_transit_state(self) -> FgoState:
         click_point = self.env.click_definitions.fp_pool_gacha_skip_click()
         rect = self.env.detection_definitions.get_fp_pool_gacha_skip_check_button_rect()
+        skip_threshold = self.env.detection_definitions.get_fp_pool_gacha_skip_diff_threshold()
 
         while True:
             img = self._get_screenshot_impl()
 
             img_in_rect = img[rect.y1:rect.y2, rect.x1:rect.x2, :]
             diff = image_process.mean_gray_diff_err(img_in_rect, self._anchor_file)
-            logger.debug(f'diff: {diff}')
-            if diff >= self.env.detection_definitions.get_fp_pool_gacha_skip_diff_threshold():
+            logger.debug(f'fp_pool_gacha_skip_diff: {diff}, threshold: {skip_threshold}')
+            if diff >= skip_threshold:
                 sleep(0.5)
                 self.env.attacher.send_click(click_point.x, click_point.y)
                 continue
