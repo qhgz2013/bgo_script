@@ -224,13 +224,25 @@ class Exact16x9RatioClickDefImpl(AbstractClickDef):
         return PointF(0.8984, 0.9375)
 
     @staticmethod
-    def craft_essence_cancel() -> PointF:
-        return PointF(0.07813, 0.0556)
-
-    @staticmethod
     def craft_essence_double_confirm_yes() -> PointF:
         return PointF(0.6563, 0.8194)
 
     @staticmethod
     def craft_essence_double_confirm_no() -> PointF:
         return PointF(0.3516, 0.8194)
+
+    @staticmethod
+    def synthesis_cancel() -> PointF:
+        return PointF(0.07813, 0.0556)
+
+    @staticmethod
+    def menu() -> PointF:
+        return PointF(0.9258, 0.9097)
+
+    @staticmethod
+    def summon() -> PointF:
+        return PointF(0.5, 0.8334)
+
+    @staticmethod
+    def switch_friend_point() -> PointF:
+        return PointF(0.0313, 0.5)

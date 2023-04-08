@@ -8,6 +8,8 @@ from bgo_game import ScriptEnv, APRecoveryItemType
 
 logger = logging.getLogger('bgo_script.fsm')
 
+__all__ = ['EatAppleHandler']
+
 
 class EatAppleHandler(StateHandler):
     _eat_apple_ui_anchor = None

@@ -7,6 +7,8 @@ from ..fgo_state import FgoState
 
 logger = logging.getLogger('bgo_script.fsm')
 
+__all__ = ['ExitQuestHandler', 'FriendUIHandler', 'ContinuousBattleHandler']
+
 
 class ExitQuestHandler(StateHandler):
 
@@ -33,7 +35,7 @@ class FriendUIHandler(StateHandler):
         val = image_process.mean_gray_diff_err(image_process.resize(
             img, self._support_anchor.shape[1], self._support_anchor.shape[0]), self._support_anchor)
         logger.debug('DEBUG value friend_ui mean_gray_diff_err = %f' % val)
-        return val < 10
+        return val < 15  # 10 is not enough: 10.914105
 
     def run_and_transit_state(self) -> FgoState:
         # 检查并跳过发送好友申请界面（用于选择非好友助战但好友未满时的情况）
@@ -71,13 +73,10 @@ class ContinuousBattleHandler(StateHandler):
             if self._is_in_continuous_battle_confirm_ui():
                 logger.debug('Enable continuous battle')
                 self.env.attacher.send_click(cont_battle_confirm.x, cont_battle_confirm.y)
-                next_state = WaitFufuStateHandler(self.env, self.forward_state_pos).run_and_transit_state()
+                sleep(2)
+                return WaitFufuStateHandler(self.env, self.forward_state_pos).run_and_transit_state()
             else:
                 logger.error('Continuous battle scene not detected, assume quest is exited')
-                self.env.attacher.send_click(cont_battle_cancel.x, cont_battle_cancel.y)
-                next_state = self.forward_state_neg
-        else:
-            self.env.attacher.send_click(cont_battle_cancel.x, cont_battle_cancel.y)
-            next_state = self.forward_state_neg
-        sleep(0.5)
-        return next_state
+        self.env.attacher.send_click(cont_battle_cancel.x, cont_battle_cancel.y)
+        sleep(1)
+        return self.forward_state_neg

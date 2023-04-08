@@ -271,11 +271,6 @@ class AbstractClickDef(metaclass=ABCMeta):
 
     @staticmethod
     @plot_point
-    def craft_essence_cancel() -> PointF:
-        raise NotImplementedError
-
-    @staticmethod
-    @plot_point
     def craft_essence_double_confirm_yes() -> PointF:
         raise NotImplementedError
 
@@ -285,3 +280,23 @@ class AbstractClickDef(metaclass=ABCMeta):
         raise NotImplementedError
 
     # <===== Craft Essence Synthesis End =====
+
+    @staticmethod
+    @plot_point
+    def synthesis_cancel() -> PointF:
+        raise NotImplementedError
+
+    @staticmethod
+    @plot_point
+    def menu() -> PointF:
+        raise NotImplementedError
+
+    @staticmethod
+    @plot_point
+    def summon() -> PointF:
+        raise NotImplementedError
+
+    @staticmethod
+    @plot_point
+    def switch_friend_point() -> PointF:
+        raise NotImplementedError

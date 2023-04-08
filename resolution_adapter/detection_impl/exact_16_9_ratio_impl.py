@@ -162,7 +162,7 @@ class Exact16x9RatioDetectionDefImpl(BasicDetectionDefImpl):
 
     @staticmethod
     def get_craft_essence_grid_detection_area_min_pixels() -> int:
-        return 8
+        return 7
 
     @staticmethod
     def get_craft_essence_target_rect() -> Rect:

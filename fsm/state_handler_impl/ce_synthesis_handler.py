@@ -1,5 +1,5 @@
 from ..fgo_state import FgoState
-from ..state_handler import StateHandler
+from ..state_handler import StateHandler, WaitFufuStateHandler
 from bgo_game import ScriptEnv
 import image_process
 from logging import getLogger
@@ -82,17 +82,18 @@ class CraftEssenceSynthesisHandler(StateHandler):
     def __init__(self, env: ScriptEnv, forward_state: FgoState,
                  target_ce_not_found_forward_state: Optional[FgoState] = None):
         super(CraftEssenceSynthesisHandler, self).__init__(env, forward_state)
-        if self._ui_size_img is None:
-            self._ui_size_img = image_process.imread(
+        cls = type(self)
+        if cls._ui_size_img is None:
+            cls._ui_size_img = image_process.imread(
                 self.env.detection_definitions.get_craft_essence_material_ui_size_file())
-        if self._synthesis_result_img is None:
-            self._synthesis_result_img = image_process.imread(
+        if cls._synthesis_result_img is None:
+            cls._synthesis_result_img = image_process.imread(
                 self.env.detection_definitions.get_craft_essence_synthesis_result_ui_file())
             resolution = self.env.detection_definitions.get_target_resolution()
-            self._synthesis_result_img = image_process.resize(self._synthesis_result_img,
-                                                              resolution.width, resolution.height)
-        if self._target_empty_img is None:
-            self._target_empty_img = image_process.imread(
+            cls._synthesis_result_img = image_process.resize(cls._synthesis_result_img,
+                                                             resolution.width, resolution.height)
+        if cls._target_empty_img is None:
+            cls._target_empty_img = image_process.imread(
                 self.env.detection_definitions.get_craft_essence_target_empty_file())
         self._target_filter_checked = False
         self._material_filter_checked = False
@@ -271,7 +272,7 @@ class CraftEssenceSynthesisHandler(StateHandler):
 
         # configurable param
         tol_pixels = self.env.detection_definitions.get_craft_essence_grid_detection_tol_pixels()  # 3
-        split_threshold = self.env.detection_definitions.get_craft_essence_grid_detection_hsv_threshold()  # 25
+        split_threshold = self.env.detection_definitions.get_craft_essence_grid_detection_hsv_threshold()  # 30
         height = self.env.detection_definitions.get_craft_essence_material_height()  # 128
 
         if show_plot:
@@ -303,14 +304,17 @@ class CraftEssenceSynthesisHandler(StateHandler):
         min_margin = self.env.detection_definitions.get_craft_essence_grid_detection_area_min_pixels()
         y = 0
         valid_y = None
+        results = []
         while y < height + margin:  # 128+14=142
             y1 = _bool_traversal(split_flag, valid_bool_value=False, start=y, max_lookahead_pixel=tol_pixels)
             y = _bool_traversal(split_flag, valid_bool_value=True, start=y1, max_lookahead_pixel=tol_pixels)
+            results.append(f'{y1}-{y} (length: {y-y1})')
             if margin > y - y1 >= min_margin:
                 valid_y = (y1 + y) // 2
                 break
         if valid_y is None:
-            raise ValueError('Could not detect craft essence material grid')
+            raise ValueError(f'Could not detect craft essence material grid, all results "{results}" are not in '
+                             f'range: [{min_margin}, {margin})')
         # y = (valid_y + margin // 2) % (margin + height)  # bottom pixel
         y %= (margin + height)
         repeat_cnt = (guessed_available_cols.shape[0] - y) // (height + margin)
@@ -482,12 +486,14 @@ class CraftEssenceSynthesisHandler(StateHandler):
     def _lock_ce(self, ce_bounding_box: Rect):
         toggle_lock = self.env.click_definitions.craft_essence_toggle_lock()
         self.env.attacher.send_click(toggle_lock.x, toggle_lock.y)
-        sleep(0.5)
+        sleep(1)
         self._select_ce(ce_bounding_box)
-        sleep(0.5)
+        sleep(1)
         toggle_ce = self.env.click_definitions.craft_essence_toggle_ce_selection()
         self.env.attacher.send_click(toggle_ce.x, toggle_ce.y)
-        sleep(0.5)
+        sleep(1)
+        # this will make a request, so we need to wait for the response
+        WaitFufuStateHandler(self.env, FgoState.STATE_FINISH).run_and_transit_state()
 
     def _select_target_ce(self, ce_grid_data: List[List[CEDetectionResult]]) -> bool:
         for row in ce_grid_data:
@@ -507,18 +513,21 @@ class CraftEssenceSynthesisHandler(StateHandler):
                 if cell.available and not cell.locked and not cell.favored and \
                         (cell.rarity <= 3 or cell.flag == 'svtEquipExp'):
                     self._select_ce(cell.bounding_box)
-                    sleep(0.3)
+                    sleep(0.2)
                     selected_ce_count += 1
                 # stop when 20 materials are selected
                 if selected_ce_count >= 20:
-                    return selected_ce_count
+                    break
+            if selected_ce_count >= 20:
+                break
         if selected_ce_count > 0:
             confirm = self.env.click_definitions.craft_essence_confirm()
             self.env.attacher.send_click(confirm.x, confirm.y)
         else:
-            cancel = self.env.click_definitions.craft_essence_cancel()
+            cancel = self.env.click_definitions.synthesis_cancel()
             self.env.attacher.send_click(cancel.x, cancel.y)
         sleep(1)
+        logger.info(f'Selected {selected_ce_count} materials')
         return selected_ce_count
 
     def _wait_synthesis_complete(self):
@@ -553,6 +562,7 @@ class CraftEssenceSynthesisHandler(StateHandler):
             if not self._target_ce_presence():
 
                 # step 1: enter target selection UI
+                logger.info('Select target craft essence')
                 target_ce_click_pos = self.env.click_definitions.craft_essence_synthesis_target_select()
                 self.env.attacher.send_click(target_ce_click_pos.x, target_ce_click_pos.y)
 
@@ -572,7 +582,7 @@ class CraftEssenceSynthesisHandler(StateHandler):
                 # step 5: select target CE
                 if not self._select_target_ce(ce_data):
                     logger.info('No target CE found, skip synthesis')
-                    cancel = self.env.click_definitions.craft_essence_cancel()
+                    cancel = self.env.click_definitions.synthesis_cancel()
                     self.env.attacher.send_click(cancel.x, cancel.y)
                     sleep(1)
                     return self._target_ce_not_found_forward_state

@@ -63,7 +63,7 @@ def main():
     except KeyboardInterrupt as kb_int:
         script_logger_root.info('Keyboard interrupted')
         _log_exception(kb_int)
-        raise kb_int
+        # raise kb_int
     except Exception as ex:
         _log_exception(ex)
 

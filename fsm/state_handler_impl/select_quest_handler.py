@@ -8,6 +8,8 @@ from fsm.fgo_state import FgoState
 
 logger = logging.getLogger('bgo_script.fsm')
 
+__all__ = ['SelectQuestHandler']
+
 
 class SelectQuestHandler(StateHandler):
     _eat_apple_ui_anchor = None

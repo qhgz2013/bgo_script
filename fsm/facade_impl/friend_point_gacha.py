@@ -28,4 +28,6 @@ class FgoFSMFacadeFriendPointGacha(FgoFSMFacadeBase):
         self.executor.add_state_handler(s.STATE_FP_GACHA_ITEM_OVERFLOW_SVT,
                                         DirectStateForwarder(env, s.STATE_FINISH))
         self.executor.add_state_handler(s.STATE_FP_GACHA_ITEM_OVERFLOW_CE,
-                                        CraftEssenceSynthesisHandler(env, s.STATE_FINISH))
+                                        CraftEssenceSynthesisHandler(env, s.STATE_FP_GACHA_ITEM_OVERFLOW_SOLVED))
+        self.executor.add_state_handler(s.STATE_FP_GACHA_ITEM_OVERFLOW_SOLVED,
+                                        BackToFriendPointGachaHandler(env, s.STATE_CHECK_FP_GACHA_UI))

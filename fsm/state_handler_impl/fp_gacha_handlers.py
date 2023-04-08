@@ -7,7 +7,7 @@ import image_process
 import numpy as np
 
 __all__ = ['CheckFriendPointGachaUIHandler', 'FriendPointGachaConfirmHandler', 'FriendPointGachaSkipHandler',
-           'FriendPointGachaItemOverflowHandler']
+           'FriendPointGachaItemOverflowHandler', 'BackToFriendPointGachaHandler']
 
 logger = getLogger('bgo_script.fsm')
 
@@ -17,7 +17,8 @@ def _check_fp_usage_is_active(img: np.ndarray, env: ScriptEnv) -> bool:
     img = np.mean(img[rect.y1:rect.y2, rect.x1:rect.x2, :].astype(np.float32), -1)
     img_bin = np.greater_equal(img, env.detection_definitions.get_fp_active_gray_threshold())
     value = np.mean(img_bin)
-    logger.debug(f'check_fp_usage_is_active: {value}, threshold: {env.detection_definitions.get_fp_active_gray_ratio_threshold()}')
+    logger.debug(f'check_fp_usage_is_active: {value}, '
+                 f'threshold: {env.detection_definitions.get_fp_active_gray_ratio_threshold()}')
     return value >= env.detection_definitions.get_fp_active_gray_ratio_threshold()
 
 
@@ -66,6 +67,7 @@ class FriendPointGachaConfirmHandler(StateHandler):
                 image_process.imread(self.env.detection_definitions.get_fp_item_overflow_file())
 
     def run_and_transit_state(self) -> FgoState:
+        sleep(0.3)
         img = self._get_screenshot_impl()
         anchor_rect = self.env.detection_definitions.get_fp_pool_gacha_confirm_rect()
         img_in_anchor = img[anchor_rect.y1:anchor_rect.y2, anchor_rect.x1:anchor_rect.x2, :]
@@ -150,3 +152,23 @@ class FriendPointGachaItemOverflowHandler(StateHandler):
             return FgoState.STATE_FP_GACHA_ITEM_OVERFLOW_CE
         else:
             return FgoState.STATE_FP_GACHA_ITEM_OVERFLOW_SVT
+
+
+class BackToFriendPointGachaHandler(StateHandler):
+    def run_and_transit_state(self) -> FgoState:
+        sleep(1)
+        back_button = self.env.click_definitions.synthesis_cancel()
+        self.env.attacher.send_click(back_button.x, back_button.y)
+        sleep(2)
+        menu = self.env.click_definitions.menu()
+        self.env.attacher.send_click(menu.x, menu.y)
+        sleep(0.5)
+        summon = self.env.click_definitions.summon()
+        self.env.attacher.send_click(summon.x, summon.y)
+        sleep(2)
+        WaitFufuStateHandler(self.env, FgoState.STATE_FINISH).run_and_transit_state()
+        sleep(0.5)
+        switch_to_fp = self.env.click_definitions.switch_friend_point()
+        self.env.attacher.send_click(switch_to_fp.x, switch_to_fp.y)
+        sleep(1)
+        return self.forward_state

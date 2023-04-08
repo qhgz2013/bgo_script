@@ -11,8 +11,9 @@ from fsm.fgo_state import FgoState
 from util import DigitRecognizer
 from basic_class import PointF
 
-
 logger = logging.getLogger('bgo_script.fsm')
+
+__all__ = ['SelectSupportHandler']
 
 
 # NOT implemented: NP level detection
@@ -51,26 +52,28 @@ class SelectSupportHandler(StateHandler):
 
     def __init__(self, env: ScriptEnv, forward_state: FgoState):
         super().__init__(env, forward_state)
+        cls = type(self)
         self._support_svt = self.env.team_config.support_servant
         # noinspection PyTypeChecker
         self._scroll_down_y = self.env.click_definitions.support_scrolldown_y_mumu()
         self._digit_recognizer = DigitRecognizer(self.env.detection_definitions.get_support_skill_digit_dir())
-        if self._support_empty_img is None:
-            self._support_empty_img = image_process.imread(self.env.detection_definitions.get_support_empty_file())
-        if self._support_craft_essence_imgs is None:
-            self._support_craft_essence_imgs = [image_process.imread(x) for x in
-                                                self.env.detection_definitions.get_support_empty_craft_essence_files()]
-        if self._support_max_break_img is None:
-            self._support_max_break_img = image_process.imread(self.env.detection_definitions.get_max_break_icon_file())
-        if self.servant_matcher is None:
-            self.servant_matcher = SupportServantMatcher(self.env.detection_definitions.get_database_file(), self.env)
-        if self.craft_essence_matcher is None:
-            self.craft_essence_matcher = SupportCraftEssenceMatcher(self.env.detection_definitions.get_database_file(),
-                                                                    self.env)
+        if cls._support_empty_img is None:
+            cls._support_empty_img = image_process.imread(self.env.detection_definitions.get_support_empty_file())
+        if cls._support_craft_essence_imgs is None:
+            cls._support_craft_essence_imgs = [image_process.imread(x) for x in
+                                               self.env.detection_definitions.get_support_empty_craft_essence_files()]
+        if cls._support_max_break_img is None:
+            cls._support_max_break_img = image_process.imread(self.env.detection_definitions.get_max_break_icon_file())
+        if cls.servant_matcher is None:
+            cls.servant_matcher = SupportServantMatcher(self.env.detection_definitions.get_database_file(), self.env)
+        if cls.craft_essence_matcher is None:
+            cls.craft_essence_matcher = SupportCraftEssenceMatcher(self.env.detection_definitions.get_database_file(),
+                                                                   self.env)
 
     def run_and_transit_state(self) -> FgoState:
         suc = False
         resolution = self.env.detection_definitions.get_target_resolution()
+        sleep(1)  # since the game may lag for a while after getting response
         while True:
             sleep(0.5)
             img = self._get_screenshot_impl()[..., :3]
@@ -80,8 +83,8 @@ class SelectSupportHandler(StateHandler):
                 if self._check_config(svt_data[i]):
                     # servant matched
                     logger.info('Found required support')
-                    self.env.attacher.send_click(0.5,
-                                                 (support_range[i][0] + support_range[i][1]) / 2 / resolution.height)
+                    y = (support_range[i][0] + support_range[i][1]) / 2 / resolution.height
+                    self.env.attacher.send_click(0.5, y)
                     sleep(0.5)
                     suc = True
                     break

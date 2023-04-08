@@ -57,7 +57,7 @@ class ImageHashCacher:
             for candidate_image, val in candidate_image_list:
                 v = self.hash_conflict_func(image, candidate_image)
                 logger.debug('Candidate from node %d (distance: %d) with value %s: conflict func returned %s' %
-                             (key, dis, str(val), str(v)))
+                             (key, dis, str(val)[:20], str(v)))
                 if (isinstance(v, bool) and v) or (isinstance(v, float) and v < self.conflict_tol):
                     return True
         return False
@@ -71,7 +71,7 @@ class ImageHashCacher:
             for candidate_image, value in candidate_image_list:
                 v = self.hash_conflict_func(image, candidate_image)
                 logger.debug('Candidate from node %d (distance: %d) with value %s: conflict func returned %s' %
-                             (key, dis, str(value), str(v)))
+                             (key, dis, str(value)[:20], str(v)))
                 if (isinstance(v, bool) and v) or (isinstance(v, float) and v < self.conflict_tol):
                     return value
         raise KeyError('image not found')

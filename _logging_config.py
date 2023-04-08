@@ -26,6 +26,9 @@ import pickle
 
 __all__ = ['bootstrap', 'default_formatter_str', 'bootstrap_parent', 'bootstrap_child']
 
+# Fix: forrtl: error (200): program aborting due to control-C event
+os.putenv('FOR_DISABLE_CONSOLE_CTRL_HANDLER', '1')
+
 
 class StrEnum(str, Enum):
     pass
@@ -210,7 +213,7 @@ def bootstrap_parent(formatter_str: str = default_formatter_str, log_dir: str = 
                      write_to_file: bool = True, write_to_file_loggers: LOGGER_CONFIG_DICT = None,
                      default_write_to_file_level: Optional[int] = None, file_name_prefix: str = '(root)',
                      max_file_cnt: int = 10) -> None:
-    """Configurate logging module.
+    """Configure logging module.
 
     Known side effect: attribute "propagate" will be set to False
 

@@ -83,7 +83,7 @@ class BasicDetectionDefImpl(AbstractDetectionDef, metaclass=ABCMeta):
 
     @staticmethod
     def get_exit_quest_diff_threshold() -> int:
-        return 3
+        return 7  # previous value: 3
 
     @staticmethod
     def get_in_battle_blank_screen_threshold() -> int:
@@ -231,7 +231,7 @@ class BasicDetectionDefImpl(AbstractDetectionDef, metaclass=ABCMeta):
 
     @staticmethod
     def get_craft_essence_grid_detection_hsv_threshold() -> int:
-        return 25
+        return 30
 
     @staticmethod
     def get_craft_essence_grid_detection_conf_threshold() -> float:
