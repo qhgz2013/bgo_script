@@ -13,6 +13,7 @@ from io import BytesIO
 import json
 from basic_class import Rect
 import matplotlib.pyplot as plt
+from time import time
 
 __all__ = ['CraftEssenceSynthesisHandler']
 
@@ -51,6 +52,7 @@ def _bool_traversal(bool_list: np.ndarray, valid_bool_value: bool, start: int, m
             return y
         else:
             y += lookahead_offset
+    return y
 
 
 class CraftEssenceSynthesisHandler(StateHandler):
@@ -87,11 +89,13 @@ class CraftEssenceSynthesisHandler(StateHandler):
             cls._ui_size_img = image_process.imread(
                 self.env.detection_definitions.get_craft_essence_material_ui_size_file())
         if cls._synthesis_result_img is None:
-            cls._synthesis_result_img = image_process.imread(
+            # changed: rescale according to the ratio of height
+            synthesis_result_img = image_process.imread(
                 self.env.detection_definitions.get_craft_essence_synthesis_result_ui_file())
             resolution = self.env.detection_definitions.get_target_resolution()
-            cls._synthesis_result_img = image_process.resize(cls._synthesis_result_img,
-                                                             resolution.width, resolution.height)
+            ratio = resolution.height / synthesis_result_img.shape[0]
+            width = int(synthesis_result_img.shape[1] * ratio)
+            cls._synthesis_result_img = image_process.resize(synthesis_result_img, width, resolution.height)
         if cls._target_empty_img is None:
             cls._target_empty_img = image_process.imread(
                 self.env.detection_definitions.get_craft_essence_target_empty_file())
@@ -205,6 +209,7 @@ class CraftEssenceSynthesisHandler(StateHandler):
         order_rect = self.env.detection_definitions.get_craft_essence_order_ascending_rect()
         img_in_rect = np.mean(img[order_rect.y1:order_rect.y2, order_rect.x1:order_rect.x2, :], axis=(1, 2))
         slope = np.polyfit(np.arange(len(img_in_rect)), img_in_rect, 1)[0]
+        logger.debug(f'filter ascending / descending slope: {slope}')
         if slope < 0:
             logger.info('Filter updated: order by ascending')
             click_pos = self.env.click_definitions.craft_essence_toggle_order()
@@ -213,7 +218,7 @@ class CraftEssenceSynthesisHandler(StateHandler):
 
     def _detect_material_grid_y(self, img: Optional[np.ndarray] = None) -> List[Tuple[int, int]]:
         if img is None:
-            img = self._get_screenshot_impl()
+            img = self._get_screenshot_impl(precise_mode=True)
         img_hsv = image_process.rgb_to_hsv(img).astype(np.int32)
 
         x_begin, x_end = self.env.detection_definitions.get_craft_essence_material_x_range()
@@ -242,11 +247,12 @@ class CraftEssenceSynthesisHandler(StateHandler):
             detection_hsv_img2 = img_hsv[y_begin:, detection_ix2:ix2-2]
             detection_hsv_img = np.concatenate([detection_hsv_img1, detection_hsv_img2], 1)  # [height, width, 3]
 
+            # new: add std error among x axis
+            std = np.std(detection_hsv_img, 1)  # [height, 3]
+
             for j, anchor_hsv in enumerate(self.anchor_color):
                 anchor_hsv = np.expand_dims(anchor_hsv, [0, 1])  # [1, 1, channel (3)]
                 diff = np.mean(np.abs(detection_hsv_img - anchor_hsv), 1)  # [height, 3]
-                # new: add std error among x axis
-                std = np.std(detection_hsv_img, 1)  # [height, 3]
                 hsv_diff_tensor[j, i, :, :] = diff + std * 1.0  # weighted as 1.0?
 
         # choose minimized difference along anchor-axis
@@ -374,8 +380,6 @@ class CraftEssenceSynthesisHandler(StateHandler):
     def _ce_image_lookup(self, img: np.ndarray) -> Tuple[int, Dict[str, Any]]:
         cache_result = self._cache.get(img, None)
         # perf debug
-        from time import time
-
         t0 = time()
         if cache_result is not None:
             return cache_result
@@ -399,7 +403,7 @@ class CraftEssenceSynthesisHandler(StateHandler):
     def _detect_material_grid(self, y_loc: Optional[List[Tuple[int, int]]] = None,
                               img: Optional[np.ndarray] = None) -> List[List[CEDetectionResult]]:
         if img is None:
-            img = self._get_screenshot_impl()
+            img = self._get_screenshot_impl(precise_mode=True)
         if y_loc is None:
             y_loc = self._detect_material_grid_y(img)
 
@@ -533,14 +537,23 @@ class CraftEssenceSynthesisHandler(StateHandler):
     def _wait_synthesis_complete(self):
         click_pos = self.env.click_definitions.craft_essence_confirm()  # use confirm button here
         threshold = self.env.detection_definitions.get_craft_essence_wait_synthesis_complete_diff_threshold()
+        max_wait_seconds = 10
+        t = time()
         while True:
             img = self._get_screenshot_impl()
+            x = (img.shape[1] - self._synthesis_result_img.shape[1]) // 2
+            img = img[:, x:x+self._synthesis_result_img.shape[1], :]
             diff = image_process.mean_gray_diff_err(img, self._synthesis_result_img)
             logger.debug(f'_wait_synthesis_complete diff: {diff}')
             if diff < threshold:
                 break
             self.env.attacher.send_click(click_pos.x, click_pos.y)
             sleep(0.5)
+            if time() - t > max_wait_seconds:
+                # sometimes the click action will affect the detection result, we need to set a timeout
+                logger.warning(f'Wait synthesis complete timeout: {max_wait_seconds} seconds, '
+                               f'skip waiting and continue')
+                break
         sleep(0.5)  # 1.5  animation delay
         # todo: check state before exit
         for _ in range(3):  # multiple clicks are required to prevent failure

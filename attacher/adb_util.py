@@ -69,6 +69,13 @@ def find_adb_path() -> Optional[str]:
     return _cache_adb_path
 
 
+def _wait_infinite(waitable) -> None:
+    # wait() with timeout=None could not capture KeyboardInterrupt
+    while True:
+        if waitable.wait(1):
+            break
+
+
 class ADBShell:
     def __init__(self, adb_path: str, target_device: Optional[str] = None, warn_timeout_secs: Optional[float] = 5.0):
         """A wrapper for ADB shell commands with mux functionality. It is capable of running multiple commands within
@@ -89,7 +96,8 @@ class ADBShell:
         self._warn_timeout_secs = warn_timeout_secs
         self._target_device = target_device
         self._adb_proc = subprocess.Popen(cmd, stdin=_PIPE, stdout=_PIPE, stderr=_PIPE)
-        self._mutex = threading.RLock()
+        self._mutex = threading.RLock()  # internal mutex
+        self._call_mutex = threading.RLock()  # mutex for calling interact()
         self._session_id = None
         self._stdout_buf = StringIO()
         self._stderr_buf = StringIO()
@@ -202,6 +210,12 @@ class ADBShell:
         cmd = f'echo {boundary} && ((({cmd}) && echo {boundary}-s) || echo {boundary}-f$?)'
         if len(cmd) == 0:
             return 0, '', ''  # ignore empty command
+        # added a mutex to ensure that only one command is executed at a time
+        # although internal calls are ordered, the generated output may be mixed up (quite strange)
+        with self._call_mutex:
+            return self._interact_internal(cmd, boundary, wait)
+
+    def _interact_internal(self, cmd: str, boundary: str, wait: bool) -> Optional[Tuple[int, str, str]]:
         with self._mutex:
             self._session_id = boundary
             logger.debug(f'[PID {self._adb_proc.pid}] stdin: {cmd}')
@@ -222,17 +236,18 @@ class ADBShell:
             if not self._session_finished.wait(self._warn_timeout_secs):
                 logger.warning(f'[PID {self._adb_proc.pid}] Session {boundary} is not finished after waiting '
                                f'{self._warn_timeout_secs} seconds')
-                self._session_finished.wait()
+                _wait_infinite(self._session_finished)
         else:
-            self._session_finished.wait()
+            _wait_infinite(self._session_finished)
         self._session_finished.clear()
         if not wait:
             return None
         with self._mutex:
             stdout = self._stdout_buf.getvalue()
             stderr = self._stderr_buf.getvalue()
+            exit_code = self._session_exit_code
         # noinspection PyTypeChecker
-        return self._session_exit_code, stdout, stderr
+        return exit_code, stdout, stderr
 
     def kill(self) -> None:
         """Kill ADB shell process"""

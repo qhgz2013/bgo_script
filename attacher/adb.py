@@ -42,6 +42,7 @@ _FFMPEG_PROCESS_FPS = 10  # Video FPS, passed to FFMpeg wrapper
 _WARN_PROCESS_SPEED_THRESHOLD = 0.8  # if process speed is less than this value, a warning will be logged per interval
 # variables (auto-controlled)
 _warned_screencap_arg = False
+_first_get_surface_orientation_failed = False
 
 
 class SurfaceOrientation(IntEnum):
@@ -90,10 +91,13 @@ def _gen_landscape_orientation(output: str, pattern: re.Pattern) -> SurfaceOrien
 
 def get_surface_orientation(shell: ADBShell) -> SurfaceOrientation:
     """Get the current device orientation (aka surface orientation)."""
+    global _first_get_surface_orientation_failed
     # not work for android 13 (at least my new device is not working)
-    ret_val, output, _ = shell.interact('dumpsys input|grep SurfaceOrientation')
-    if ret_val == 0:
-        return _gen_landscape_orientation(output, _SURFACE_ORIENTATION_PATTERN)
+    if not _first_get_surface_orientation_failed:
+        ret_val, output, _ = shell.interact('dumpsys input|grep SurfaceOrientation')
+        if ret_val == 0:
+            return _gen_landscape_orientation(output, _SURFACE_ORIENTATION_PATTERN)
+        _first_get_surface_orientation_failed = True
     ret_val, output, _ = shell.interact('dumpsys input|grep orientation')
     if ret_val == 0:
         return _gen_landscape_orientation(output, _SURFACE_ORIENTATION_PATTERN_NEW)
@@ -182,13 +186,13 @@ class ADBScreenCapturer(ScreenCapturer):
             raise RuntimeError(f'Failed to decode PNG image: {e!r}, '
                                f'check your device, connection cable and ADB version!')
 
-    def _get_screenshot_impl(self) -> np.ndarray:
+    def _get_screenshot_impl(self, **kwargs) -> np.ndarray:
         if self._transfer_format == ADBScreencapTransferFormat.Raw:
             return self._get_screenshot_impl_raw()
         else:
             return self._get_screenshot_impl_png()
 
-    def get_screenshot(self) -> np.ndarray:
+    def get_screenshot(self, **kwargs) -> np.ndarray:
         # always returns the landscape-orientated screenshot
         if not self._adb_shell.is_alive():
             raise RuntimeError('ADB shell process is gone')
@@ -196,7 +200,7 @@ class ADBScreenCapturer(ScreenCapturer):
             try:
                 # make sure the orientation does not change during capturing the screen
                 orientation_before = get_surface_orientation(self._adb_shell)
-                screenshot = self._get_screenshot_impl()
+                screenshot = self._get_screenshot_impl(**kwargs)
                 orientation_after = get_surface_orientation(self._adb_shell)
                 if orientation_after != orientation_before:
                     # if orientation changed, retry after 0.2s
@@ -237,11 +241,14 @@ class ADBScreenCapturer(ScreenCapturer):
 
 # adb exec-out screenrecord --size wxh --bit-rate bitrate --time-limit secs --output-format=h264 -
 # performance hint: DO NOT USE "raw-frames" as output format, it is extremely slow
+
+@register_handler(CapturerRegistry, 'adb')
 class ADBScreenrecordCapturerThreaded(ADBScreenCapturer):
 
-    def __init__(self, adb_server: Optional[ADBServer] = None, bitrate: Optional[int] = None,
+    def __init__(self, adb_server: Optional[ADBServer] = None, bitrate: Optional[Union[int, str]] = 4000000,
                  time_limit: Optional[int] = None, resolution: Optional[Resolution] = None,
-                 device: Optional[str] = None, ffmpeg_executable_path: Optional[str] = None):
+                 device: Optional[str] = None, ffmpeg_executable_path: Optional[str] = None,
+                 decode_latency: float = 0.3):
         """Instantiating a screen capturer via ADB screenrecord. Compared with screencap, this solution has low latency
         with more resource usage. If the video decoding speed or process speed cannot keep up, use the screencap
         implementation.
@@ -254,6 +261,10 @@ class ADBScreenrecordCapturerThreaded(ADBScreenCapturer):
         :param resolution: The resolution of video output, leave None to use native device solution.
         :param device: Specify which device should be connected.
         :param ffmpeg_executable_path: Path of FFMpeg executable file, leave None to search in PATH variable.
+        :param decode_latency: Float value of the latency of decoding, in seconds. It is used to compensate the
+            decoding latency. The default value is 0.3s, which is suitable for most cases. If you find the video
+            is lagging behind the real-time, try to increase this value. If you find the video is too fast, try to
+            decrease this value.
         """
         super(ADBScreenrecordCapturerThreaded, self).__init__(adb_server, device)
 
@@ -274,6 +285,7 @@ class ADBScreenrecordCapturerThreaded(ADBScreenCapturer):
         self._screenrecord_spawn_args = cmds
         self._screenrecord_proc = None
         self._ffmpeg_executable_path = ffmpeg_executable_path
+        self._decode_latency = decode_latency
         self._restarter = threading.Thread(target=self._tle_restarter, daemon=False,
                                            name='ADBScreenRecordRestarterDaemon')
         self._frame = None  # stores the first decoded frame after frame_request being set
@@ -281,8 +293,17 @@ class ADBScreenrecordCapturerThreaded(ADBScreenCapturer):
         self._frame_response = threading.Event()
         self._started = False
 
+    def _handle_decoder_output_no_throw(self, decode_stream: IO[bytes]):
+        try:
+            self._handle_decoder_output(decode_stream)
+        except RuntimeError:
+            pass
+        except Exception as ex:
+            logger.error(f'Unexpected exception in ADBScreenrecordCapturerThreaded: {ex!r}')
+        self.kill()
+
     def _handle_decoder_output(self, decode_stream: IO[bytes]):
-        solution = self._resolution or self._get_solution_native_impl()
+        solution = self._resolution or self._get_solution_impl()
         expected_buffer_size = solution.width * solution.height * 3  # RGB format, raw stream
         frame_cnt = 0
         first_frame_time = 0
@@ -332,7 +353,7 @@ class ADBScreenrecordCapturerThreaded(ADBScreenCapturer):
 
     def _tle_restarter(self):
         # restart adb screen record once time limit exceeded
-        while threading.main_thread().is_alive():
+        while threading.main_thread().is_alive() and not self._terminated:
             if self._screenrecord_proc is None or self._screenrecord_proc.poll() is not None:
                 self._restart_screenrecord()
             try:
@@ -349,8 +370,13 @@ class ADBScreenrecordCapturerThreaded(ADBScreenCapturer):
             self._restarter.start()
             self._started = True
 
-    def _get_screenshot_impl(self) -> np.ndarray:
+    def _get_screenshot_impl(self, precise_mode: bool = False, **kwargs) -> np.ndarray:
+        if precise_mode:
+            # precise mode directly returns lossless screenshot, whereas default mode returns lossy video frame
+            return super()._get_screenshot_impl(**kwargs)
         self._start_daemon()
+        if self._decode_latency > 0:
+            sleep(self._decode_latency)
         self._frame_request.set()
         self._frame_response.wait()
         self._frame_response.clear()
@@ -359,12 +385,13 @@ class ADBScreenrecordCapturerThreaded(ADBScreenCapturer):
         return frame
 
 
-# multiprocessing solution
-@register_handler(CapturerRegistry, 'adb')
+# multiprocessing solution TODO: needs to re-check the termination logic
+# @register_handler(CapturerRegistry, 'adb')
 class ADBScreenrecordCapturerMP(ADBScreenCapturer):
-    def __init__(self, adb_server: Optional[ADBServer] = None, bitrate: Optional[int] = None,
+    def __init__(self, adb_server: Optional[ADBServer] = None, bitrate: Optional[Union[int, str]] = 4000000,
                  time_limit: Optional[int] = None, resolution: Optional[Resolution] = None,
-                 device: Optional[str] = None, ffmpeg_executable_path: Optional[str] = None):
+                 device: Optional[str] = None, ffmpeg_executable_path: Optional[str] = None,
+                 decode_latency: float = 0.3):
         """Instantiating a screen capturer via ADB screenrecord. Compared with screencap, this solution has low latency
         with more resource usage. If the video decoding speed or process speed cannot keep up, use the screencap
         implementation.
@@ -377,9 +404,14 @@ class ADBScreenrecordCapturerMP(ADBScreenCapturer):
         :param resolution: The solution of video output, leave None to use native device solution.
         :param device: Specify which device should be connected.
         :param ffmpeg_executable_path: Path of FFMpeg executable file, leave None to search in PATH variable.
+        :param decode_latency: Float value of the latency of decoding, in seconds. It is used to compensate the
+            decoding latency. The default value is 0.3s, which is suitable for most cases. If you find the video
+            is lagging behind the real-time, try to increase this value. If you find the video is too fast, try to
+            decrease this value.
         """
-        ScreenCapturer.__init__(self)
-        self._args = (adb_server, bitrate, time_limit, resolution, device, ffmpeg_executable_path)
+        # ScreenCapturer.__init__(self)
+        super(ADBScreenrecordCapturerMP, self).__init__(adb_server, device)
+        self._args = (adb_server, bitrate, time_limit, resolution, device, ffmpeg_executable_path, decode_latency)
         self._event_queue = mp.SimpleQueue()
         self._sig_req = mp.Event()
         self._sig_resp = mp.Event()

@@ -5,11 +5,13 @@ from time import sleep, time
 import logging
 import numpy as np
 import image_process
+import inspect
 
 __all__ = ['StateHandler', 'WaitFufuStateHandler', 'DirectStateForwarder', 'SingleClickHandler',
            'SingleClickAndWaitFufuHandler']
 
 logger = logging.getLogger('bgo_script.fsm')
+_precise_mode_warned = False
 
 
 class StateHandler(metaclass=ABCMeta):
@@ -20,9 +22,24 @@ class StateHandler(metaclass=ABCMeta):
         self.env = env
         self.forward_state = forward_state
 
-    def _get_screenshot_impl(self):
+    def _get_screenshot_impl(self, precise_mode: bool = False):
         # get screenshot from capturer, resize to target resolution if given
-        screenshot = self.env.capturer.get_screenshot()
+        screenshot = None
+        # check if precise_mode is supported (by checking parameter or **kwargs support)
+        if precise_mode:
+            sig = inspect.signature(self.env.capturer.get_screenshot)
+            if 'precise_mode' in sig.parameters.keys() or \
+                    any(p.kind == inspect.Parameter.VAR_KEYWORD for p in sig.parameters.values()):
+                screenshot = self.env.capturer.get_screenshot(precise_mode=precise_mode)
+            else:
+                global _precise_mode_warned
+                if not _precise_mode_warned:
+                    logger.warning(f'Precise mode is not supported by capturer {self.env.capturer!r}, '
+                                   f'fallback to unconditional mode')
+                    _precise_mode_warned = True
+        if screenshot is None:
+            # fallback option
+            screenshot = self.env.capturer.get_screenshot()
         resolution = self.env.detection_definitions.get_target_resolution()
         if resolution is not None:
             screenshot = image_process.resize(screenshot, resolution.width, resolution.height)

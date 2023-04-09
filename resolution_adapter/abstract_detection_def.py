@@ -318,12 +318,14 @@ class AbstractDetectionDef(metaclass=ABCMeta):
         raise NotImplementedError
 
     @staticmethod
+    @plot_rect
     def get_fp_item_overflow_rect() -> Rect:
         raise NotImplementedError
 
     # 礼装强化界面识别
     # <===== Craft Essence Synthesis Begin =====
     @staticmethod
+    @plot_rect
     def get_craft_essence_synthesis_ui_rect() -> Rect:
         raise NotImplementedError
 

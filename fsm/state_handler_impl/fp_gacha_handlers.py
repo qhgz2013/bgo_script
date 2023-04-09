@@ -40,11 +40,11 @@ class CheckFriendPointGachaUIHandler(StateHandler):
         logger.debug(f'fp_pool_ui_diff: {diff}, threshold: {threshold}')
         is_free = False  # 是否是每日首次友情池十连
         if diff > threshold:
-            # TODO: check daily bonus
+            # check daily free bonus
             rect_daily = self.env.detection_definitions.get_fp_pool_ui_rect_daily()
             img_in_anchor = img[rect_daily.y1:rect_daily.y2, rect_daily.x1:rect_daily.x2, :]
             diff = image_process.mean_gray_diff_err(img_in_anchor, self._anchor_file)
-            logger.debug(f'fp_pool_ui_diff2: {diff}')
+            logger.debug(f'fp_pool_ui_diff2: {diff}, threshold: {threshold}')
             is_free = True
             if diff > threshold:
                 logger.error('Friend point gacha UI not detected.')
@@ -57,7 +57,7 @@ class CheckFriendPointGachaUIHandler(StateHandler):
 
         # all check passed: click gacha button and wait confirm
         button = self.env.click_definitions.fp_pool_gacha()
-        self.env.attacher.send_click(button.x, 0.5 if is_free else button.y)
+        self.env.attacher.send_click(0.5 if is_free else button.x, button.y)
 
         # wait 0.5s
         sleep(0.5)
@@ -82,13 +82,20 @@ class FriendPointGachaConfirmHandler(StateHandler):
         anchor_rect = self.env.detection_definitions.get_fp_pool_gacha_confirm_rect()
         img_in_anchor = img[anchor_rect.y1:anchor_rect.y2, anchor_rect.x1:anchor_rect.x2, :]
         diff = image_process.mean_gray_diff_err(img_in_anchor, self._anchor_file)
-        if diff > self.env.detection_definitions.get_fp_pool_gacha_confirm_diff_threshold():
+        threshold = self.env.detection_definitions.get_fp_pool_gacha_confirm_diff_threshold()
+        logger.debug(f'fp_pool_gacha_confirm_diff: {diff}, threshold: {threshold}')
+        if diff > threshold:
             # check if item overflow
             overflow_rect = self.env.detection_definitions.get_fp_item_overflow_rect()
             img_in_anchor = img[overflow_rect.y1:overflow_rect.y2, overflow_rect.x1:overflow_rect.x2, :]
             diff = image_process.mean_gray_diff_err(img_in_anchor, self._fp_item_overflow_file)
-            if diff > self.env.detection_definitions.get_fp_pool_gacha_confirm_diff_threshold():
+            logger.debug(f'fp_item_overflow_diff: {diff}, threshold: {threshold}')
+            # from PIL import Image
+            # from time import time
+            # Image.fromarray(img_in_anchor).save(f'debug/{time()}.png')
+            if diff > threshold:
                 logger.error('Friend point gacha confirm UI check failed')
+                # TODO: 改成loop形式，超过多久还没出现就报错
                 return FgoState.STATE_ERROR
             else:
                 return FgoState.STATE_FP_GACHA_ITEM_OVERFLOW

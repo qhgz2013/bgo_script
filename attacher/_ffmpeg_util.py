@@ -19,6 +19,7 @@ __all__ = ['ADBScreenrecordFFMpegDecoder']
 
 logger = getLogger('bgo_script.attacher.ffmpeg')
 _WARN_MEMORY_BUFFER_THRESHOLD = 100 * 0x100000  # warn user if the script cannot keep up with ffmpeg, default: 100MB
+_TERMINATE_MEMORY_BUFFER_THRESHOLD = 10 * _WARN_MEMORY_BUFFER_THRESHOLD  # terminate ffmpeg if buffer is too large
 _warned_memory_buffer_size = False
 
 
@@ -162,12 +163,18 @@ class ADBScreenrecordFFMpegDecoder(IO[bytes]):
                                        f'cannot keep up with the decoder output, this will increase memory usage and '
                                        f'the program will crash some time later. (This warning will be logged once)')
                         _warned_memory_buffer_size = True
+                    if len(self._buffer) > _TERMINATE_MEMORY_BUFFER_THRESHOLD:
+                        break
         self.close()
 
     def _handle_stderr(self):
         # ignore stderr
         while self._ffmpeg_process.poll() is None:
-            data = self._ffmpeg_process.stderr.read(4096)
+            try:
+                data = self._ffmpeg_process.stderr.read(4096)
+            except ValueError:
+                # I/O operation on closed file
+                break
             # if len(data) > 0:
             #     print(str(data, 'utf8'))
         self.close()

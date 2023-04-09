@@ -13,11 +13,11 @@ class BasicDetectionDefImpl(AbstractDetectionDef, metaclass=ABCMeta):
 
     @staticmethod
     def get_fufu_blank_binarization_threshold() -> int:
-        return 195
+        return 210  # previous: 195
 
     @staticmethod
     def get_fufu_blank_ratio_threshold() -> float:
-        return 0.992  # previous: 0.995
+        return 0.98  # previous: 0.995
 
     @staticmethod
     def get_attack_button_anchor_file() -> str:
@@ -133,7 +133,7 @@ class BasicDetectionDefImpl(AbstractDetectionDef, metaclass=ABCMeta):
 
     @staticmethod
     def get_fp_pool_ui_diff_threshold() -> float:
-        return 50  # TODO
+        return 20  # > 14
 
     @staticmethod
     def get_fp_active_gray_threshold() -> int:
@@ -149,7 +149,7 @@ class BasicDetectionDefImpl(AbstractDetectionDef, metaclass=ABCMeta):
 
     @staticmethod
     def get_fp_pool_gacha_confirm_diff_threshold() -> float:
-        return 20
+        return 15  # previous: 20, found min: 17.4
 
     @staticmethod
     def get_fp_pool_gacha_skip_diff_threshold() -> float:
@@ -177,7 +177,7 @@ class BasicDetectionDefImpl(AbstractDetectionDef, metaclass=ABCMeta):
 
     @staticmethod
     def get_craft_essence_ui_size_diff_threshold() -> float:
-        return 15  # correct: ~7.4, others are: 31.3, 50.8
+        return 20  # correct: < 20, others are: 31.3, 50.8
 
     @staticmethod
     def get_craft_essence_order_by_rarity_r_threshold() -> float:
