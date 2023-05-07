@@ -58,7 +58,7 @@ def _bool_traversal(bool_list: np.ndarray, valid_bool_value: bool, start: int, m
 class CraftEssenceSynthesisHandler(StateHandler):
     """Craft Essence Synthesis Handler: auto making craft essence with the following predefined rules:
 
-    1. CE to be synthesized must be <= 3 stars.
+    1. CE to be synthesized must be < 3 stars.
     2. Synthesis materials are all CEs with <= 3 stars (unlocked, and not favored), EXP CEs with 4 stars.
 
     The handler will perform a series of actions:
@@ -502,7 +502,7 @@ class CraftEssenceSynthesisHandler(StateHandler):
     def _select_target_ce(self, ce_grid_data: List[List[CEDetectionResult]]) -> bool:
         for row in ce_grid_data:
             for cell in row:
-                if cell.available and cell.rarity <= 3:
+                if cell.available and cell.rarity < 3:
                     if not cell.locked:
                         self._lock_ce(cell.bounding_box)
                     self._select_ce(cell.bounding_box)
@@ -544,7 +544,7 @@ class CraftEssenceSynthesisHandler(StateHandler):
             x = (img.shape[1] - self._synthesis_result_img.shape[1]) // 2
             img = img[:, x:x+self._synthesis_result_img.shape[1], :]
             diff = image_process.mean_gray_diff_err(img, self._synthesis_result_img)
-            logger.debug(f'_wait_synthesis_complete diff: {diff}')
+            logger.debug(f'_wait_synthesis_complete diff: {diff}, threshold: {threshold}')
             if diff < threshold:
                 break
             self.env.attacher.send_click(click_pos.x, click_pos.y)
