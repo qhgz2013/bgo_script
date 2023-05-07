@@ -117,8 +117,8 @@ class Exact16x9RatioDetectionDefImpl(BasicDetectionDefImpl):
         return Rect(400, 565, 500, 595)
 
     @staticmethod
-    def get_craft_essence_material_height() -> int:
-        return 128
+    def get_craft_essence_material_size() -> Tuple[int, int]:
+        return 128, 117
 
     @staticmethod
     def get_craft_essence_material_margin_y() -> int:

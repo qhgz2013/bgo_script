@@ -8,12 +8,11 @@ import numpy as np
 import sqlite3
 from typing import *
 from dataclasses import dataclass
-from PIL import Image
-from io import BytesIO
 import json
 from basic_class import Rect
 import matplotlib.pyplot as plt
 from time import time
+from functools import partial
 
 __all__ = ['CraftEssenceSynthesisHandler']
 
@@ -53,6 +52,10 @@ def _bool_traversal(bool_list: np.ndarray, valid_bool_value: bool, start: int, m
         else:
             y += lookahead_offset
     return y
+
+
+def _on_ce_decoded(_k, _v, img, ce_h, ce_w):
+    return image_process.resize(img, ce_w, ce_h)
 
 
 class CraftEssenceSynthesisHandler(StateHandler):
@@ -101,33 +104,22 @@ class CraftEssenceSynthesisHandler(StateHandler):
                 self.env.detection_definitions.get_craft_essence_target_empty_file())
         self._target_filter_checked = False
         self._material_filter_checked = False
-        self._sql_conn = sqlite3.connect(self.env.detection_definitions.get_database_file())
-        self._sql_cursor = self._sql_conn.cursor()
-        self._cache = image_process.ImageHashCacher(hash_func=image_process.perception_hash,
-                                                    hash_conflict_func=image_process.mean_gray_diff_err)
-        self._sql_cursor.execute("select ce_id from craft_essence_meta")
-        self._ce_ids = [x[0] for x in self._sql_cursor.fetchall()]
-        logger.debug(f'Craft essences in database: {len(self._ce_ids)}')
-        self._img_cache = {}
+        sql_conn = sqlite3.connect(self.env.detection_definitions.get_database_file())
+        sql_cursor = sql_conn.cursor()
+        sql_cursor.execute("select image_key, ce_id from craft_essence_faces")
+        results = sql_cursor.fetchall()
+        sql_cursor.execute("select ce_id, meta_json from craft_essence_meta")
+        self._ce_meta = {x[0]: json.loads(x[1]) for x in sql_cursor.fetchall()}
         self._target_ce_not_found_forward_state = target_ce_not_found_forward_state or forward_state
 
-    def _get_ce_image(self, ce_id: int, target_size: Optional[Tuple[int, int]] = None) -> np.ndarray:
-        self._sql_cursor.execute("select image_key from craft_essence_faces where ce_id = ?", (ce_id,))
-        image_key = self._sql_cursor.fetchone()
-        if image_key is None:
-            raise KeyError(f'Craft Essence ID "{ce_id}" not exists')
-        image_key = image_key[0]
-        self._sql_cursor.execute("select image_data from image where image_key = ?", (image_key,))
-        data = self._sql_cursor.fetchone()
-        if data is None:
-            raise KeyError(f'Image "{image_key}" not exists')
-        # TODO: change to use image_process package
-        stream = BytesIO(data[0])
-        pil_img = Image.open(stream)
-        if target_size is not None:
-            pil_img = pil_img.resize(target_size)
-        # noinspection PyTypeChecker
-        return np.asarray(pil_img, dtype=np.uint8)
+        cache = image_process.ImageHashCacher(hash_func=image_process.perception_hash,
+                                              hash_conflict_func=image_process.mean_gray_diff_err)
+        r = self.env.detection_definitions.get_craft_essence_material_inner_image_rect()
+        ce_matcher = image_process.MPImageMatcher(
+            self.env.detection_definitions.get_database_file(), results, image_process.mean_gray_diff_err, cacher=cache,
+            on_image_decoded=partial(_on_ce_decoded, ce_h=r.y2-r.y1, ce_w=r.x2-r.x1)
+        )
+        self._ce_matcher = ce_matcher
 
     def _check_synthesis_ui_size(self):
         ui_size_rect = self.env.detection_definitions.get_craft_essence_material_ui_size_rect()
@@ -224,7 +216,7 @@ class CraftEssenceSynthesisHandler(StateHandler):
         x_begin, x_end = self.env.detection_definitions.get_craft_essence_material_x_range()
         margin_x = self.env.detection_definitions.get_craft_essence_material_margin_x()
         num_per_row = self.env.detection_definitions.get_craft_essence_n_materials_per_row()  # should be 7
-        width = ((x_end - x_begin) - margin_x * (num_per_row - 1)) / num_per_row
+        height, width = self.env.detection_definitions.get_craft_essence_material_size()  # 128, 117
         y_begin = self.env.detection_definitions.get_craft_essence_material_y_start()
         frame_detection_ratio = self.env.detection_definitions.get_craft_essence_frame_detection_ratio()  # 0.23
 
@@ -279,7 +271,6 @@ class CraftEssenceSynthesisHandler(StateHandler):
         # configurable param
         tol_pixels = self.env.detection_definitions.get_craft_essence_grid_detection_tol_pixels()  # 3
         split_threshold = self.env.detection_definitions.get_craft_essence_grid_detection_hsv_threshold()  # 30
-        height = self.env.detection_definitions.get_craft_essence_material_height()  # 128
 
         if show_plot:
             plt.figure()
@@ -347,26 +338,8 @@ class CraftEssenceSynthesisHandler(StateHandler):
         return [(a + y_begin, b + y_begin) for a, b in y_coords]
 
     def _ce_image_lookup(self, img: np.ndarray) -> Tuple[int, Dict[str, Any]]:
-        cache_result = self._cache.get(img, None)
-        # perf debug
-        t0 = time()
-        if cache_result is not None:
-            return cache_result
-        min_val = 0x7fffffff
-        min_idx = -1
-        # TODO: MP dispatch
-        for ce in self._ce_ids:
-            if ce not in self._img_cache:
-                self._img_cache[ce] = self._get_ce_image(ce, (img.shape[1], img.shape[0]))
-            val = image_process.mean_gray_diff_err(img, self._img_cache[ce])
-            if val < min_val:
-                min_val = val
-                min_idx = ce
-        self._sql_cursor.execute("select meta_json from craft_essence_meta where ce_id = ?", (min_idx,))
-        meta_json = self._sql_cursor.fetchone()[0]
-        meta = json.loads(meta_json)
-        self._cache[img] = min_idx, meta
-        logger.debug(f'ce lookup time: {time() - t0:.3f}s, result: {min_idx} ({meta["original_name"]})')
+        _, min_idx, min_val = self._ce_matcher.match(img)
+        meta = self._ce_meta[min_idx]
         return min_idx, meta
 
     def _detect_material_grid(self, y_loc: Optional[List[Tuple[int, int]]] = None,

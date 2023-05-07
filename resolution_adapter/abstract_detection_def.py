@@ -346,7 +346,7 @@ class AbstractDetectionDef(metaclass=ABCMeta):
         raise NotImplementedError
 
     @staticmethod
-    def get_craft_essence_material_height() -> int:
+    def get_craft_essence_material_size() -> Tuple[int, int]:
         raise NotImplementedError
 
     @staticmethod
