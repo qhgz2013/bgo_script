@@ -225,7 +225,7 @@ class BasicDetectionDefImpl(AbstractDetectionDef, metaclass=ABCMeta):
 
     @staticmethod
     def get_craft_essence_wait_synthesis_complete_diff_threshold() -> float:
-        return 3  # <= 5 ok
+        return 5  # <= 5 ok, previous: 3
 
     @staticmethod
     def get_craft_essence_grid_detection_tol_pixels() -> int:

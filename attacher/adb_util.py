@@ -23,7 +23,10 @@ logger = getLogger('bgo_script.attacher.adb')
 _cache_adb_path_not_found = object()
 _cache_adb_path = None
 _DEVICE_PATTERN = re.compile(r'^(?P<device_name>[^\s]+)\s+(?P<device_type>device)$')
-MSG_TYPE = Literal['stdout', 'stderr']
+try:
+    MSG_TYPE = Literal['stdout', 'stderr']
+except NameError:
+    MSG_TYPE = str  # python 3.6
 _PIPE = subprocess.PIPE
 _T = TypeVar('_T', bound=str)
 SPAWN_FUNC_PROTOTYPE = Callable[..., Tuple[int, _T, _T]]

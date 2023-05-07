@@ -28,6 +28,14 @@ class ADBScreenrecordFFMpegDecoder(IO[bytes]):
     """Only works for ADB screenrecord that takes H264 encoded video as input and RGB image stream as output."""
 
     # <<< begin IO[bytes] implementation
+    # python 3.6 implementation
+    @property
+    def mode(self) -> str:
+        return 'rb'
+
+    @property
+    def name(self) -> str:
+        return ''
 
     def close(self) -> None:
         with self._buffer_lock:

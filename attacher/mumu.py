@@ -105,7 +105,7 @@ class MumuScreenCapturer(WinAPIScreenCapturer):
         self.simulator_host_handle = host_handle
         return player_handle
 
-    def get_screenshot(self) -> np.ndarray:
+    def get_screenshot(self, **kwargs) -> np.ndarray:
         if check_window_minimized(self.simulator_host_handle) and not self.__warned_minimize:
             logger.warning('Screenshot capture is not supported for minimized window')
             self.__warned_minimize = True

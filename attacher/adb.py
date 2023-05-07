@@ -69,7 +69,7 @@ def get_landscape_orientation(shell: ADBShell) -> SurfaceOrientation:
     return getattr(SurfaceOrientation, match.group('var'))
 
 
-def _gen_landscape_orientation(output: str, pattern: re.Pattern) -> SurfaceOrientation:
+def _gen_landscape_orientation(output: str, pattern: 're.Pattern') -> SurfaceOrientation:
     def _gen_internal():
         for line in output.split('\n'):
             line = line.rstrip()
