@@ -287,7 +287,6 @@ class CraftEssenceSynthesisHandler(StateHandler):
             plt.grid()
             plt.show()
 
-        # <<< new detection method
         margin = self.env.detection_definitions.get_craft_essence_material_margin_y()  # 14
         guessed_available_cols = np.sum(np.mean(hsv_diff_reduction_anchor[..., :2], -1) < split_threshold, 0)
         # project to height+margin
@@ -326,36 +325,6 @@ class CraftEssenceSynthesisHandler(StateHandler):
         repeat_cnt = (guessed_available_cols.shape[0] - y) // (height + margin)
         y_coords = [((height + margin) * i - height + y, (height + margin) * i + y) for i in range(1, repeat_cnt+1)]
         logger.debug(y_coords)
-
-        # <<< end new detection method
-
-        # <<< old detection method
-        # y = 0
-        # last_y = None
-        # split_flag = hsv_diff_reduction_row < split_threshold
-        #
-        # y_coords1 = []
-        # while y < len(split_flag):
-        #     y = _bool_traversal(split_flag, valid_bool_value=False, start=y, max_lookahead_pixel=tol_pixels)
-        #     if y == len(split_flag):
-        #         break
-        #     y1 = y
-        #
-        #     y = _bool_traversal(split_flag, valid_bool_value=True, start=y, max_lookahead_pixel=tol_pixels)
-        #     y2 = y
-        #     if y2 - y1 < 6:  # normal: 7-8px
-        #         continue
-        #
-        #     if y2 <= height:
-        #         # incomplete row
-        #         continue
-        #
-        #     y_coords1.append((y2 - height, y2))
-
-        #     # last_y = y2  # normal: 142-143px (128px content + 14-15px margin)
-        #     # logger.debug(f'{y1}, {y2}')
-        # <<< end old detection method
-        # logger.debug(y_coords1)
 
         if show_plot:
             img2 = img.copy()
