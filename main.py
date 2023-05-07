@@ -31,6 +31,7 @@ def main():
     parser.add_argument('--enable_anti_detection', action='store_true', help='Enable anti-detection mechanism')
     parser.add_argument('--ap_recovery', default='no', help='Enable AP auto recovery by using specified items',
                         choices=['no', 'gold', 'silver', 'bronze', 'saint_quartz', 'sapling'])
+    parser.add_argument('--notify_at_exit', action='store_true', help='Notify user at script exit')
     parser.add_argument('--verbose', help='Print verbose log (debug level) to screen', action='store_true',
                         default=False)
     args = parser.parse_args()
@@ -66,6 +67,9 @@ def main():
         # raise kb_int
     except Exception as ex:
         _log_exception(ex)
+    if args.notify_at_exit:
+        from util import balloon_tip
+        balloon_tip('bgo_script', 'Script exited')
 
 
 if __name__ == '__main__':

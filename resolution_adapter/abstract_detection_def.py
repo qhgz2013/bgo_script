@@ -6,6 +6,14 @@ from typing import *
 __all__ = ['AbstractDetectionDef']
 
 
+try:
+    final
+except NameError:
+    # python 3.6
+    def final(f):
+        return f
+
+
 class AbstractDetectionDef(metaclass=ABCMeta):
     __version__ = '2022.11.06'
 

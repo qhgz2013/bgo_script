@@ -4,3 +4,4 @@ from .misc import *
 from .digit_recognizer import DigitRecognizer
 from .rwlock import RWLock
 from .handler_registry import *
+from .toast_notification import WindowsBalloonTip, balloon_tip
