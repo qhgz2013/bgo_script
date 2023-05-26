@@ -27,22 +27,23 @@ class WaitAttackOrExitQuestHandler(StateHandler):
 
     def __init__(self, env: ScriptEnv):
         super().__init__(env, forward_state=FgoState.STATE_BATTLE_LOOP_ATK)
-        if self._attack_button_anchor is None:
-            self._attack_button_anchor = image_process.imread(
-                self.env.detection_definitions.get_attack_button_anchor_file())
-        if self._exit_quest_img is None:
-            self._exit_quest_img = image_process.imread(
-                self.env.detection_definitions.get_exit_quest_ui_file())
+        cls = type(self)
+        if cls._attack_button_anchor is None:
+            cls._attack_button_anchor = [image_process.imread(file) for file in
+                                         self.env.detection_definitions.get_attack_button_anchor_file()]
+        if cls._exit_quest_img is None:
+            cls._exit_quest_img = image_process.imread(self.env.detection_definitions.get_exit_quest_ui_file())
 
     def run_and_transit_state(self) -> FgoState:
         blank_threshold = self.env.detection_definitions.get_in_battle_blank_screen_threshold()
         blank_ratio = self.env.detection_definitions.get_in_battle_blank_screen_ratio_threshold()
         while True:
             sleep(0.2)
-            img = self._get_screenshot_impl()
+            img = self._get_screenshot_impl()[..., :3]
             gray = np.mean(img, -1)
             blank_val = np.mean(np.less(gray, blank_threshold))
-            # logger.debug('DEBUG value: blank ratio: %f' % blank_val)
+            logger.debug(f'DEBUG value: blank_ratio: {blank_val}, threshold: {blank_ratio} '
+                         f'(binarization threshold: {blank_threshold})')
             # skip blank screen frame
             if blank_val >= blank_ratio:
                 continue
@@ -56,16 +57,18 @@ class WaitAttackOrExitQuestHandler(StateHandler):
     def _can_attack(self, img: np.ndarray) -> bool:
         button_rect = self.env.detection_definitions.get_attack_button_rect()
         btn_area = img[button_rect.y1:button_rect.y2, button_rect.x1:button_rect.x2]
-        abs_gray_diff = image_process.mean_gray_diff_err(btn_area, self._attack_button_anchor)
-        # logger.debug('DEBUG value: attack button mean_gray_diff_err = %f' % abs_gray_diff)
-        return abs_gray_diff < self.env.detection_definitions.get_attack_button_diff_threshold()
+        abs_gray_diff = [image_process.mean_gray_diff_err(btn_area, anchor) for anchor in self._attack_button_anchor]
+        threshold = self.env.detection_definitions.get_attack_button_diff_threshold()
+        logger.debug(f'DEBUG value: attack button abs_gray_diff_err: {abs_gray_diff}, threshold: {threshold}')
+        return any(diff < threshold for diff in abs_gray_diff)
 
     def _is_exit_quest_scene(self, img: np.ndarray) -> bool:
         exit_quest_rect = self.env.detection_definitions.get_exit_quest_rect()
         img = img[exit_quest_rect.y1:exit_quest_rect.y2, exit_quest_rect.x1:exit_quest_rect.x2, :].copy()
         diff = image_process.mean_gray_diff_err(img, self._exit_quest_img)
-        logger.debug(f'DEBUG value: exit quest diff: {diff}')
-        return diff < self.env.detection_definitions.get_exit_quest_diff_threshold()
+        threshold = self.env.detection_definitions.get_exit_quest_diff_threshold()
+        logger.debug(f'DEBUG value: exit_quest_diff: {diff}, threshold: {threshold}')
+        return diff < threshold
 
 
 class BattleLoopAttackHandler(StateHandler):
@@ -85,16 +88,14 @@ class BattleLoopAttackHandler(StateHandler):
         # re-order based on x position
         cx = [(x.min_x + x.max_x) / 2 for x in rects]
         pixel_threshold = self.env.detection_definitions.get_battle_filter_pixel_threshold()
-        rects = [x[1] for x in sorted(zip(cx, rects), key=lambda t: t[0])
-                 if x[1].associated_pixels.shape[0] > pixel_threshold]
-        logger.debug('Digit rects: %s' % str(rects))
+        rects_filtered = [x[1] for x in sorted(zip(cx, rects), key=lambda t: t[0])
+                          if x[1].associated_pixels.shape[0] > pixel_threshold]
+        logger.debug(f'Digit rects: {rects_filtered} (before filter: {rects})')
         if len(rects) != 3:
-            logger.warning('Detected %d rects, it is incorrect' % len(rects))
+            logger.warning(f'Detected {len(rects)} rects, it is incorrect')
         # TODO [PRIOR: low]: add rough shape check
         assert len(rects) == 3, 'Current implementation must meet that # of battles less than 10,' \
                                 ' or maybe recognition corrupted'
-        # return self._digit_recognize(image_process.normalize_image(rects[0].get_image_segment(), [20, 10])), \
-        #     self._digit_recognize(image_process.normalize_image(rects[-1].get_image_segment(), [20, 10]))
         return self._digit_recognizer.recognize(rects[0].get_image_segment()), \
             self._digit_recognizer.recognize(rects[-1].get_image_segment())
 
@@ -102,7 +103,15 @@ class BattleLoopAttackHandler(StateHandler):
         var = self.env.runtime_var_store
         if not var['SKIP_QUEST_INFO_DETECTION']:
             img = self._get_screenshot_impl()[..., :3]
-            cur_battle, max_battle = self._get_current_battle(img)
+            cur_battle, max_battle, e = None, None, None
+            for _ in range(5):
+                try:
+                    cur_battle, max_battle = self._get_current_battle(img)
+                    break
+                except AssertionError as e:
+                    sleep(0.2)  # failed in some time, let's have another retry
+            if cur_battle is None:
+                raise ValueError('Could not determine battle status') from e
             if cur_battle != var['CURRENT_BATTLE']:
                 var['TURN'] = 1  # reset turn
             else:

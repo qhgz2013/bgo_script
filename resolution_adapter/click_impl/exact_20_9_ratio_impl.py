@@ -18,169 +18,143 @@ class Exact20x9RatioClickDefImpl(AbstractClickDef):
 
     @staticmethod
     def eat_silver_apple() -> PointF:
-        # return PointF(0.469, 0.648)
-        raise NotImplementedError
+        return PointF(0.469, 0.648)
 
     @staticmethod
     def eat_gold_apple() -> PointF:
-        # return PointF(0.469, 0.486)
-        raise NotImplementedError
+        return PointF(0.469, 0.486)
 
     @staticmethod
     def eat_saint_quartz() -> PointF:
-        # return PointF(0.469, 0.278)
-        raise NotImplementedError
+        return PointF(0.469, 0.278)
 
     @staticmethod
     def eat_bronze_sapling() -> PointF:
-        # return PointF(0.469, 0.769)
-        raise NotImplementedError
+        return PointF(0.469, 0.769)
 
     # 确认恰苹果
     @staticmethod
     def eat_apple_confirm() -> PointF:
-        # return PointF(0.625, 0.778)
-        raise NotImplementedError
+        return PointF(0.625, 0.8194)
+        # raise NotImplementedError
 
     # 取消恰苹果
     @staticmethod
     def eat_apple_cancel() -> PointF:
-        # return PointF(0.5, 0.85)
-        raise NotImplementedError
+        return PointF(0.5, 0.85)
 
     # 选第一个本位置
     @staticmethod
     def enter_first_quest() -> PointF:
-        # return PointF(0.75, 0.264)
-        raise NotImplementedError
+        return PointF(0.75, 0.264)
 
     # 出本结算的点击位置
     @staticmethod
     def exit_battle_button() -> PointF:
-        # return PointF(0.859, 0.944)
-        raise NotImplementedError
+        return PointF(0.8, 0.889)
 
     # 刷新支援
     @staticmethod
     def support_refresh() -> PointF:
-        # return PointF(0.724, 0.181)
-        raise NotImplementedError
+        return PointF(0.632, 0.181)
 
     # 确定刷新支援
     @staticmethod
     def support_refresh_confirm() -> PointF:
-        # return PointF(0.656, 0.778)
-        raise NotImplementedError
+        return PointF(0.625, 0.778)
 
     # 编队界面进本按钮
     @staticmethod
     def enter_quest_button() -> PointF:
-        # return PointF(0.938, 0.931)
-        raise NotImplementedError
+        return PointF(0.894, 0.889)
 
     @staticmethod
     def support_scrolldown_y_adb() -> float:
-        # return 0.455
-        raise NotImplementedError
+        return 0.455
+        # raise NotImplementedError
 
     @staticmethod
     def support_scrolldown_y_mumu() -> float:
-        # return 0.51
-        raise NotImplementedError
+        return 0.51
+        # raise NotImplementedError
 
     # 使用技能/点击攻击/选择指令卡/换人的操作的点击坐标
     @staticmethod
     def skill_buttons() -> List[PointF]:
-        # return [PointF(0.055, 0.792), PointF(0.125, 0.792), PointF(0.203, 0.792),
-        #         PointF(0.3, 0.792), PointF(0.375, 0.792), PointF(0.453, 0.792),
-        #         PointF(0.55, 0.792), PointF(0.625, 0.792), PointF(0.7, 0.792)]
-        raise NotImplementedError
+        return [PointF(0.075, 0.771), PointF(0.131, 0.771), PointF(0.188, 0.771),
+                PointF(0.275, 0.771), PointF(0.331, 0.771), PointF(0.388, 0.771),
+                PointF(0.475, 0.771), PointF(0.531, 0.771), PointF(0.588, 0.771)]
 
     @staticmethod
     def np_buttons() -> List[PointF]:
-        # return [PointF(0.3, 0.28), PointF(0.5, 0.28), PointF(0.7, 0.28)]
-        raise NotImplementedError
+        return [PointF(0.338, 0.28), PointF(0.5, 0.28), PointF(0.663, 0.28)]
 
     @staticmethod
     def change_servant() -> List[PointF]:
-        # return [PointF(0.109, 0.486), PointF(0.266, 0.486), PointF(0.422, 0.486),
-        #         PointF(0.578, 0.486), PointF(0.734, 0.486), PointF(0.891, 0.486)]
-        raise NotImplementedError
+        return [PointF(0.188, 0.486), PointF(0.313, 0.486), PointF(0.438, 0.486),
+                PointF(0.563, 0.486), PointF(0.688, 0.486), PointF(0.813, 0.486)]
 
     @staticmethod
     def command_card() -> List[PointF]:
-        # return [PointF(0.1, 0.69), PointF(0.23, 0.69), PointF(0.5, 0.69), PointF(0.7, 0.69), PointF(0.9, 0.69)]
-        raise NotImplementedError
+        return [PointF(0.175, 0.69), PointF(0.338, 0.69), PointF(0.5, 0.69), PointF(0.663, 0.69), PointF(0.825, 0.69)]
 
     @staticmethod
     def clothes_button() -> PointF:
-        # return PointF(0.934, 0.43)
-        raise NotImplementedError
+        return PointF(0.906, 0.43)
 
     @staticmethod
     def clothes_skills() -> List[PointF]:
-        # return [PointF(0.707, 0.43), PointF(0.777, 0.43), PointF(0.844, 0.43)]
-        raise NotImplementedError
+        return [PointF(0.725, 0.43), PointF(0.782, 0.43), PointF(0.838, 0.43)]
 
     @staticmethod
     def to_servant() -> List[PointF]:
-        # return [PointF(0.258, 0.625), PointF(0.508, 0.625), PointF(0.75, 0.625)]
-        raise NotImplementedError
+        return [PointF(0.313, 0.625), PointF(0.5, 0.625), PointF(0.688, 0.625)]
 
     # todo: 6 enemies
     @staticmethod
     def select_enemy() -> List[PointF]:
-        # return [PointF(0.035, 0.056), PointF(0.223, 0.056), PointF(0.41, 0.056)]
-        raise NotImplementedError
+        return [PointF(0.075, 0.056), PointF(0.231, 0.056), PointF(0.388, 0.056)]
 
     @staticmethod
     def attack_button() -> PointF:
-        # return PointF(0.89, 0.84)
-        raise NotImplementedError
+        return PointF(0.855, 0.84)
 
     @staticmethod
     def apply_order_change_button() -> PointF:
-        # return PointF(0.5, 0.868)
-        raise NotImplementedError
+        return PointF(0.5, 0.868)
 
     @staticmethod
     def attack_back_button() -> PointF:
-        # return PointF(0.9375, 0.9444)
-        raise NotImplementedError
+        return PointF(0.9, 0.91)
 
     # 助战刷新
     @staticmethod
     def support_refresh_refused_confirm() -> PointF:
-        # return PointF(0.5078, 0.7639)
-        raise NotImplementedError
+        return PointF(0.5, 0.7639)
 
     # 添加好友：跳过/申请
     @staticmethod
     def support_request_skip() -> PointF:
-        # return PointF(0.2578, 0.8542)
-        raise NotImplementedError
+        return PointF(0.31, 0.86)
 
     @staticmethod
     def support_request_apply() -> PointF:
-        # return PointF(0.7422, 0.8542)
-        raise NotImplementedError
+        return PointF(0.7, 0.86)
 
     # 连续出击
     @staticmethod
     def continuous_battle_confirm() -> PointF:
-        # return PointF(0.6511, 0.7871)
-        raise NotImplementedError
+        return PointF(0.625, 0.785)
 
     @staticmethod
     def continuous_battle_cancel() -> PointF:
-        # return PointF(0.3386, 0.7871)
-        raise NotImplementedError
+        return PointF(0.375, 0.785)
 
     # 技能加速
     @staticmethod
     def skill_speedup() -> PointF:
-        # return PointF(0.75, 0.5)
-        raise NotImplementedError
+        return PointF(0.75, 0.5)
+        # raise NotImplementedError
 
     # 友情池
     @staticmethod

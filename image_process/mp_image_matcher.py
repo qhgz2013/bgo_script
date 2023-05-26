@@ -75,6 +75,8 @@ def _worker_callback(rank: int, p: mp.Pipe):
                 if score < best_score:
                     best_key, best_value, best_score = image_key, image_value, score
             p.send((best_key, best_value, best_score))
+    except (EOFError, KeyboardInterrupt):
+        pass
     except Exception as e:
         logger.critical(f'Worker callback error: {e!r}', exc_info=True)
 

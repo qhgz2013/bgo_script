@@ -25,13 +25,22 @@ class FriendUIHandler(StateHandler):
 
     def __init__(self, env: ScriptEnv, forward_state: FgoState):
         super().__init__(env, forward_state)
-        if self._support_anchor is None:
-            resolution = self.env.detection_definitions.get_target_resolution()
-            self._support_anchor = image_process.resize(image_process.imread(
-                self.env.detection_definitions.get_request_support_ui_file()), resolution.width, resolution.height)
+        cls = type(self)
+        if cls._support_anchor is None:
+            cls._support_anchor = image_process.imread(self.env.detection_definitions.get_request_support_ui_file())
 
     def _is_in_requesting_friend_ui(self) -> bool:
         img = self._get_screenshot_impl()
+        if img.shape[0] != self._support_anchor.shape[0]:
+            raise ValueError(f'The height of anchor image {self._support_anchor.shape[0]} does not match the image '
+                             f'returned by capturer: {img.shape[0]}')
+        if img.shape[1] > self._support_anchor.shape[1]:
+            width_diff_half = (img.shape[1] - self._support_anchor.shape[1]) // 2
+            # for other resolutions with ratio > 16 / 9
+            img = img[:, width_diff_half:width_diff_half+self._support_anchor.shape[1], ...]
+        elif img.shape[1] < self._support_anchor.shape[1]:
+            # this situation should be handled by capturer (ratio < 16 / 9)
+            raise ValueError(f'{self.__class__.__name__} currently does not support image with shape {img.shape}')
         val = image_process.mean_gray_diff_err(image_process.resize(
             img, self._support_anchor.shape[1], self._support_anchor.shape[0]), self._support_anchor)
         logger.debug('DEBUG value friend_ui mean_gray_diff_err = %f' % val)
@@ -55,14 +64,16 @@ class ContinuousBattleHandler(StateHandler):
         super().__init__(env, forward_state_pos)
         self.forward_state_pos = forward_state_pos
         self.forward_state_neg = forward_state_neg
-        if self._anchor is None:
-            resolution = self.env.detection_definitions.get_target_resolution()
-            self._anchor = image_process.resize(image_process.imread(
-                self.env.detection_definitions.get_continuous_battle_ui_file()), resolution.width, resolution.height)
+        cls = type(self)
+        if cls._anchor is None:
+            cls._anchor = image_process.imread(
+                self.env.detection_definitions.get_continuous_battle_ui_file())
 
     def _is_in_continuous_battle_confirm_ui(self) -> bool:
         img = self._get_screenshot_impl()
-        v = image_process.mean_gray_diff_err(self._anchor, img)
+        rect = self.env.detection_definitions.get_continuous_battle_ui_rect()
+        img_in_rect = img[rect.y1:rect.y2, rect.x1:rect.x2, :]
+        v = image_process.mean_gray_diff_err(self._anchor, img_in_rect)
         logger.debug('DEBUG value: is_in_continuous_battle_confirm_ui mean_gray_diff_err = %f' % v)
         return v < 10  # TODO: parameterize
 

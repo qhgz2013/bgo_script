@@ -20,12 +20,12 @@ class BasicDetectionDefImpl(AbstractDetectionDef, metaclass=ABCMeta):
         return 0.98  # previous: 0.995
 
     @staticmethod
-    def get_attack_button_anchor_file() -> str:
-        return 'cv_data/attack_button.png'
+    def get_attack_button_anchor_file() -> List[str]:
+        return ['cv_data/attack_button_cn.png', 'cv_data/attack_button_en.png']
 
     @staticmethod
     def get_attack_button_diff_threshold() -> int:
-        return 10
+        return 28  # original: 10
 
     @staticmethod
     def get_support_scrollbar_gray_threshold() -> int:
@@ -105,7 +105,7 @@ class BasicDetectionDefImpl(AbstractDetectionDef, metaclass=ABCMeta):
 
     @staticmethod
     def get_battle_filter_pixel_threshold() -> int:
-        return 40
+        return 34  # previous: 40
 
     @staticmethod
     def get_battle_digit_threshold() -> int:

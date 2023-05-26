@@ -76,7 +76,7 @@ class SelectSupportHandler(StateHandler):
         sleep(1)  # since the game may lag for a while after getting response
         while True:
             sleep(0.5)
-            img = self._get_screenshot_impl()[..., :3]
+            img = self._get_screenshot_impl(precise_mode=True)[..., :3]
             support_range = self._split_support_image(img)
             svt_data = self.match_support_servant(img, support_range)
             for i in range(len(svt_data)):

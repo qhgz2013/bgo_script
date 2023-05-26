@@ -17,10 +17,9 @@ class EatAppleHandler(StateHandler):
 
     def __init__(self, env: ScriptEnv, forward_state: FgoState):
         super().__init__(env, forward_state)
-        resolution = self.env.detection_definitions.get_target_resolution()
-        if self._eat_apple_ui_anchor is None:
-            self._eat_apple_ui_anchor = image_process.resize(image_process.imread(
-                env.detection_definitions.get_eat_apple_ui_file()), resolution.width, resolution.height)
+        cls = type(self)
+        if cls._eat_apple_ui_anchor is None:
+            cls._eat_apple_ui_anchor = image_process.imread(self.env.detection_definitions.get_eat_apple_ui_file())
         self._y_mapper = {
             APRecoveryItemType.GoldApple: self.env.click_definitions.eat_gold_apple(),
             APRecoveryItemType.SilverApple: self.env.click_definitions.eat_silver_apple(),
@@ -56,6 +55,9 @@ class EatAppleHandler(StateHandler):
             return self.forward_state
 
     def is_in_eat_apple_ui(self, img: np.ndarray):
+        rect = self.env.detection_definitions.get_eat_apple_ui_rect()
+        img = img[rect.y1:rect.y2, rect.x1:rect.x2, :]
         v = image_process.mean_gray_diff_err(self._eat_apple_ui_anchor, img)
-        logger.debug('DEBUG value: mean_gray_diff_err = %f' % v)
-        return v < 3
+        threshold = 5  # TODO: change this hard-coded value
+        logger.debug(f'is_in_eat_apple_ui: diff: {v}, threshold: {threshold}')
+        return v < threshold

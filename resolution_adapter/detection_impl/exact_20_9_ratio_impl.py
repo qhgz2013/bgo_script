@@ -15,7 +15,7 @@ class Exact20x9RatioDetectionDefImpl(BasicDetectionDefImpl):
     @staticmethod
     def get_ap_bar_rect() -> Rect:
         # return Rect(190, 690, 320, 695)
-        raise NotImplementedError
+        return Rect(270, 647, 400, 652)
 
     @staticmethod
     def get_fufu_rect() -> Rect:
@@ -23,85 +23,93 @@ class Exact20x9RatioDetectionDefImpl(BasicDetectionDefImpl):
 
     @staticmethod
     def get_attack_button_rect() -> Rect:
-        # return Rect(1042, 515, 1227, 700)
-        raise NotImplementedError
+        # return Rect(1042, 515, 1227, 700)  # 185x185
+        return Rect(1277, 515, 1462, 700)  # 185x185
 
     @staticmethod
     def get_support_scrollbar_rect() -> Rect:
         # return Rect(1245, 180, 1265, 700)
-        raise NotImplementedError
+        return Rect(1480, 180, 1500, 700)
 
     @staticmethod
     def get_support_detection_x() -> Tuple[int, int]:
         # return 300, 1000
-        raise NotImplementedError
+        return 500, 1200
 
     @staticmethod
     def get_support_detection_y_len_threshold_range() -> Tuple[int, int]:
-        # return 176, 181
-        raise NotImplementedError
+        return 176, 181
+        # raise NotImplementedError
 
     @staticmethod
     def get_support_detection_servant_x() -> Tuple[int, int]:
         # return 48, 212
-        raise NotImplementedError
+        return 228, 392
 
     @staticmethod
     def get_support_detection_servant_img_size() -> Tuple[int, int]:
-        # return 128, 128
-        raise NotImplementedError
+        return 128, 128
+        # raise NotImplementedError
 
     @staticmethod
     def get_support_detection_craft_essence_img_size() -> Tuple[int, int]:
-        # return 68, 150  # the original size is 68x150, but cropped to 40x150 in support selection stage
-        raise NotImplementedError
+        return 68, 150  # the original size is 68x150, but cropped to 40x150 in support selection stage
+        # raise NotImplementedError
 
     @staticmethod
     def get_support_detection_craft_essence_crop_height() -> int:
-        # return 40
-        raise NotImplementedError
+        return 40
+        # raise NotImplementedError
 
     @staticmethod
     def get_support_detection_servant_split_y() -> int:
-        # return 102
-        raise NotImplementedError
+        return 102
+        # raise NotImplementedError
 
     @staticmethod
     def get_support_craft_essence_max_break_rect() -> Rect:
-        # return Rect(134, -24, 154, -4)
-        raise NotImplementedError
+        return Rect(134, -24, 154, -4)
+        # raise NotImplementedError
 
     @staticmethod
     def get_support_friend_detect_rect() -> Rect:
-        # return Rect(360, 130, 600, 155)
-        raise NotImplementedError
+        return Rect(360, 130, 600, 155)
+        # raise NotImplementedError
 
     @staticmethod
     def get_support_friend_ratio_threshold() -> float:
-        # return 5 / 255
-        raise NotImplementedError
+        return 5 / 255
+        # raise NotImplementedError
 
     @staticmethod
     def get_support_skill_box_rect() -> List[Rect]:
         # 助战技能框位置，已更新至被动技能layout
         # 35px, 10px margin
         # return [Rect(837, 135, 872, 170), Rect(882, 135, 917, 170), Rect(927, 135, 962, 170)]
-        raise NotImplementedError
+        return [Rect(1018, 135, 1053, 170), Rect(1063, 135, 1098, 170), Rect(1108, 135, 1143, 170)]
 
     @staticmethod
     def get_exit_quest_rect() -> Rect:
         # return Rect(55, 155, 1225, 545)
-        raise NotImplementedError
+        return Rect(215, 155, 1385, 545)
 
     @staticmethod
     def get_battle_digit_rect() -> Rect:
         # return Rect(860, 10, 940, 40)
-        raise NotImplementedError
+        return Rect(1150, 10, 1230, 40)
 
     @staticmethod
     def get_support_refresh_refused_detection_rect() -> Rect:
         # return Rect(550, 540, 750, 580)
-        raise NotImplementedError
+        return Rect(700, 540, 900, 580)
+
+    @staticmethod
+    def get_eat_apple_ui_rect() -> Rect:
+        return Rect(310, 40, 1290, 650)
+
+    @staticmethod
+    def get_continuous_battle_ui_rect() -> Rect:
+        return Rect(350, 90, 1250, 630)
 
     @staticmethod
     def get_fp_pool_ui_rect() -> Rect:

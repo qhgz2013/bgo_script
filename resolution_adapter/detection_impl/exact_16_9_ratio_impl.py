@@ -88,6 +88,14 @@ class Exact16x9RatioDetectionDefImpl(BasicDetectionDefImpl):
         return Rect(550, 540, 750, 580)
 
     @staticmethod
+    def get_eat_apple_ui_rect() -> Rect:
+        return Rect(150, 40, 1130, 650)
+
+    @staticmethod
+    def get_continuous_battle_ui_rect() -> Rect:
+        return Rect(190, 90, 1090, 630)
+
+    @staticmethod
     def get_fp_pool_ui_rect() -> Rect:
         return Rect(695, 480, 955, 580)
 

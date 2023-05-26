@@ -63,7 +63,7 @@ class AbstractDetectionDef(metaclass=ABCMeta):
         raise NotImplementedError
 
     @staticmethod
-    def get_attack_button_anchor_file() -> str:
+    def get_attack_button_anchor_file() -> List[str]:
         raise NotImplementedError
 
     # 助战的scrollbar
@@ -256,9 +256,19 @@ class AbstractDetectionDef(metaclass=ABCMeta):
     def get_eat_apple_ui_file() -> str:
         raise NotImplementedError
 
+    @staticmethod
+    @plot_rect
+    def get_eat_apple_ui_rect() -> Rect:
+        raise NotImplementedError
+
     # 连续出击界面识别
     @staticmethod
     def get_continuous_battle_ui_file() -> str:
+        raise NotImplementedError
+
+    @staticmethod
+    @plot_rect
+    def get_continuous_battle_ui_rect() -> Rect:
         raise NotImplementedError
 
     # 友情池的十连按钮（非每日首次）识别
