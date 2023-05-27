@@ -105,7 +105,7 @@ class BasicDetectionDefImpl(AbstractDetectionDef, metaclass=ABCMeta):
 
     @staticmethod
     def get_battle_filter_pixel_threshold() -> int:
-        return 34  # previous: 40
+        return 25  # previous: 40
 
     @staticmethod
     def get_battle_digit_threshold() -> int:

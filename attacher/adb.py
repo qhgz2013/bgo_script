@@ -303,7 +303,11 @@ class ADBScreenrecordCapturerThreaded(ADBScreenCapturer):
         self.kill()
 
     def _handle_decoder_output(self, decode_stream: IO[bytes]):
-        solution = self._resolution or self._get_solution_impl()
+        try:
+            solution = self._resolution or self._get_solution_impl()
+        except RuntimeError:
+            # exception raised after adb shell process exited
+            return
         expected_buffer_size = solution.width * solution.height * 3  # RGB format, raw stream
         frame_cnt = 0
         first_frame_time = 0

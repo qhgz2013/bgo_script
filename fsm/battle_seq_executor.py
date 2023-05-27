@@ -263,7 +263,10 @@ class BattleSequenceExecutor:
         servant_pos = self._lookup_servant_position(servant_id)
         assert 0 <= servant_pos < 3, 'Could not find servant in current team'
         assert enemy_location == ENEMY_LOCATION_EMPTY or 0 <= enemy_location < 3, 'Invalid enemy location'
-        assert len(self._selected_cmd_cards) < 3, 'Reached attack limitation (3 attacks per turn)'
+        # assert len(self._selected_cmd_cards) < 3, 'Reached attack limitation (3 attacks per turn)'
+        if len(self._selected_cmd_cards) >= 3:
+            logger.warning(f'Attack command card limit exceeded (3 attacks per turn, current: '
+                           f'{len(self._selected_cmd_cards)+1}), this may cause unknown effect')
         # 未出卡前指定敌方单体
         self._enter_attack_mode()
         self._select_enemy(enemy_location)
@@ -285,7 +288,10 @@ class BattleSequenceExecutor:
     def attack(self, command_card_index: int, enemy_location: int = ENEMY_LOCATION_EMPTY) -> 'BattleSequenceExecutor':
         assert 0 <= command_card_index < 5, 'Invalid command card index'
         assert enemy_location == ENEMY_LOCATION_EMPTY or 0 <= enemy_location < 3, 'Invalid enemy location'
-        assert len(self._selected_cmd_cards) < 3, 'Reached attack limitation (3 attacks per turn)'
+        # assert len(self._selected_cmd_cards) < 3, 'Reached attack limitation (3 attacks per turn)'
+        if len(self._selected_cmd_cards) >= 3:
+            logger.warning(f'Attack command card limit exceeded (3 attacks per turn, current: '
+                           f'{len(self._selected_cmd_cards)+1}), this may cause unknown effect')
         self._enter_attack_mode()
         self._select_enemy(enemy_location)
         # 选卡

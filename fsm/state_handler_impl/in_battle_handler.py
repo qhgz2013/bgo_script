@@ -91,27 +91,28 @@ class BattleLoopAttackHandler(StateHandler):
         rects_filtered = [x[1] for x in sorted(zip(cx, rects), key=lambda t: t[0])
                           if x[1].associated_pixels.shape[0] > pixel_threshold]
         logger.debug(f'Digit rects: {rects_filtered} (before filter: {rects})')
-        if len(rects) != 3:
-            logger.warning(f'Detected {len(rects)} rects, it is incorrect')
+        if len(rects_filtered) != 3:
+            logger.warning(f'Detected {len(rects_filtered)} rects, it is incorrect')
         # TODO [PRIOR: low]: add rough shape check
-        assert len(rects) == 3, 'Current implementation must meet that # of battles less than 10,' \
-                                ' or maybe recognition corrupted'
-        return self._digit_recognizer.recognize(rects[0].get_image_segment()), \
-            self._digit_recognizer.recognize(rects[-1].get_image_segment())
+        assert len(rects_filtered) == 3, 'Current implementation must meet that # of battles less than 10,' \
+                                         ' or maybe recognition corrupted'
+        return self._digit_recognizer.recognize(rects_filtered[0].get_image_segment()), \
+            self._digit_recognizer.recognize(rects_filtered[-1].get_image_segment())
 
     def run_and_transit_state(self) -> FgoState:
         var = self.env.runtime_var_store
         if not var['SKIP_QUEST_INFO_DETECTION']:
             img = self._get_screenshot_impl()[..., :3]
-            cur_battle, max_battle, e = None, None, None
+            cur_battle, max_battle, ex = None, None, None
             for _ in range(5):
                 try:
                     cur_battle, max_battle = self._get_current_battle(img)
                     break
                 except AssertionError as e:
+                    ex = e
                     sleep(0.2)  # failed in some time, let's have another retry
             if cur_battle is None:
-                raise ValueError('Could not determine battle status') from e
+                raise ValueError('Could not determine battle status') from ex
             if cur_battle != var['CURRENT_BATTLE']:
                 var['TURN'] = 1  # reset turn
             else:

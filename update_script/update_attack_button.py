@@ -1,4 +1,4 @@
-from attacher import MumuAttacher
+from attacher import ADBScreenCapturer
 from skimage.io import imsave
 import numpy as np
 import image_process
@@ -19,7 +19,7 @@ def _generate_attack_button_mask(button_rect: Rect) -> np.ndarray:
 
 
 def main():
-    attacher = MumuAttacher()
+    attacher = ADBScreenCapturer()
     # MAKE SURE YOU'RE IN BATTLE
     img = attacher.get_screenshot()
     detection_defs = resolution_adapter.DetectionDefFactory.get_detection_def(Resolution(img.shape[0], img.shape[1]))
@@ -27,10 +27,13 @@ def main():
     if target_resolution is not None:
         img = image_process.resize(img, target_resolution.width, target_resolution.height)
     button_rect = detection_defs.get_attack_button_rect()
-    battle_button = img[button_rect.y1:button_rect.y2, button_rect.x1:button_rect.x2, :]
+    battle_button = img[button_rect.y1:button_rect.y2, button_rect.x1:button_rect.x2, :].copy()
     mask = _generate_attack_button_mask(button_rect)
-    battle_button = np.concatenate([battle_button, np.expand_dims(mask, 2)], 2)
-    imsave('../cv_data/attack_button.png', battle_button)
+    if battle_button.shape[-1] == 3:
+        battle_button = np.concatenate([battle_button, np.expand_dims(mask, 2)], 2)
+    else:
+        battle_button[..., -1] = mask
+    imsave('../cv_data/attack_button_en.png', battle_button)
 
 
 if __name__ == '__main__':

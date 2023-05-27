@@ -15,7 +15,9 @@
 
 适用人群：适合有一定编程经验的人使用
 
-本脚本自动执行的操作为：
+## 刷本
+
+本脚本**刷本时**自动执行的操作为：
 - 点击第一个本（不要进还没首次通关的本）
 ![](asset/1.jpg)
 - 啃金银铜彩苹果（AP不够时根据设置执行）
@@ -28,27 +30,18 @@
 - 自动出本，跳过好友请求
 - 使用连续出击则返回第3步，否则返回第1步（由设置决定）
 
-本脚本的全局设置在`config.py`里，其中：
+本脚本的战斗逻辑和队伍设置在`config.py`里，其中`BattleController`中的`__call__`负责决定每T战斗需要执行的操作，包括使用技能，放宝具，选卡。`TeamConfig`为队伍设置，由自己的从者设置`ServantConfig`以及助战从者设置`SupportServantConfig`的list组成。
 
-`TmpController`中的`__call__`负责决定每T战斗需要执行的操作，包括使用技能，放宝具，选卡。
-
-`ScriptConfig`为全局设置，初始化参数如下：  
-`eat_apple_type`决定是否吃苹果以及吃的苹果类型，若不吃苹果，则会在AP不足时退出执行；  
-`battle_controller`是负责执行自动战斗操作的类；  
-`team_config`为队伍设置（未实现配队功能），初始化的参数为队伍的顺序，目前仅作选助战用；  
-`max_ap`可选的最大AP值；  
-`enable_continuous_battle_feature`为是否使用连续出击，默认true，就算是否也只是退到选关界面再进去而已。
-
-## 助战从者配置 `SupportServantConfig`
+### 助战从者配置 `SupportServantConfig`
 
 `svt_id`指定助战从者ID  
 `skill_requirement`为一个list，指定三个技能的等级，`None`视为某个技能等级不做要求；  
-`craft_essence_cfg`为礼装配置，可由list指定多个配置。该参数保证检测到助战的礼装符合其中一个配置；  
-`friend_only`为bool，指定是否只选择好友助战（默认false）。
+`craft_essence_cfg`为礼装配置；  
+`friend_only`为bool，指定是否只选择好友助战（默认false）_（注：由于日服助战宝具不再限制为好友范围，该参数将会在国服实装后移除）_。
 
 `SupportCraftEssenceConfig`共有两个参数，一个是礼装ID，另外一个是是否要求礼装满破。
 
-## BattleController的API
+### BattleController API
 
 全部可以直接`self.`调用，详细可以见`fsm/battle_seq_executor.py`下的`BattleSequenceExecutor`类的所有公开方法。主要包含：
 - 常量：
@@ -66,25 +59,30 @@
     - `attack(command_card_index: int, enemy_location: int = ENEMY_LOCATION_EMPTY)`：选指令卡，该操作执行在所有技能点完之后，`command_card_index`为指令卡的位置，从0开始从左计数，最左边的卡为0，最右边为4，其他参数同上
     - `use_clothes_skill(skill_index: int, to_servant_id: Union[int, Tuple[int, int]] = SERVANT_ID_EMPTY, enemy_location: int = ENEMY_LOCATION_EMPTY)`：使用衣服技能，参数同上。`to_servant_id`在接受到int为参数（如`to_servant_id=2`时），将技能交给指定的从者，而在接受2个int为参数时（如`to_servant_id=(1,2)`），则视为使用换人（唯一一个特殊用法），并且自动交换队伍顺序，不需要手动调用`order_change`
 
+## 抽友情池&搓丸子
+
+在抽友情池前，需要手动将界面转到友情池抽卡界面上。本脚本在每次抽池前都会检测确保当前使用的是友情点而不是石头（手动狗头）。
+
+本脚本**抽友情池时**自动执行的操作为：
+- 抽友情池，直到从者/礼装/纹章中的其中一种材料溢出；
+- 礼装溢出时跳转到礼装强化界面，执行自动搓丸子（丸子的选择条件为2星及以下的礼装，丸子选定后会自动上锁；强化材料为**未上锁**的3星及以下的全部礼装以及4星的**经验值**礼装）
+- 在礼装强化完成（找不到强化素材）后自动返回友情池界面，继续抽友情池；
+- 从者或纹章溢出时自动退出。
+
+
 # 环境需求
 
 ## Python
 
-Python 3.6 +
+Python 3.7+
 
 其他依赖包：
 - `numpy`
 - `pillow`
 - `scipy`
-- `scikit-image`
-- `opencv-python`（推荐使用4.4以后的版本，包含SIFT模块）
-
-使用OpenCV时，需要确保其中一个生效：
-```python
-import cv2
-cv2.SIFT.create()  # OpenCV 4.4.x
-cv2.xfeatures2d_SIFT.create()  # OpenCV 3.x
-```
+- `requests`
+- `scikit-image`（可选）
+- `opencv-python`（可选）
 
 ## 模拟器需求
 
@@ -98,9 +96,14 @@ cv2.xfeatures2d_SIFT.create()  # OpenCV 3.x
 
 ![](asset/5.jpg)
 
+目前手机端兼容的宽高比为20:9以及16:9。
+
 ## 使用方式
 
-1. 下载并解压数据库文件（包含从者、礼装图片的数据）[fgo_new.db](https://cdn.zhouxuebin.club/data/2020/12/fgo_new.zip)到`cv_data`文件夹中。
+1. 更新FGO从者/礼装数据库
+```bash
+python -m update_script.crawler_main_atlas_db
+```
 2. 运行脚本：默认使用Mumu模拟器，执行完整的进本
 ```bash
 python main.py
@@ -113,7 +116,7 @@ python main.py mumu
 ```bash
 python main.py adb
 ```
-若需要修改执行流程，则通过`--schemas`修改（如默认的`full`实现的是重复刷本，`support`仅自动选择助战，`battle`仅包含进本后的自动化操作），如：
+若需要修改执行流程，则通过`--schemas`修改（如默认的`full`实现的是重复刷本，`support`仅自动选择助战，`battle`仅包含进本后的自动化操作，`friend_point`负责抽友情池），如：
 ```bash
 python main.py mumu --schemas support
 ```
@@ -126,15 +129,9 @@ python main.py mumu --schemas support
 - [x] 识别助战各技能等级
 - [x] 识别助战为好友/非好友
 - [ ] 自动配队
-
-# 其他说明
-
-需要更新从者/礼装数据库时，运行：
-```bash
-python update_script/crawler_main.py -o cv_data/fgo_new.db
-```
-需要安装的额外依赖包有：`requests`，`beautifulsoup4`，`pandas`
-
+- [x] 日服&多分辨率支持
+- [x] 搓丸子
+- [ ] 卖低星从者
 
 <!--
 # ~~Special Thanks~~
