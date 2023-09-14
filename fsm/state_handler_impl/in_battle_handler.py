@@ -8,6 +8,7 @@ import logging
 from util import DigitRecognizer
 from bgo_game import ScriptEnv
 from fsm.battle_seq_executor import BattleSequenceExecutor
+from time import time
 
 logger = logging.getLogger('bgo_script.fsm')
 
@@ -37,6 +38,9 @@ class WaitAttackOrExitQuestHandler(StateHandler):
     def run_and_transit_state(self) -> FgoState:
         blank_threshold = self.env.detection_definitions.get_in_battle_blank_screen_threshold()
         blank_ratio = self.env.detection_definitions.get_in_battle_blank_screen_ratio_threshold()
+        last_click_time = 0
+        skip_click = self.env.click_definitions.skill_speedup()  # still use skill speedup position here
+        var = self.env.runtime_var_store
         while True:
             sleep(0.2)
             img = self._get_screenshot_impl()[..., :3]
@@ -50,9 +54,12 @@ class WaitAttackOrExitQuestHandler(StateHandler):
             if self._can_attack(gray):
                 return FgoState.STATE_BATTLE_LOOP_ATK
             if self._is_exit_quest_scene(img):
-                self.env.runtime_var_store['BATTLE_LOOP_NEXT_STATE'] = FgoState.STATE_EXIT_QUEST
-                self.env.runtime_var_store['SGN_BATTLE_STATE_CHANGED'].set()
+                var['BATTLE_LOOP_NEXT_STATE'] = FgoState.STATE_EXIT_QUEST
+                var['SGN_BATTLE_STATE_CHANGED'].set()
                 return FgoState.STATE_EXIT_QUEST
+            if var['CURRENT_BATTLE'] < var['MAX_BATTLE'] and time() - last_click_time > 1:  # todo: hard-coded
+                last_click_time = time()
+                self.env.attacher.send_click(skip_click.x, skip_click.y)
 
     def _can_attack(self, img: np.ndarray) -> bool:
         button_rect = self.env.detection_definitions.get_attack_button_rect()
@@ -102,15 +109,15 @@ class BattleLoopAttackHandler(StateHandler):
     def run_and_transit_state(self) -> FgoState:
         var = self.env.runtime_var_store
         if not var['SKIP_QUEST_INFO_DETECTION']:
-            img = self._get_screenshot_impl()[..., :3]
             cur_battle, max_battle, ex = None, None, None
             for _ in range(5):
                 try:
+                    img = self._get_screenshot_impl()[..., :3]
                     cur_battle, max_battle = self._get_current_battle(img)
                     break
                 except AssertionError as e:
                     ex = e
-                    sleep(0.2)  # failed in some time, let's have another retry
+                    sleep(0.5)  # failed in some time, let's have another retry
             if cur_battle is None:
                 raise ValueError('Could not determine battle status') from ex
             if cur_battle != var['CURRENT_BATTLE']:

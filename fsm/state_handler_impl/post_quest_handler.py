@@ -44,7 +44,7 @@ class FriendUIHandler(StateHandler):
         val = image_process.mean_gray_diff_err(image_process.resize(
             img, self._support_anchor.shape[1], self._support_anchor.shape[0]), self._support_anchor)
         logger.debug('DEBUG value friend_ui mean_gray_diff_err = %f' % val)
-        return val < 15  # 10 is not enough: 10.914105
+        return val < 18  # 10 is not enough: 10.914105
 
     def run_and_transit_state(self) -> FgoState:
         # 检查并跳过发送好友申请界面（用于选择非好友助战但好友未满时的情况）
