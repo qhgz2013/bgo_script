@@ -48,6 +48,9 @@ class CheckFriendPointGachaUIHandler(StateHandler):
             is_free = True
             if diff > threshold:
                 logger.error('Friend point gacha UI not detected.')
+                from PIL import Image
+                from time import time
+                Image.fromarray(img_in_anchor).save(f'debug/{time()}.png')
                 return FgoState.STATE_ERROR
 
         # step 2: double-check friend point is active (highlighted at the top of summon UI)

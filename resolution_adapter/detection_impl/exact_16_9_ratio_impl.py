@@ -105,7 +105,7 @@ class Exact16x9RatioDetectionDefImpl(BasicDetectionDefImpl):
 
     @staticmethod
     def get_fp_active_rect() -> Rect:
-        return Rect(700, 30, 840, 55)
+        return Rect(820, 30, 960, 55)
 
     @staticmethod
     def get_fp_pool_gacha_confirm_rect() -> Rect:
@@ -113,7 +113,7 @@ class Exact16x9RatioDetectionDefImpl(BasicDetectionDefImpl):
 
     @staticmethod
     def get_fp_pool_gacha_skip_check_button_rect() -> Rect:
-        return Rect(640, 10, 700, 70)
+        return Rect(754, 10, 814, 70)
 
     @staticmethod
     def get_fp_item_overflow_rect() -> Rect:

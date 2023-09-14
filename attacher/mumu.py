@@ -20,9 +20,11 @@ __all__ = ['WinAPIScreenCapturer', 'MumuScreenCapturer', 'MumuADBServer', 'MumuA
 
 logger = getLogger('bgo_script.attacher')
 
+_selected_locate_func = None
 
-def locate_mumu_simulator_handle() -> Tuple[int, int]:
-    """Locate Mumu simulator window, returns a tuple of (host_handle, player_handle)."""
+
+def _locate_mumu_6_simulator_handle() -> Tuple[int, int]:
+    """Locate Mumu 6 simulator window, returns a tuple of (host_handle, player_handle)."""
     # SPY++:
     # Qt5QWindowIcon, MuMu模拟器 or Game name
     # |- Qt5QWindowIcon, NemuPlayer
@@ -37,8 +39,43 @@ def locate_mumu_simulator_handle() -> Tuple[int, int]:
             host_handle = win32gui.FindWindowEx(0, host_handle, 'Qt5QWindowIcon', None)
     if player_handle <= 0:
         raise RuntimeError('Could not find child handle of Mumu simulator: NemuPlayer')
-    logger.info(f'Located Mumu simulator handle: host: {host_handle:#x}, player: {player_handle:#x}')
+    logger.info(f'Located Mumu 6 simulator handle: host: {host_handle:#x}, player: {player_handle:#x}')
     return host_handle, player_handle
+
+
+def _locate_mumu_12_simulator_handle() -> Tuple[int, int]:
+    """Locate Mumu 12 simulator window, returns a tuple of (host_handle, player_handle)."""
+    # SPY++:
+    # Qt5156QWindowIcon, MuMu模拟器 or Game name
+    # |- Qt5156QWindowIcon, MuMuPlayer
+    #    |- nemuwin, nemudisplay
+    host_handle = win32gui.FindWindow('Qt5156QWindowIcon', None)
+    player_handle = 0
+    while host_handle > 0:
+        player_handle = win32gui.FindWindowEx(host_handle, 0, 'Qt5156QWindowIcon', 'MuMuPlayer')
+        if player_handle > 0:
+            break
+        else:
+            host_handle = win32gui.FindWindowEx(0, host_handle, 'Qt5156QWindowIcon', None)
+    if player_handle <= 0:
+        raise RuntimeError('Could not find child handle of Mumu simulator: NemuPlayer')
+    logger.info(f'Located Mumu 12 simulator handle: host: {host_handle:#x}, player: {player_handle:#x}')
+    return host_handle, player_handle
+
+
+def locate_mumu_simulator_handle() -> Tuple[int, int]:
+    """Locate Mumu simulator window (version invariant)"""
+    global _selected_locate_func
+    if _selected_locate_func is not None:
+        return _selected_locate_func()
+    try:
+        ret_val = _locate_mumu_12_simulator_handle()
+        _selected_locate_func = _locate_mumu_12_simulator_handle
+    except RuntimeError:
+        ret_val = _locate_mumu_6_simulator_handle()
+        _selected_locate_func = _locate_mumu_6_simulator_handle
+    logger.debug(f'Selected locate function: {_selected_locate_func}')
+    return ret_val
 
 
 def get_screenshot_winapi_impl(handle: int) -> np.ndarray:
