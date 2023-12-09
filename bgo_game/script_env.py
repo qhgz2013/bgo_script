@@ -6,6 +6,7 @@ from logging import getLogger
 from resolution_adapter import DetectionDefFactory, ClickDefFactory
 import importlib
 from attacher import AttacherBase, ScreenCapturer
+from .compact_option import CompactOption
 
 __all__ = ['ScriptEnv']
 
@@ -20,7 +21,9 @@ class ScriptEnv(metaclass=SingletonMeta):
                  anti_detection_cfg: Optional[AntiDetectionConfig] = None,
                  ap_recovery_item_type: APRecoveryItemType = APRecoveryItemType.DontEatMyApple,
                  enable_continuous_battle: bool = True,
-                 *, controller_import: str = 'config', team_config_import: str = 'config'):
+                 *, controller_import: str = 'config', team_config_import: str = 'config',
+                 laplace_team_data_cache_dir: str = 'laplace_cache',
+                 compact_option: Optional[CompactOption] = None):
         if isinstance(attacher, str):
             logger.info(f'Instantiating attacher {attacher}')
             attacher_cls = AttacherRegistry.get_handler(attacher)
@@ -86,3 +89,8 @@ class ScriptEnv(metaclass=SingletonMeta):
         self.runtime_var_store = {}
         self.ap_recovery_item_type = ap_recovery_item_type
         self.enable_continuous_battle = enable_continuous_battle
+        self.laplace_team_data_cache_dir = laplace_team_data_cache_dir
+        if compact_option is None:
+            compact_option = CompactOption()
+        self.compact_option = compact_option
+        self.detection_definitions.compact_option = compact_option

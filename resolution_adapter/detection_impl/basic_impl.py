@@ -113,7 +113,7 @@ class BasicDetectionDefImpl(AbstractDetectionDef, metaclass=ABCMeta):
 
     @staticmethod
     def get_support_refresh_refused_detection_s_threshold() -> int:
-        return 5
+        return 15  # previous: 5
 
     @staticmethod
     def get_request_support_ui_file() -> str:

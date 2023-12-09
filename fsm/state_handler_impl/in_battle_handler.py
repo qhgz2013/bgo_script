@@ -17,7 +17,7 @@ __all__ = ['EnterQuestHandler', 'WaitAttackOrExitQuestHandler', 'BattleLoopAttac
 
 class EnterQuestHandler(StateHandler):
     def run_and_transit_state(self) -> FgoState:
-        executor = BattleSequenceExecutor(self.env, self.env.runtime_var_store)
+        executor = BattleSequenceExecutor(self.env)
         self.env.runtime_var_store['EXECUTOR_INSTANCE'] = executor
         return WaitFufuStateHandler(self.env, self.forward_state).run_and_transit_state()
 

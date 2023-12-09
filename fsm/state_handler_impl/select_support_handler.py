@@ -206,8 +206,10 @@ class SelectSupportHandler(StateHandler):
             # Check clickable
             img = self._get_screenshot_impl()
             img = image_process.rgb_to_hsv(img[..., :3])[refresh_refused_rect.y1:refresh_refused_rect.y2,
-                                                         refresh_refused_rect.x1:refresh_refused_rect.x2, 1]
-            if np.mean(img) < self.env.detection_definitions.get_support_refresh_refused_detection_s_threshold():
+                                                         refresh_refused_rect.x1:refresh_refused_rect.x2]
+            val = img.astype(np.float32)
+            val = val[..., 1] * (val[..., 2] / 255.0)  # also weighted by brightness
+            if np.mean(val) < self.env.detection_definitions.get_support_refresh_refused_detection_s_threshold():
                 self.env.attacher.send_click(refresh_refused_confirm.x, refresh_refused_confirm.y)
                 logger.info('Could not refresh support temporarily, retry in 5 secs')
                 sleep(5)

@@ -1,7 +1,7 @@
 from ..fgo_state import FgoState
 from ..state_handler import StateHandler, WaitFufuStateHandler
 from bgo_game import ScriptEnv
-from time import sleep
+from time import sleep, time
 from logging import getLogger
 import image_process
 import numpy as np
@@ -71,49 +71,53 @@ class FriendPointGachaConfirmHandler(StateHandler):
     _anchor_file = None
     _fp_item_overflow_file = None
 
-    def __init__(self, env: ScriptEnv, forward_state: FgoState):
+    def __init__(self, env: ScriptEnv, forward_state: FgoState, max_wait_secs: float = 3.0):
         super(FriendPointGachaConfirmHandler, self).__init__(env, forward_state)
         if self._anchor_file is None:
             self._anchor_file = image_process.imread(self.env.detection_definitions.get_fp_pool_gacha_confirm_file())
         if self._fp_item_overflow_file is None:
             self._fp_item_overflow_file = \
                 image_process.imread(self.env.detection_definitions.get_fp_item_overflow_file())
+        self.max_wait_secs = max_wait_secs
 
     def run_and_transit_state(self) -> FgoState:
         sleep(0.3)
         img = self._get_screenshot_impl()
         anchor_rect = self.env.detection_definitions.get_fp_pool_gacha_confirm_rect()
-        img_in_anchor = img[anchor_rect.y1:anchor_rect.y2, anchor_rect.x1:anchor_rect.x2, :]
-        diff = image_process.mean_gray_diff_err(img_in_anchor, self._anchor_file)
         threshold = self.env.detection_definitions.get_fp_pool_gacha_confirm_diff_threshold()
-        logger.debug(f'fp_pool_gacha_confirm_diff: {diff}, threshold: {threshold}')
-        if diff > threshold:
-            # check if item overflow
-            overflow_rect = self.env.detection_definitions.get_fp_item_overflow_rect()
-            img_in_anchor = img[overflow_rect.y1:overflow_rect.y2, overflow_rect.x1:overflow_rect.x2, :]
-            diff = image_process.mean_gray_diff_err(img_in_anchor, self._fp_item_overflow_file)
-            logger.debug(f'fp_item_overflow_diff: {diff}, threshold: {threshold}')
-            # from PIL import Image
-            # from time import time
-            # Image.fromarray(img_in_anchor).save(f'debug/{time()}.png')
+        loop_start = time()
+        while time() - loop_start < self.max_wait_secs:
+            img_in_anchor = img[anchor_rect.y1:anchor_rect.y2, anchor_rect.x1:anchor_rect.x2, :]
+            diff = image_process.mean_gray_diff_err(img_in_anchor, self._anchor_file)
+            logger.debug(f'fp_pool_gacha_confirm_diff: {diff}, threshold: {threshold}')
             if diff > threshold:
-                logger.error('Friend point gacha confirm UI check failed')
-                # TODO: 改成loop形式，超过多久还没出现就报错
-                return FgoState.STATE_ERROR
-            else:
-                return FgoState.STATE_FP_GACHA_ITEM_OVERFLOW
+                # check if item overflow
+                overflow_rect = self.env.detection_definitions.get_fp_item_overflow_rect()
+                img_in_anchor = img[overflow_rect.y1:overflow_rect.y2, overflow_rect.x1:overflow_rect.x2, :]
+                diff = image_process.mean_gray_diff_err(img_in_anchor, self._fp_item_overflow_file)
+                logger.debug(f'fp_item_overflow_diff: {diff}, threshold: {threshold}')
+                # from PIL import Image
+                # Image.fromarray(img_in_anchor).save(f'debug/{time()}.png')
+                if diff > threshold:
+                    logger.warning('Friend point gacha confirm UI check failed, wait for retry')
+                    sleep(0.2)
+                    continue
+                else:
+                    return FgoState.STATE_FP_GACHA_ITEM_OVERFLOW
 
-        # click confirm button
-        button = self.env.click_definitions.fp_pool_gacha_confirm()
-        self.env.attacher.send_click(button.x, button.y)
+            # click confirm button
+            button = self.env.click_definitions.fp_pool_gacha_confirm()
+            self.env.attacher.send_click(button.x, button.y)
 
-        # wait 1.5s
-        sleep(1.5)
+            # wait 1.5s
+            sleep(1.5)
 
-        # wait fufu
-        wait_fufu_handler = WaitFufuStateHandler(self.env, self.forward_state)
-        return wait_fufu_handler.run_and_transit_state()
+            # wait fufu
+            wait_fufu_handler = WaitFufuStateHandler(self.env, self.forward_state)
+            return wait_fufu_handler.run_and_transit_state()
 
+        logger.error('Friend point gacha confirm UI check failed, and timeout exceeded')
+        return FgoState.STATE_ERROR
 
 class FriendPointGachaSkipHandler(StateHandler):
     _anchor_file = None

@@ -202,7 +202,7 @@ class ForwardHandler(logging.Handler):
             self.forward_handler.handle(record)
 
 
-default_formatter_str = '[%(asctime)s] [%(process)d] [%(levelname)s] [%(name)s] (%(filename)s:%(lineno)d) %(message)s'
+default_formatter_str = '[%(asctime)s][%(process)d][%(levelname)s][%(name)s](%(filename)s:%(lineno)d) %(message)s'
 LOGGER_CONFIG_DICT = Optional[Dict[Optional[str], Optional[int]]]
 LOGGING_SERVER_PORT_KEY = '_LOGGING_SERVER_PORT'
 

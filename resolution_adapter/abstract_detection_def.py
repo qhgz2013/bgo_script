@@ -2,6 +2,8 @@ from abc import ABCMeta
 from .resolution_match_rule import Resolution, Rect
 from .plot_util import plot_rect
 from typing import *
+if TYPE_CHECKING:
+    from bgo_game import CompactOption
 
 __all__ = ['AbstractDetectionDef']
 
@@ -15,7 +17,8 @@ except NameError:
 
 
 class AbstractDetectionDef(metaclass=ABCMeta):
-    __version__ = '2022.11.06'
+    __version__ = '2023.12.09'
+    compact_option = None  # type: Optional[CompactOption]
 
     @classmethod
     @final

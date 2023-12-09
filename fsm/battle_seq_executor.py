@@ -205,10 +205,10 @@ class BattleSequenceExecutor:
             self._submit_click_event(0.5, (enemy_pos.x, enemy_pos.y))
             self._last_selected_enemy = enemy_location
 
-    def remove_servant(self, servant_id: int) -> 'BattleSequenceExecutor':
+    def remove_servant(self, servant_id: int, *, skip_lookup: bool = False) -> 'BattleSequenceExecutor':
         # removes the servant like some kind of archer, which dead after NP
         # for SUPPORT SERVANT, refers to SERVANT_ID_SUPPORT
-        servant_pos = self._lookup_servant_position(servant_id)
+        servant_pos = servant_id if skip_lookup else self._lookup_servant_position(servant_id)
         assert servant_pos >= 0, 'Could not find servant in current team'
         if len(self._servants) <= 3:
             self._servants.remove(servant_id)
@@ -217,12 +217,12 @@ class BattleSequenceExecutor:
             self._servants = self._servants[:3] + self._servants[4:]
         return self
 
-    def remove_support_servant(self) -> 'BattleSequenceExecutor':
-        return self.remove_servant(SERVANT_ID_SUPPORT)
+    def remove_support_servant(self, *, skip_lookup: bool = False) -> 'BattleSequenceExecutor':
+        return self.remove_servant(SERVANT_ID_SUPPORT, skip_lookup=skip_lookup)
 
-    def order_change(self, svt_id1: int, svt_id2: int) -> 'BattleSequenceExecutor':
-        servant_pos1 = self._lookup_servant_position(svt_id1)
-        servant_pos2 = self._lookup_servant_position(svt_id2)
+    def order_change(self, svt_id1: int, svt_id2: int, *, skip_lookup: bool = False) -> 'BattleSequenceExecutor':
+        servant_pos1 = svt_id1 if skip_lookup else self._lookup_servant_position(svt_id1)
+        servant_pos2 = svt_id2 if skip_lookup else self._lookup_servant_position(svt_id2)
         assert servant_pos1 >= 0 and servant_pos2 >= 0, 'Could not find servant in current team'
         t = self._servants[servant_pos1]
         self._servants[servant_pos1] = self._servants[servant_pos2]
@@ -230,10 +230,10 @@ class BattleSequenceExecutor:
         return self
 
     def use_skill(self, servant_id: int, skill_index: int, to_servant_id: int = SERVANT_ID_EMPTY,
-                  enemy_location: int = ENEMY_LOCATION_EMPTY, np_card_type: int = NP_CARD_TYPE_EMPTY) \
-            -> 'BattleSequenceExecutor':
+                  enemy_location: int = ENEMY_LOCATION_EMPTY, np_card_type: int = NP_CARD_TYPE_EMPTY,
+                  *, skip_lookup: bool = False) -> 'BattleSequenceExecutor':
         # TODO [PRIOR: middle]: add argument check
-        servant_pos = self._lookup_servant_position(servant_id)
+        servant_pos = servant_id if skip_lookup else self._lookup_servant_position(servant_id)
         assert 0 <= servant_pos < 3, 'Could not find servant in current team'
         to_servant_pos = self._lookup_servant_position(to_servant_id)
         assert to_servant_pos < 3, 'Could not use skill to backup member'
@@ -255,12 +255,14 @@ class BattleSequenceExecutor:
         return self
 
     def use_support_skill(self, skill_index: int, to_servant_id: int = SERVANT_ID_EMPTY,
-                          enemy_location: int = ENEMY_LOCATION_EMPTY, np_card_type: int = NP_CARD_TYPE_EMPTY) \
-            -> 'BattleSequenceExecutor':
-        return self.use_skill(SERVANT_ID_SUPPORT, skill_index, to_servant_id, enemy_location, np_card_type)
+                          enemy_location: int = ENEMY_LOCATION_EMPTY, np_card_type: int = NP_CARD_TYPE_EMPTY,
+                          *, skip_lookup: bool = False) -> 'BattleSequenceExecutor':
+        return self.use_skill(SERVANT_ID_SUPPORT, skill_index, to_servant_id, enemy_location, np_card_type,
+                              skip_lookup=skip_lookup)
 
-    def noble_phantasm(self, servant_id: int, enemy_location: int = ENEMY_LOCATION_EMPTY) -> 'BattleSequenceExecutor':
-        servant_pos = self._lookup_servant_position(servant_id)
+    def noble_phantasm(self, servant_id: int, enemy_location: int = ENEMY_LOCATION_EMPTY,
+                       *, skip_lookup: bool = False) -> 'BattleSequenceExecutor':
+        servant_pos = servant_id if skip_lookup else self._lookup_servant_position(servant_id)
         assert 0 <= servant_pos < 3, 'Could not find servant in current team'
         assert enemy_location == ENEMY_LOCATION_EMPTY or 0 <= enemy_location < 3, 'Invalid enemy location'
         # assert len(self._selected_cmd_cards) < 3, 'Reached attack limitation (3 attacks per turn)'
@@ -282,8 +284,9 @@ class BattleSequenceExecutor:
             logger.warning(f'Could not find NP data for servant {real_svt_id}')
         return self
 
-    def support_noble_phantasm(self, enemy_location: int = ENEMY_LOCATION_EMPTY) -> 'BattleSequenceExecutor':
-        return self.noble_phantasm(SERVANT_ID_SUPPORT, enemy_location)
+    def support_noble_phantasm(self, enemy_location: int = ENEMY_LOCATION_EMPTY,
+                               *, skip_lookup: bool = False) -> 'BattleSequenceExecutor':
+        return self.noble_phantasm(SERVANT_ID_SUPPORT, enemy_location, skip_lookup=skip_lookup)
 
     def attack(self, command_card_index: int, enemy_location: int = ENEMY_LOCATION_EMPTY) -> 'BattleSequenceExecutor':
         assert 0 <= command_card_index < 5, 'Invalid command card index'
@@ -305,7 +308,8 @@ class BattleSequenceExecutor:
         return self
 
     def use_clothes_skill(self, skill_index: int, to_servant_id: Union[int, Tuple[int, int]] = SERVANT_ID_EMPTY,
-                          enemy_location: int = ENEMY_LOCATION_EMPTY) -> 'BattleSequenceExecutor':
+                          enemy_location: int = ENEMY_LOCATION_EMPTY,
+                          *, skip_lookup: bool = False) -> 'BattleSequenceExecutor':
         # TODO [PRIOR: middle]: add argument check
         assert 0 <= skill_index < 3, 'invalid skill index'
         self._exit_attack_mode()
@@ -317,15 +321,15 @@ class BattleSequenceExecutor:
         self._submit_click_event(0.5, (cloth_skill_btn.x, cloth_skill_btn.y))
         # 选技能
         if isinstance(to_servant_id, int):
-            servant_pos = self._lookup_servant_position(to_servant_id)
+            servant_pos = to_servant_id if skip_lookup else self._lookup_servant_position(to_servant_id)
             assert servant_pos < 3, 'Could not use skill to backup member'
             to_svt = self.env.click_definitions.to_servant()[servant_pos]
             self._submit_click_event(0.5, (to_svt.x, to_svt.y))
         else:
             assert (isinstance(to_servant_id, tuple) or isinstance(to_servant_id, list)) and len(to_servant_id) == 2, \
                 'invalid type or length of input servant tuple (used for changing servants)'
-            servant_pos1 = self._lookup_servant_position(to_servant_id[0])
-            servant_pos2 = self._lookup_servant_position(to_servant_id[1])
+            servant_pos1 = to_servant_id[0] if skip_lookup else self._lookup_servant_position(to_servant_id[0])
+            servant_pos2 = to_servant_id[1] if skip_lookup else self._lookup_servant_position(to_servant_id[1])
             assert servant_pos1 >= 0 and servant_pos2 >= 0, 'Could not find servant in current team'
             t = self._servants[servant_pos1]
             self._servants[servant_pos1] = self._servants[servant_pos2]

@@ -1,5 +1,5 @@
 import _logging_config
-from bgo_game import ScriptEnv, APRecoveryItemType
+from bgo_game import ScriptEnv, APRecoveryItemType, CompactOption
 import argparse
 import logging
 from attacher import AntiDetectionConfig
@@ -32,6 +32,7 @@ def main():
     parser.add_argument('--ap_recovery', default='no', help='Enable AP auto recovery by using specified items',
                         choices=['no', 'gold', 'silver', 'bronze', 'saint_quartz', 'sapling'])
     parser.add_argument('--notify_at_exit', action='store_true', help='Notify user at script exit')
+    parser.add_argument('--compact_option', nargs='+', help='Compact options for CHS and JPN server')
     parser.add_argument('--verbose', help='Print verbose log (debug level) to screen', action='store_true',
                         default=False)
     args = parser.parse_args()
@@ -52,8 +53,14 @@ def main():
                                   'sapling': APRecoveryItemType.BronzeSapling}
     ap_recovery_item = ap_recovery_item_type_dict[args.ap_recovery]
 
+    if len(args.compact_option) > 0:
+        compact_kwargs = {opt: True for opt in args.compact_option}
+        compact_opt = CompactOption(compact_kwargs)
+    else:
+        compact_opt = None
     script_env = ScriptEnv(args.attacher, args.capturer, args.controller, args.team_config, anti_detection_cfg,
-                           ap_recovery_item, controller_import='config', team_config_import='config')
+                           ap_recovery_item, controller_import='config', team_config_import='config',
+                           compact_option=compact_opt)
     schemas_class = FgoFSMFacadeFactory.get_handler(args.schemas)
     if schemas_class is None:
         raise ValueError(f'Invalid schemas: {args.schemas}')
