@@ -82,11 +82,11 @@ class FriendPointGachaConfirmHandler(StateHandler):
 
     def run_and_transit_state(self) -> FgoState:
         sleep(0.3)
-        img = self._get_screenshot_impl()
         anchor_rect = self.env.detection_definitions.get_fp_pool_gacha_confirm_rect()
         threshold = self.env.detection_definitions.get_fp_pool_gacha_confirm_diff_threshold()
         loop_start = time()
         while time() - loop_start < self.max_wait_secs:
+            img = self._get_screenshot_impl()
             img_in_anchor = img[anchor_rect.y1:anchor_rect.y2, anchor_rect.x1:anchor_rect.x2, :]
             diff = image_process.mean_gray_diff_err(img_in_anchor, self._anchor_file)
             logger.debug(f'fp_pool_gacha_confirm_diff: {diff}, threshold: {threshold}')
