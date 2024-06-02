@@ -18,8 +18,8 @@ logger = None  # type: Optional[logging.Logger]
 
 
 def configure_logging():
-    logging.basicConfig(level=logging.INFO, format='[%(asctime)s] [%(process)d] [%(levelname)s] [%(name)s]'
-                                                   ' (%(filename)s:%(lineno)d) %(message)s')
+    logging.basicConfig(level=logging.INFO, format='[%(asctime)s][%(process)d][%(levelname)s][%(name)s]'
+                                                   '(%(filename)s:%(lineno)d) %(message)s')
     global logger
     logger = logging.getLogger(__name__)
 
@@ -48,6 +48,11 @@ class ServantMeta:
     original_name: str  # JP name
     rarity: int
     type: str
+
+    # not used fields
+    flags: list
+    traits: list
+
     overwrite_name: str = ''
     original_overwrite_name: str = ''
 
@@ -113,6 +118,7 @@ class CraftEssenceMeta:
     original_name: str  # JP name
     rarity: int
     type: str
+    flags: list
     valentine_equip_owner: Optional[int] = None
     bond_equip_owner: Optional[int] = None
 

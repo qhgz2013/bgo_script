@@ -32,7 +32,7 @@ def main():
     parser.add_argument('--ap_recovery', default='no', help='Enable AP auto recovery by using specified items',
                         choices=['no', 'gold', 'silver', 'bronze', 'saint_quartz', 'sapling'])
     parser.add_argument('--notify_at_exit', action='store_true', help='Notify user at script exit')
-    parser.add_argument('--compact_option', nargs='+', help='Compact options for CHS and JPN server')
+    parser.add_argument('--compact_option', nargs='*', help='Compact options for CHS and JPN server')
     parser.add_argument('--verbose', help='Print verbose log (debug level) to screen', action='store_true',
                         default=False)
     args = parser.parse_args()
@@ -53,7 +53,7 @@ def main():
                                   'sapling': APRecoveryItemType.BronzeSapling}
     ap_recovery_item = ap_recovery_item_type_dict[args.ap_recovery]
 
-    if len(args.compact_option) > 0:
+    if args.compact_option is not None and len(args.compact_option) > 0:
         compact_kwargs = {opt: True for opt in args.compact_option}
         compact_opt = CompactOption(compact_kwargs)
     else:

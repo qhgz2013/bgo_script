@@ -19,7 +19,7 @@ def _resize_skimage(img: np.ndarray, width: int, height: int) -> np.ndarray:
 def _resize_pil(img: np.ndarray, width: int, height: int) -> np.ndarray:
     from PIL import Image
     img_obj = Image.fromarray(img)
-    return np.asarray(img_obj.resize((width, height), Image.ANTIALIAS), dtype='uint8')
+    return np.asarray(img_obj.resize((width, height), Image.LANCZOS), dtype='uint8')
 
 
 def resize(img: np.ndarray, width: int, height: int) -> np.ndarray:
