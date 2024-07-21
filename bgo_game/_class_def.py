@@ -1,9 +1,12 @@
 from enum import IntEnum
-from typing import *
+from typing import TYPE_CHECKING, Optional, Sequence, Union, List
 if TYPE_CHECKING:
     from fsm.battle_seq_executor import BattleSequenceExecutor
+
+
 __all__ = ['CommandCard', 'CommandCardType', 'APRecoveryItemType', 'DispatchedCommandCard', 'BattleController',
-           'ServantConfig', 'SupportCraftEssenceConfig', 'SupportServantConfig', 'TeamConfig', 'CommandCardNotFound']
+           'ServantConfig', 'SupportCraftEssenceConfig', 'SupportServantConfig', 'TeamConfig', 'CommandCardNotFound',
+           'ServantSkillType']
 
 
 # 指令卡类型
@@ -22,6 +25,10 @@ class APRecoveryItemType(IntEnum):
     BronzeApple = 4
     BronzeSapling = 5
 
+
+class ServantSkillType(IntEnum):
+    ActiveSkill = 1
+    PassiveSkill = 2
 
 # 一般情况下的指令卡类
 class CommandCard:
@@ -164,19 +171,24 @@ class SupportCraftEssenceConfig:
         return f'<SupportCraftEssenceConfig id: {self.id}, max_break: {self.max_break}'
 
 
+SkillType = Sequence[Optional[int]]
+
+
 # 助战从者设置
 class SupportServantConfig(ServantConfig):
-    __slots__ = ['svt_id', 'craft_essence_cfg', 'friend_only', 'skill_requirement']
+    __slots__ = ['svt_id', 'craft_essence_cfg', 'friend_only', 'skill_requirement', 'passive_skill_requirement']
 
     def __init__(self, svt_id: int, craft_essence_cfg: Union[SupportCraftEssenceConfig,
                                                              Sequence[SupportCraftEssenceConfig]],
-                 friend_only: bool = False, skill_requirement: Optional[Sequence[int]] = None):
+                 friend_only: bool = False, skill_requirement: Optional[SkillType] = None,
+                 passive_skill_requirement: Optional[SkillType] = None):
         super().__init__(svt_id)
+        if isinstance(craft_essence_cfg, SupportCraftEssenceConfig):
+            craft_essence_cfg = [craft_essence_cfg]
         self.craft_essence_cfg = craft_essence_cfg
-        if isinstance(self.craft_essence_cfg, SupportCraftEssenceConfig):
-            self.craft_essence_cfg = [self.craft_essence_cfg]
         self.friend_only = friend_only
         self.skill_requirement = skill_requirement
+        self.passive_skill_requirement = passive_skill_requirement
 
     def __repr__(self):
         s = f'<SupportServantConfig svt: {self.svt_id} and {len(self.craft_essence_cfg)} c.e. config(s)'
@@ -184,6 +196,8 @@ class SupportServantConfig(ServantConfig):
             s += ' (friend only)'
         if self.skill_requirement:
             s += ' (skill: %s)' % str(self.skill_requirement)
+        if self.passive_skill_requirement:
+            s += ' (passive: %s)' % str(self.passive_skill_requirement)
         return s + '>'
 
 

@@ -79,6 +79,8 @@ def locate_mumu_simulator_handle() -> Tuple[int, int]:
 
 
 def get_screenshot_winapi_impl(handle: int) -> np.ndarray:
+    # only works in DX mode for mumu
+    # TODO: warps winrt by c++ for vulkan and dx11 support
     left, top, right, bottom = win32gui.GetWindowRect(handle)
     window_height = bottom - top
     window_width = right - left
@@ -96,6 +98,9 @@ def get_screenshot_winapi_impl(handle: int) -> np.ndarray:
     win32gui.ReleaseDC(handle, handle_dc)
     win32gui.DeleteObject(new_bitmap.GetHandle())
     screenshot = np.flip(arr[..., :3], -1)
+    if np.all(np.std(screenshot, (0, 1)) < 1e-5):
+        raise RuntimeError(f'Vulkan mode (and/or) DX 11 mode is not supported yet, but will be implemented in future'
+                           f', with low priority. CHOOSE DirectX MODE IN MUMU NOW.')
     return screenshot
 
 

@@ -40,8 +40,8 @@ class HandlerRegistry(Generic[_TK, _TV]):
         return list(cls._registered_handlers.keys())
 
 
-def register_handler(registry: Type[HandlerRegistry[_TK, _TV]], handler_name: Union[_TK, Sequence[_TK]]) \
-        -> Callable[[_TV], _TV]:
+def register_handler(registry: Type['HandlerRegistry[_TK, _TV]'], handler_name: Union[_TK, List[_TK]]) \
+        -> Callable[[Type[_TV]], Type[_TV]]:
     """A decorator for registering handler.
 
     Example::
@@ -79,7 +79,7 @@ def register_handler(registry: Type[HandlerRegistry[_TK, _TV]], handler_name: Un
     :param handler_name: The name for current handler.
     :return A decorator function for class.
     """
-    def do_handler_registration(handler_class: Type[_TV]):
+    def do_handler_registration(handler_class: Type[_TV]) -> Type[_TV]:
         if isinstance(handler_name, (list, tuple)):
             for name in handler_name:
                 registry.register_handler(name, handler_class)

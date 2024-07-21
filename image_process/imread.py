@@ -70,10 +70,10 @@ def benchmark():
         print('imread for opencv failed')
     else:
         # noinspection PyUnboundLocalVariable
-        print('mean abs diff opencv: %f' % np.mean(np.abs(a.astype(np.float) - b)))
+        print('mean abs diff opencv: %f' % np.mean(np.abs(a.astype(np.float32) - b)))
     # noinspection PyUnboundLocalVariable
-    print('mean abs diff pil: %f' % np.mean(np.abs(a.astype(np.float) - c)))
+    print('mean abs diff pil: %f' % np.mean(np.abs(a.astype(np.float32) - c)))
     # noinspection PyUnboundLocalVariable
-    print('mean abs diff skimage: %f' % np.mean(np.abs(a.astype(np.float) - d)))
+    print('mean abs diff skimage: %f' % np.mean(np.abs(a.astype(np.float32) - d)))
     import os
     os.remove(name)

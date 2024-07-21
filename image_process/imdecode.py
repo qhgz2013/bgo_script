@@ -48,7 +48,7 @@ def benchmark():
     print('imdecode opencv (png with alpha) time: %f' % t2)
     print('imdecode pil (png with alpha) time: %f' % t1)
     # noinspection PyUnboundLocalVariable
-    print('mean abs diff: %f' % np.mean(np.abs(bb.astype(np.float) - c)))
+    print('mean abs diff: %f' % np.mean(np.abs(bb.astype(np.float32) - c)))
     with BytesIO() as f1:
         Image.fromarray(a[..., :3]).save(f1, 'PNG')
         f1.seek(0)
@@ -64,4 +64,4 @@ def benchmark():
     print('imdecode opencv (png without alpha) time: %f' % t2)
     print('imdecode pil (png without alpha) time: %f' % t1)
     # noinspection PyUnboundLocalVariable
-    print('mean abs diff: %f' % np.mean(np.abs(bb.astype(np.float) - c)))
+    print('mean abs diff: %f' % np.mean(np.abs(bb.astype(np.float32) - c)))

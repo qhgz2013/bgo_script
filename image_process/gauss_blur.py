@@ -39,7 +39,7 @@ def benchmark():
     print('gauss blur (alpha) opencv time: %f' % t1)
     print('gauss blur (alpha) pil time: %f' % t2)
     # noinspection PyUnboundLocalVariable
-    print('mean abs diff: %f' % np.mean(np.abs(a.astype(np.float) - b)))
+    print('mean abs diff: %f' % np.mean(np.abs(a.astype(np.float32) - b)))
     # test without alpha
     t1 = time()
     for _ in range(1000):
@@ -52,7 +52,7 @@ def benchmark():
     print('gauss blur (no alpha) opencv time: %f' % t1)
     print('gauss blur (no alpha) pil time: %f' % t2)
     # noinspection PyUnboundLocalVariable
-    print('mean abs diff: %f' % np.mean(np.abs(a.astype(np.float) - b)))
+    print('mean abs diff: %f' % np.mean(np.abs(a.astype(np.float32) - b)))
     # test kernel size = multiple of 2
     t1 = time()
     for _ in range(1000):
@@ -65,4 +65,4 @@ def benchmark():
     print('gauss blur (2x kernel) opencv time: %f' % t1)
     print('gauss blur (2x kernel) pil time: %f' % t2)
     # noinspection PyUnboundLocalVariable
-    print('mean abs diff: %f' % np.mean(np.abs(a.astype(np.float) - b)))
+    print('mean abs diff: %f' % np.mean(np.abs(a.astype(np.float32) - b)))

@@ -62,6 +62,11 @@ class Exact16x9RatioClickDefImpl(AbstractClickDef):
     def support_refresh_confirm() -> PointF:
         return PointF(0.656, 0.778)
 
+    # 助战 -- 切换主动/被动技能展示
+    @staticmethod
+    def support_switch_skill() -> PointF:
+        return PointF(0.664, 0.181)
+
     # 编队界面进本按钮
     @staticmethod
     def enter_quest_button() -> PointF:

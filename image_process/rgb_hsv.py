@@ -60,6 +60,6 @@ def benchmark():
     print('hsv to rgb conversion (opencv) time: %f' % t3)
     print('hsv to rgb conversion (skiamge) time: %f' % t4)
     # noinspection PyUnboundLocalVariable
-    print('rgb to hsv mean abs diff: %f' % np.mean(np.abs(b.astype(np.float) - c)))
+    print('rgb to hsv mean abs diff: %f' % np.mean(np.abs(b.astype(np.float32) - c)))
     # noinspection PyUnboundLocalVariable
-    print('hsv to rgb mean abs diff: %f' % np.mean(np.abs(d.astype(np.float) - e)))
+    print('hsv to rgb mean abs diff: %f' % np.mean(np.abs(d.astype(np.float32) - e)))

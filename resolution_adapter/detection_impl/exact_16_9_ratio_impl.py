@@ -73,7 +73,12 @@ class Exact16x9RatioDetectionDefImpl(BasicDetectionDefImpl):
     def get_support_skill_box_rect() -> List[Rect]:
         # 助战技能框位置，已更新至被动技能layout
         # 35px, 10px margin
-        return [Rect(837, 135, 872, 170), Rect(882, 135, 917, 170), Rect(927, 135, 962, 170)]
+        # return [Rect(837, 135, 872, 170), Rect(882, 135, 917, 170), Rect(927, 135, 962, 170)]
+        return [Rect(830, 135, 865, 170), Rect(875, 135, 910, 170), Rect(920, 135, 955, 170)]
+
+    @staticmethod
+    def get_support_skill_type_rect() -> Rect:
+        return Rect(825, 110, 955, 130)
 
     @staticmethod
     def get_exit_quest_rect() -> Rect:

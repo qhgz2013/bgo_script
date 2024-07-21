@@ -38,5 +38,5 @@ class FgoFSMFacadeBase(StateHandler):
         return self.forward_state
 
 
-class FgoFSMFacadeFactory(HandlerRegistry[str, StateHandler]):
+class FgoFSMFacadeFactory(HandlerRegistry[str, FgoFSMFacadeBase]):
     pass

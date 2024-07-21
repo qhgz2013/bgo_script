@@ -40,3 +40,11 @@ class Point:
 
     def to_point_f(self) -> 'PointF':
         return PointF(float(self.x), float(self.y))
+
+
+@dataclass(unsafe_hash=True, order=True)
+class Color:
+    r: int
+    g: int
+    b: int
+    a: int = 255

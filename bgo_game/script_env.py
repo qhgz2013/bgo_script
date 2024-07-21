@@ -16,14 +16,16 @@ logger = getLogger('bgo_script.script_env')
 class ScriptEnv(metaclass=SingletonMeta):
     """A singleton class holding the runtime variables for executing the whole automation script."""
 
-    def __init__(self, attacher: Union[str, AttacherBase], capturer: [str, ScreenCapturer],
-                 controller: Union[str, Type[BattleController]], team_config: [str, TeamConfig],
+    def __init__(self, attacher: Union[str, AttacherBase], capturer: Union[str, ScreenCapturer],
+                 controller: Union[str, Type[BattleController]], team_config: Union[str, TeamConfig],
                  anti_detection_cfg: Optional[AntiDetectionConfig] = None,
                  ap_recovery_item_type: APRecoveryItemType = APRecoveryItemType.DontEatMyApple,
                  enable_continuous_battle: bool = True,
                  *, controller_import: str = 'config', team_config_import: str = 'config',
-                 laplace_team_data_cache_dir: str = 'laplace_cache',
-                 compact_option: Optional[CompactOption] = None):
+                 laplace_team_data_cache_dir: str = 'cache/laplace',
+                 laplace_team_data_max_cache_size: int = 200,
+                 compact_option: Optional[CompactOption] = None,
+                 laplace_team_id_or_url: Optional[Union[int, str]] = None):
         if isinstance(attacher, str):
             logger.info(f'Instantiating attacher {attacher}')
             attacher_cls = AttacherRegistry.get_handler(attacher)
@@ -50,6 +52,12 @@ class ScriptEnv(metaclass=SingletonMeta):
             self.capturer = capturer
         logger.info(f'Using capturer: {self.capturer!r}')
 
+        if laplace_team_id_or_url is not None:
+            from functools import partial
+            from bgo_game.executor_impl import LaplaceController
+            controller = partial(LaplaceController, cache_dir=laplace_team_data_cache_dir,
+                                 cache_size=laplace_team_data_max_cache_size,
+                                 team_url_or_id=laplace_team_id_or_url)
         if isinstance(controller, str):
             try:
                 self.controller_cls = getattr(importlib.import_module(controller_import), controller)
@@ -58,13 +66,14 @@ class ScriptEnv(metaclass=SingletonMeta):
                                  f'{controller_import}')
         else:
             self.controller_cls = controller
-        assert issubclass(self.controller_cls, BattleController),\
-            f'controller must be either a string or a BattleController class, got {self.controller_cls!r}'
+        # assert issubclass(self.controller_cls, BattleController),\
+        #     f'controller must be either a string or a BattleController class, got {self.controller_cls!r}'
         logger.info(f'Using controller: {self.controller_cls!r}')
 
         if isinstance(team_config, str):
             try:
-                self.team_config = getattr(importlib.import_module(team_config_import), team_config)
+                team_module = importlib.import_module(team_config_import)
+                self.team_config = getattr(team_module, team_config)  # type: TeamConfig
             except AttributeError:
                 raise ValueError(f'Could not find team config {team_config} from team config import file '
                                  f'{team_config_import}')
@@ -90,6 +99,7 @@ class ScriptEnv(metaclass=SingletonMeta):
         self.ap_recovery_item_type = ap_recovery_item_type
         self.enable_continuous_battle = enable_continuous_battle
         self.laplace_team_data_cache_dir = laplace_team_data_cache_dir
+        self.laplace_team_data_max_cache_size = laplace_team_data_max_cache_size
         if compact_option is None:
             compact_option = CompactOption()
         self.compact_option = compact_option

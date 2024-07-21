@@ -39,7 +39,6 @@ class Exact20x9RatioDetectionDefImpl(BasicDetectionDefImpl):
     @staticmethod
     def get_support_detection_y_len_threshold_range() -> Tuple[int, int]:
         return 176, 181
-        # raise NotImplementedError
 
     @staticmethod
     def get_support_detection_servant_x() -> Tuple[int, int]:
@@ -49,45 +48,42 @@ class Exact20x9RatioDetectionDefImpl(BasicDetectionDefImpl):
     @staticmethod
     def get_support_detection_servant_img_size() -> Tuple[int, int]:
         return 128, 128
-        # raise NotImplementedError
 
     @staticmethod
     def get_support_detection_craft_essence_img_size() -> Tuple[int, int]:
         return 68, 150  # the original size is 68x150, but cropped to 40x150 in support selection stage
-        # raise NotImplementedError
 
     @staticmethod
     def get_support_detection_craft_essence_crop_height() -> int:
         return 40
-        # raise NotImplementedError
 
     @staticmethod
     def get_support_detection_servant_split_y() -> int:
         return 102
-        # raise NotImplementedError
 
     @staticmethod
     def get_support_craft_essence_max_break_rect() -> Rect:
         return Rect(134, -24, 154, -4)
-        # raise NotImplementedError
 
     @staticmethod
     def get_support_friend_detect_rect() -> Rect:
         return Rect(360, 130, 600, 155)
-        # raise NotImplementedError
 
     @staticmethod
     def get_support_friend_ratio_threshold() -> float:
         return 5 / 255
-        # raise NotImplementedError
 
     @staticmethod
     def get_support_skill_box_rect() -> List[Rect]:
         # 助战技能框位置，已更新至被动技能layout
         # 35px, 10px margin
-        if BasicDetectionDefImpl.compact_option is not None and BasicDetectionDefImpl.compact_option.class_score:
-            return [Rect(1018, 135, 1053, 170), Rect(1063, 135, 1098, 170), Rect(1108, 135, 1143, 170)]
-        return [Rect(1010, 135, 1045, 170), Rect(1055, 135, 1090, 170), Rect(1100, 135, 1135, 170)]
+        return [Rect(1018, 135, 1053, 170), Rect(1063, 135, 1098, 170), Rect(1108, 135, 1143, 170)]
+        # 没实装天赋树用这个rect
+        # return [Rect(1010, 135, 1045, 170), Rect(1055, 135, 1090, 170), Rect(1100, 135, 1135, 170)]
+
+    @staticmethod
+    def get_support_skill_type_rect() -> Rect:
+        return Rect(1013, 110, 1443, 130)
 
     @staticmethod
     def get_exit_quest_rect() -> Rect:

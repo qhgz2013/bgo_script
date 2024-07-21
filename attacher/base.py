@@ -21,7 +21,7 @@ class ScreenCapturer(metaclass=ABCMeta):
         """Get the default screenshot solution, in (height, width) tuple."""
         raise NotImplementedError
 
-    def get_screenshot(self) -> np.ndarray:
+    def get_screenshot(self, **kwargs) -> np.ndarray:
         """Returns current screenshot as numpy array in (h, w, c) shape."""
         raise NotImplementedError
 

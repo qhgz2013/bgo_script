@@ -55,7 +55,7 @@ def main():
 
     if args.compact_option is not None and len(args.compact_option) > 0:
         compact_kwargs = {opt: True for opt in args.compact_option}
-        compact_opt = CompactOption(compact_kwargs)
+        compact_opt = CompactOption(**compact_kwargs)
     else:
         compact_opt = None
     script_env = ScriptEnv(args.attacher, args.capturer, args.controller, args.team_config, anti_detection_cfg,

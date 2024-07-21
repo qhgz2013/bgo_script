@@ -2,7 +2,7 @@
 import numpy as np
 from ._class_def import DispatchedCommandCard, CommandCardType
 from typing import *
-from cv_positioning import *
+from archives.cv_positioning import *
 import image_process
 import logging
 from time import time
@@ -51,7 +51,7 @@ class CommandCardDetector:
             y_offset = 0
             for idx, (command_card_type, offset) in enumerate(zip(CommandCardDetector._command_card_type_anchor,
                                                                   CV_COMMAND_CARD_TYPE_OFFSET)):
-                score = np.empty(CV_COMMAND_CARD_Y_DETECTION_LENGTH, np.float)
+                score = np.empty(CV_COMMAND_CARD_Y_DETECTION_LENGTH, np.float32)
                 h = command_card_type.shape[0]
                 for i in range(CV_COMMAND_CARD_Y_DETECTION_LENGTH):
                     y = CV_COMMAND_CARD_Y_DETECTION_OFFSET + i

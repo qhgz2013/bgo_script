@@ -84,6 +84,22 @@ class BasicDetectionDefImpl(AbstractDetectionDef, metaclass=ABCMeta):
         return 'cv_data/support_skill_digit'
 
     @staticmethod
+    def get_active_skill_anchor_color_h() -> int:
+        return 38
+
+    @staticmethod
+    def get_passive_skill_anchor_color_h() -> int:
+        return 130
+
+    @staticmethod
+    def get_skill_anchor_color_h_threshold() -> int:
+        return 5
+
+    @staticmethod
+    def get_skill_anchor_color_h_conf_threshold() -> float:
+        return 0.15
+
+    @staticmethod
     def get_exit_quest_diff_threshold() -> int:
         return 7  # previous value: 3
 

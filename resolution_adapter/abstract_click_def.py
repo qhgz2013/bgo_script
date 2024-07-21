@@ -71,6 +71,12 @@ class AbstractClickDef(metaclass=ABCMeta):
     def support_refresh_confirm() -> PointF:
         raise NotImplementedError
 
+    # 助战 -- 切换主动/被动技能展示
+    @staticmethod
+    @plot_point
+    def support_switch_skill() -> PointF:
+        raise NotImplementedError
+
     # 编队界面进本按钮
     @staticmethod
     @plot_point

@@ -43,7 +43,7 @@ def split_gray_alpha(img: np.ndarray, fast_compute: bool = True) -> Tuple[np.nda
         gray = np.round(np.mean(img[..., :3], -1)).astype('uint8')
     else:
         w = np.array([[0.2126], [0.7152], [0.0722]])
-        gray = np.squeeze(np.round(np.dot(img.astype(np.float), w)).astype('uint8'))
+        gray = np.squeeze(np.round(np.dot(img.astype(np.float32), w)).astype('uint8'))
     return gray, alpha
 
 
@@ -88,8 +88,8 @@ def mean_gray_diff_err(a: np.ndarray, b: np.ndarray, fast_compute: bool = True, 
     func = _alpha_mode_handle_dict[alpha_mode.lower()]
     a, alpha_a = split_gray_alpha(a, fast_compute)
     b, alpha_b = split_gray_alpha(b, fast_compute)
-    alpha_mask = func(alpha_a.astype(np.float), alpha_b.astype(np.float)) / 255.0
-    gray_diff_err = a.astype(np.float) - b.astype(np.float)
+    alpha_mask = func(alpha_a.astype(np.float32), alpha_b.astype(np.float32)) / 255.0
+    gray_diff_err = a.astype(np.float32) - b.astype(np.float32)
     if abs_diff:
         gray_diff_err = np.abs(gray_diff_err)
     gray_diff_err = float(np.mean(gray_diff_err * alpha_mask))
@@ -126,13 +126,12 @@ def mean_hsv_diff_err_dbg(a: np.ndarray, b: np.ndarray, fmt_a: str = 'rgb', fmt_
         hsv_b = rgb_to_hsv(rgb_b)
     else:
         hsv_b, alpha_b = split_rgb_alpha(b)
-    alpha_mask = alpha_func(alpha_a.astype(np.float), alpha_b.astype(np.float)) / 255.0
-    # ovr_diff = np.abs(hsv_a.astype(np.float) - hsv_b)
+    alpha_mask = alpha_func(alpha_a.astype(np.float32), alpha_b.astype(np.float32)) / 255.0
     # hue ring difference
-    hue_diff = np.abs(hsv_a[..., 0].astype(np.float) - hsv_b[..., 0])
+    hue_diff = np.abs(hsv_a[..., 0].astype(np.float32) - hsv_b[..., 0])
     hue_diff = np.minimum(hue_diff, 255 - hue_diff)
     # value (brightness)
-    val_diff = value_func(hsv_a[..., 2].astype(np.float), hsv_b[..., 2]) / 255.0
+    val_diff = value_func(hsv_a[..., 2].astype(np.float32), hsv_b[..., 2]) / 255.0
     return hue_diff * val_diff * alpha_mask
 
 

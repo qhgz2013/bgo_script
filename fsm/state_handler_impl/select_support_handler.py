@@ -6,10 +6,11 @@ import image_process
 import numpy as np
 from time import sleep, time
 from image_process import mean_gray_diff_err
-from bgo_game import ScriptEnv, ServantConfig
+from bgo_game import ScriptEnv, ServantConfig, ServantSkillType
 from fsm.fgo_state import FgoState
 from util import DigitRecognizer
 from basic_class import PointF
+from enum import IntEnum
 
 logger = logging.getLogger('bgo_script.fsm')
 
@@ -19,13 +20,15 @@ __all__ = ['SelectSupportHandler']
 # NOT implemented: NP level detection
 class SupportServant(ServantConfig):
     def __init__(self, svt_id: int, craft_essence_id: int, craft_essence_max_break: bool = False,
-                 is_friend: bool = False, skill_level: Optional[List[Optional[int]]] = None, np_lv: int = 0):
+                 is_friend: bool = False, skill_level: Optional[List[Optional[int]]] = None, np_lv: int = 0,
+                 passive_skill_level: Optional[List[Optional[int]]] = None):
         super().__init__(svt_id)
         self.craft_essence_id = craft_essence_id
         self.craft_essence_max_break = craft_essence_max_break
         self.is_friend = is_friend
         self.skill_level = skill_level
         self.np_lv = np_lv
+        self.passive_skill_level = passive_skill_level
 
     def __repr__(self):
         s = '<SupportServant for svt: %d and craft essence: %d' % (self.svt_id, self.craft_essence_id)
@@ -36,9 +39,17 @@ class SupportServant(ServantConfig):
             attr.append('friend')
         if self.skill_level:
             attr.append('skill: %s' % str(self.skill_level))
+        if self.passive_skill_level:
+            attr.append('passive: %s' % str(self.passive_skill_level))
         attr_str = ', '.join(attr)
         s += (' (%s)' % attr_str) if len(attr_str) > 0 else ''
         return s + '>'
+
+
+class SupportSkillType(IntEnum):
+    Completed = 0
+    Active = 1
+    Passive = 2
 
 
 class SelectSupportHandler(StateHandler):
@@ -112,6 +123,14 @@ class SelectSupportHandler(StateHandler):
         if required_svt.skill_requirement is not None:
             required_skill = required_svt.skill_requirement
             detected_skill = detected_svt.skill_level
+            for i in range(3):
+                if required_skill[i] is None:
+                    continue
+                if detected_skill[i] is None or detected_skill[i] < required_skill[i]:
+                    return False
+        if required_svt.passive_skill_requirement is not None:
+            required_skill = required_svt.passive_skill_requirement
+            detected_skill = detected_svt.passive_skill_level
             for i in range(3):
                 if required_skill[i] is None:
                     continue
@@ -230,11 +249,11 @@ class SelectSupportHandler(StateHandler):
         svt_id, t = self._wrap_call_matcher(self.servant_matcher.match, _servant_empty_check, img,
                                             self._support_empty_img, range_list)
         logger.debug('Detected support servant ID: %s (used %f sec(s))' % (str(svt_id), t))
-        if len(svt_id) == 0:
-            import skimage.io
-            import os
-            os.makedirs('debug', exist_ok=True)
-            skimage.io.imsave(f'debug/{int(time())}.png', img)
+        # if len(svt_id) == 0:
+        #     import skimage.io
+        #     import os
+        #     os.makedirs('debug', exist_ok=True)
+        #     skimage.io.imsave(f'debug/{int(time())}.png', img)
 
         # match craft essence
         def _craft_essence_empty_check(img1, img2):
@@ -252,11 +271,6 @@ class SelectSupportHandler(StateHandler):
         max_break_rect = self.env.detection_definitions.get_support_craft_essence_max_break_rect()
         max_break_threshold = self.env.detection_definitions.get_support_craft_essence_max_break_err_threshold()
 
-        img_gray = np.mean(img, -1)
-        vertical_diff = np.zeros_like(img_gray, dtype=np.float32)
-        # pixel offset for computing abs difference
-        step_size = self.env.detection_definitions.get_support_skill_v_diff_step_size()
-        vertical_diff[:-step_size, :] = np.abs(img_gray[:-step_size, :] - img_gray[step_size:, :])
 
         for i, (y1, y2) in enumerate(range_list):
             # detect craft essence max break state
@@ -292,53 +306,18 @@ class SelectSupportHandler(StateHandler):
             ret_list[i].is_friend = is_friend
 
             # skill level detection
-            skill_box_rects = self.env.detection_definitions.get_support_skill_box_rect()
-            # skill_img = img[y1+CV_SUPPORT_SKILL_BOX_OFFSET_Y:y1+CV_SUPPORT_SKILL_BOX_OFFSET_Y+CV_SUPPORT_SKILL_BOX_SIZE,
-            #                 CV_SUPPORT_SKILL_BOX_OFFSET_X1:CV_SUPPORT_SKILL_BOX_OFFSET_X2, :3].copy()
-            # just use the first several pixels and last several pixels to determine
-            edge_size = self.env.detection_definitions.get_support_skill_v_diff_edge_size()
-            skills = []
-            for j, skill_box_rect in enumerate(skill_box_rects):
-                # begin_x = j * (CV_SUPPORT_SKILL_BOX_MARGIN_X + CV_SUPPORT_SKILL_BOX_SIZE)
-                v_diff_current_skill = np.mean(vertical_diff[y1+skill_box_rect.y1:y1+skill_box_rect.y2,
-                                                             skill_box_rect.x1:skill_box_rect.x2], -1)
-                max_v_diff = np.maximum(np.max(v_diff_current_skill[:edge_size]),
-                                        np.max(v_diff_current_skill[-edge_size:]))
-                logger.debug(f'DEBUG value: max_v_diff = {max_v_diff}')
-                if max_v_diff > self.env.detection_definitions.get_support_skill_v_diff_threshold():
-                    # digit recognition, using SSIM metric, split by S (-> 0) and V (-> 255)
-                    current_skill_img = img[y1+skill_box_rect.y1:y1+skill_box_rect.y2,
-                                            skill_box_rect.x1:skill_box_rect.x2, :]
-                    hsv = image_process.rgb_to_hsv(current_skill_img).astype(np.float32)
-                    img_digit_part = (1. - hsv[..., 1] / 255.) * (hsv[..., 2] / 255.)
-                    img_digit_part = img_digit_part[15:, 3:25]
-                    bin_digits = np.greater_equal(
-                        img_digit_part, self.env.detection_definitions.get_support_skill_binarization_threshold())
-                    digit_segments = image_process.split_image(bin_digits)
-                    digits = []
-                    for segment in sorted(digit_segments, key=lambda x: (x.max_x + x.min_x)):
-                        if 40 < segment.associated_pixels.shape[0] < 100 \
-                                and abs(segment.min_y + segment.max_y - 20) <= 3 \
-                                and segment.max_x - segment.min_x < 12 <= segment.max_y - segment.min_y:
-                            digits.append(self._digit_recognizer.recognize(segment.get_image_segment()))
-                    if len(digits) == 2:
-                        skill_lvl = digits[0] * 10 + digits[1]
-                        if skill_lvl != 10:
-                            logger.warning(f'Invalid 2 digits skill level: expected 10, but got {skill_lvl}, set to 10')
-                            skill_lvl = 10
-                    elif len(digits) == 0:
-                        skill_lvl = None
-                        logger.warning(f'Failed to detect skill level: no digit found (this mainly because of the low'
-                                       f' resolution of screenshot)')
-                    else:
-                        skill_lvl = digits[0]
-                        if skill_lvl == 0:
-                            logger.warning(f'Invalid 1 digit skill level: expected 1~9, but got {skill_lvl}')
-                    skills.append(skill_lvl)
-                else:
-                    # skill unavailable
-                    skills.append(None)
-            ret_list[i].skill_level = skills
+            while self._check_skill_missing(ret_list[i]) != SupportSkillType.Completed:
+                skill_type = self._check_skill_type(img, y1)
+                skills = self._check_skill_level(img, y1)
+                if skill_type == SupportSkillType.Active:
+                    ret_list[i].skill_level = skills
+                elif skill_type == SupportSkillType.Passive:
+                    ret_list[i].passive_skill_level = skills
+                if self._check_skill_missing(ret_list[i]) == SupportSkillType.Completed:
+                    break
+                self._do_change_skill_btn()
+                img = self._get_screenshot_impl()
+
         logger.info('Detected support servant info: %s' % str(ret_list))
         return ret_list
 
@@ -363,3 +342,84 @@ class SelectSupportHandler(StateHandler):
                 if not is_empty:
                     ret.append(func(icon))
         return ret, time() - t
+
+    def _check_skill_missing(self, svt: SupportServant) -> SupportSkillType:
+        if self._support_svt.skill_requirement is not None and svt.skill_level is None:
+            return SupportSkillType.Active
+        if self._support_svt.passive_skill_requirement is not None and svt.passive_skill_level is None:
+            return SupportSkillType.Passive
+        return SupportSkillType.Completed
+
+    def _do_change_skill_btn(self):
+        pos = self.env.click_definitions.support_switch_skill()
+        self.env.attacher.send_click(pos.x, pos.y)
+        sleep(0.5)
+
+    def _check_skill_level(self, img: np.ndarray, y1: int) -> List[Optional[int]]:
+        img_gray = np.mean(img, -1)
+        vertical_diff = np.zeros_like(img_gray, dtype=np.float32)
+        # pixel offset for computing abs difference
+        step_size = self.env.detection_definitions.get_support_skill_v_diff_step_size()
+        vertical_diff[:-step_size, :] = np.abs(img_gray[:-step_size, :] - img_gray[step_size:, :])
+
+        skill_box_rects = self.env.detection_definitions.get_support_skill_box_rect()
+        # just use the first several pixels and last several pixels to determine
+        edge_size = self.env.detection_definitions.get_support_skill_v_diff_edge_size()
+        skills = []
+        for _, skill_box_rect in enumerate(skill_box_rects):
+            v_diff_current_skill = np.mean(vertical_diff[y1+skill_box_rect.y1:y1+skill_box_rect.y2,
+                                                            skill_box_rect.x1:skill_box_rect.x2], -1)
+            max_v_diff = np.maximum(np.max(v_diff_current_skill[:edge_size]),
+                                    np.max(v_diff_current_skill[-edge_size:]))
+            logger.debug(f'DEBUG value: max_v_diff = {max_v_diff}')
+            if max_v_diff > self.env.detection_definitions.get_support_skill_v_diff_threshold():
+                # digit recognition, using SSIM metric, split by S (-> 0) and V (-> 255)
+                current_skill_img = img[y1+skill_box_rect.y1:y1+skill_box_rect.y2,
+                                        skill_box_rect.x1:skill_box_rect.x2, :]
+                hsv = image_process.rgb_to_hsv(current_skill_img).astype(np.float32)
+                img_digit_part = (1. - hsv[..., 1] / 255.) * (hsv[..., 2] / 255.)
+                img_digit_part = img_digit_part[15:, 3:25]
+                bin_digits = np.greater_equal(
+                    img_digit_part, self.env.detection_definitions.get_support_skill_binarization_threshold())
+                digit_segments = image_process.split_image(bin_digits)
+                digits = []
+                for segment in sorted(digit_segments, key=lambda x: (x.max_x + x.min_x)):
+                    if 40 < segment.associated_pixels.shape[0] < 100 \
+                            and abs(segment.min_y + segment.max_y - 20) <= 3 \
+                            and segment.max_x - segment.min_x < 12 <= segment.max_y - segment.min_y:
+                        digits.append(self._digit_recognizer.recognize(segment.get_image_segment()))
+                if len(digits) == 2:
+                    skill_lvl = digits[0] * 10 + digits[1]
+                    if skill_lvl != 10:
+                        logger.warning(f'Invalid 2 digits skill level: expected 10, but got {skill_lvl}, set to 10')
+                        skill_lvl = 10
+                elif len(digits) == 0:
+                    skill_lvl = None
+                    logger.warning(f'Failed to detect skill level: no digit found (this mainly because of the low'
+                                    f' resolution of screenshot)')
+                else:
+                    skill_lvl = digits[0]
+                    if skill_lvl == 0:
+                        logger.warning(f'Invalid 1 digit skill level: expected 1~9, but got {skill_lvl}')
+                skills.append(skill_lvl)
+            else:
+                # skill unavailable
+                skills.append(None)
+        return skills
+
+    def _check_skill_type(self, img: np.ndarray, y1: int) -> SupportSkillType:
+        rect = self.env.detection_definitions.get_support_skill_type_rect()
+        img_rect = img[y1+rect.y1:y1+rect.y2, rect.x1:rect.x2, :]
+        active_h = self.env.detection_definitions.get_active_skill_anchor_color_h()
+        passive_h = self.env.detection_definitions.get_passive_skill_anchor_color_h()
+        threshold = self.env.detection_definitions.get_skill_anchor_color_h_threshold()
+        img_h = image_process.rgb_to_hsv(img_rect)[:, :, 0].astype(np.int32)
+        active_score = np.mean(np.abs(img_h - active_h) < threshold)
+        passive_score = np.mean(np.abs(img_h - passive_h) < threshold)
+        conf_threshold = self.env.detection_definitions.get_skill_anchor_color_h_conf_threshold()
+        logger.debug(f'score: active={active_score}, passive={passive_score}, threshold={conf_threshold}')
+        if active_score >= max(conf_threshold, passive_score):
+            return SupportSkillType.Active
+        elif passive_score >= max(conf_threshold, active_score):
+            return SupportSkillType.Passive
+        return SupportSkillType.Completed

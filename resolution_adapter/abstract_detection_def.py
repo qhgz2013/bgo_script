@@ -1,7 +1,7 @@
 from abc import ABCMeta
-from .resolution_match_rule import Resolution, Rect
+from basic_class import Resolution, Rect
 from .plot_util import plot_rect
-from typing import *
+from typing import List, Tuple, TYPE_CHECKING, Optional
 if TYPE_CHECKING:
     from bgo_game import CompactOption
 
@@ -9,7 +9,7 @@ __all__ = ['AbstractDetectionDef']
 
 
 try:
-    final
+    final  # type: ignore
 except NameError:
     # python 3.6
     def final(f):
@@ -28,7 +28,7 @@ class AbstractDetectionDef(metaclass=ABCMeta):
 
     # 所有截图都会缩放到下面的分辨率
     @staticmethod
-    def get_target_resolution() -> Optional[Resolution]:
+    def get_target_resolution() -> Resolution:
         raise NotImplementedError
 
     # AP检测
@@ -111,7 +111,7 @@ class AbstractDetectionDef(metaclass=ABCMeta):
     @classmethod
     @final
     @plot_rect
-    def _get_support_detection_rect(cls) -> Rect:
+    def _get_support_detection_servant_rect(cls) -> Rect:
         # internal use
         return cls._x1_x2_to_rect(*cls.get_support_detection_servant_x())
 
@@ -195,6 +195,29 @@ class AbstractDetectionDef(metaclass=ABCMeta):
 
     @staticmethod
     def get_support_skill_digit_dir() -> str:
+        raise NotImplementedError
+
+    # 助战主动技能/被动技能展示识别
+    @staticmethod
+    @plot_rect
+    def get_support_skill_type_rect() -> Rect:
+        raise NotImplementedError
+
+    # 助战主动/被动技能hsv-h value
+    @staticmethod
+    def get_active_skill_anchor_color_h() -> int:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_passive_skill_anchor_color_h() -> int:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_skill_anchor_color_h_threshold() -> int:
+        raise NotImplementedError
+
+    @staticmethod
+    def get_skill_anchor_color_h_conf_threshold() -> float:
         raise NotImplementedError
 
     # 出本识别

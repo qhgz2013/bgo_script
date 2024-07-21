@@ -143,7 +143,7 @@ def extend_alpha_1px(alpha: np.ndarray) -> np.ndarray:
                     v[y, x-1] |= 4
                 if x < alpha.shape[1] - 1:
                     v[y, x+1] |= 8
-    alpha_new = np.empty_like(alpha, dtype=np.float)
+    alpha_new = np.empty_like(alpha, dtype=np.float32)
     for y in range(alpha.shape[0]):
         for x in range(alpha.shape[1]):
             c = 0
